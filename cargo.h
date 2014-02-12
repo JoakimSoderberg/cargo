@@ -21,10 +21,7 @@ typedef enum cargo_type_e
 	CARGO_STRING = 5
 } cargo_type_t;
 
-#ifndef CARGO_NAME_COUNT
-#define CARGO_NAME_COUNT 2
-#endif
-
+#define CARGO_NAME_COUNT 4
 #define CARGO_DEFAULT_PREFIX "-"
 #define CARGO_DEFAULT_MAX_OPTS 32
 #define CARGO_DEFAULT_MAX_ARGS 32
@@ -52,7 +49,6 @@ int cargo_add(cargo_t ctx,
 				void *target,
 				size_t *target_count,
 				int nargs,
-				void *default_value,
 				cargo_type_t type,
 				const char *description);
 
@@ -61,7 +57,6 @@ int cargo_add_alloc(cargo_t ctx,
 				void *target,
 				size_t *target_count,
 				int nargs,
-				void *default_value,
 				cargo_type_t type,
 				const char *description);
 

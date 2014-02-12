@@ -19,7 +19,6 @@ typedef struct cargo_opt_s
 	size_t target_idx;
 	size_t *target_count;
 	size_t max_target_count;
-	void *default_value;
 } cargo_opt_t;
 
 typedef struct cargo_s
@@ -82,7 +81,6 @@ static int _cargo_add(cargo_t ctx,
 				void *target,
 				size_t *target_count,
 				int nargs,
-				void *default_value,
 				cargo_type_t type,
 				const char *description,
 				int alloc)
@@ -102,7 +100,7 @@ static int _cargo_add(cargo_t ctx,
 	if (!target)
 		return -1;
 
-	if (!target_count && (nargs > 0))
+	if (!target_count && (nargs > 1))
 		return -1;
 
 	if (ctx->opt_count >= ctx->max_opts)
@@ -123,10 +121,8 @@ static int _cargo_add(cargo_t ctx,
 	o->target = target;
 	o->type = type;
 	o->description = description;
-	o->default_value = default_value;
 	o->target_count = target_count;
-	if (target_count)
-		o->max_target_count = *target_count;
+	o->max_target_count = target_count ? (*target_count) : 1;
 	o->alloc = alloc;
 
 	return 0;
@@ -215,13 +211,12 @@ int cargo_add(cargo_t ctx,
 				void *target,
 				size_t *target_count,
 				int nargs,
-				void *default_value,
 				cargo_type_t type,
 				const char *description)
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, target, target_count, nargs, 
-						default_value, type, description, 0);
+						type, description, 0);
 }
 
 int cargo_add_alloc(cargo_t ctx,
@@ -229,13 +224,12 @@ int cargo_add_alloc(cargo_t ctx,
 				void *target,
 				size_t *target_count,
 				int nargs,
-				void *default_value,
 				cargo_type_t type,
 				const char *description)
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, target, target_count, nargs,
-						default_value, type, description, 1);
+						type, description, 1);
 }
 
 static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
@@ -259,7 +253,8 @@ static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
-	if ((opt->type != CARGO_BOOL) && (opt->target_idx >= opt->max_target_count))
+	if ((opt->type != CARGO_BOOL) 
+		&& (opt->target_idx >= opt->max_target_count))
 	{
 		fprintf(stderr, "Too many arguments given for \"%s\", expected %lu "
 						"but got %lu\n",
@@ -310,21 +305,27 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv, int i)
 {
-	int expecter_arg_count = opt->nargs;
+	int last_arg = (i + 1) + opt->nargs;
 
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
 		(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
 	{
-		expecter_arg_count = argc;
+		last_arg = argc;
 	}
 
-	if (expecter_arg_count == 0)
+	if (opt->type == CARGO_BOOL)
 	{
-		_cargo_set_target_value(ctx, opt, name, argv[i]);
+		if (_cargo_set_target_value(ctx, opt, name, argv[i]))
+		{
+			return -1;
+		}
 	}
 	else
 	{
-		for (; i < expecter_arg_count; i++)
+		if (last_arg > argc)
+			return -1;
+
+		for (; i < last_arg; i++)
 		{
 			if (_cargo_set_target_value(ctx, opt, name, argv[i]))
 			{
@@ -347,7 +348,6 @@ static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
 		name = NULL;
 		opt = &ctx->options[j];
 
-
 		if ((name = _cargo_is_option_name(opt, argv[i])))
 		{
 			if (_cargo_parse_option(ctx, opt, name, argc, argv, i))
@@ -364,9 +364,7 @@ static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
 int cargo_parse(cargo_t ctx, int argc, char **argv)
 {
 	int i;
-	char prefix_char;
 	char *arg;
-	const char *opt;
 
 	for (i = 1; i < argc; i++)
 	{
@@ -389,6 +387,7 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 typedef struct args_s
 {
 	int hello;
+	int geese;
 } args_t;
 
 int main(int argc, char **argv)
@@ -396,15 +395,19 @@ int main(int argc, char **argv)
 	int ret = 0;
 	cargo_t cargo;
 	args_t args;
+	int default_geese = 3;
 
 	cargo_init(&cargo, 32, 32, argv[0], "The parser");
 
-	cargo_add(cargo, "--hello", &args.hello, 
+	ret = cargo_add(cargo, "--hello", &args.hello, 
 				NULL,	// No count to return.
 				0,		// No arguments.
-				0, 		// Default value 0.
 				CARGO_BOOL,
 				"Should we be greeted with a hello message?");
+
+	args.geese = 3;
+	ret = cargo_add(cargo, "--geese", &args.geese, NULL, 1, CARGO_INT,
+				"How man geese live on the farm");
 
 	if (cargo_parse(cargo, argc, argv))
 	{
@@ -415,7 +418,7 @@ int main(int argc, char **argv)
 
 	if (args.hello)
 	{
-		printf("Hello!\n");
+		printf("Hello! %d geese lives on the farm\n", args.geese);
 	}
 
 fail:
