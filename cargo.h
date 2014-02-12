@@ -21,6 +21,14 @@ typedef enum cargo_type_e
 	CARGO_STRING = 5
 } cargo_type_t;
 
+#ifndef CARGO_NAME_COUNT
+#define CARGO_NAME_COUNT 2
+#endif
+
+#define CARGO_DEFAULT_PREFIX "-"
+#define CARGO_DEFAULT_MAX_OPTS 32
+#define CARGO_DEFAULT_MAX_ARGS 32
+
 typedef struct cargo_s *cargo_t;
 
 #define CARGO_NARGS_ONE_OR_MORE -1
@@ -29,7 +37,7 @@ typedef struct cargo_s *cargo_t;
 int cargo_init(cargo_t *ctx, size_t max_opts, size_t max_args, 
 				const char *progname, const char *description);
 
-int cargo_destroy(cargo_t *ctx);
+void cargo_destroy(cargo_t *ctx);
 
 void cargo_set_description(cargo_t ctx, const char *description);
 

@@ -3,17 +3,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 #include "cargo.h"
 
 typedef struct cargo_opt_s
 {
-	const char *name;
+	const char *name[CARGO_NAME_COUNT];
+	size_t name_count;
 	const char *description;
+	int optional;
 	cargo_type_t type;
 	int nargs;
 	int alloc;
 	void *target;
+	size_t target_idx;
 	size_t *target_count;
+	size_t max_target_count;
 	void *default_value;
 } cargo_opt_t;
 
@@ -28,6 +33,7 @@ typedef struct cargo_s
 	cargo_opt_t *options;
 	size_t opt_count;
 	size_t max_opts;
+	const char *prefix;
 
 	char *args;
 	size_t arg_count;
@@ -55,6 +61,22 @@ static int _cargo_nargs_is_valid(int nargs)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
 }
 
+static char _cargo_is_prefix(cargo_t ctx, char c)
+{
+	int i;
+	size_t prefix_len = strlen(ctx->prefix);
+
+	for (i = 0; i < prefix_len; i++)
+	{
+		if (c == ctx->prefix[i])
+		{
+			return c;
+		}
+	}
+
+	return 0;
+}
+
 static int _cargo_add(cargo_t ctx,
 				const char *opt,
 				void *target,
@@ -65,9 +87,16 @@ static int _cargo_add(cargo_t ctx,
 				const char *description,
 				int alloc)
 {
+	size_t opt_len;
 	cargo_opt_t *o = NULL;
 
 	if (!_cargo_nargs_is_valid(nargs))
+		return -1;
+
+	if (!opt)
+		return -1;
+
+	if ((opt_len = strlen(opt)) == 0)
 		return -1;
 
 	if (!target)
@@ -79,16 +108,25 @@ static int _cargo_add(cargo_t ctx,
 	if (ctx->opt_count >= ctx->max_opts)
 		return -1;
 
+
+	// TODO: assert for argument conflicts.
+
 	o = &ctx->options[ctx->opt_count];
 	ctx->opt_count++;
 
-	o->name = opt;
+	// Check if the option has a prefix
+	// (this means it's optional).
+	o->optional = _cargo_is_prefix(ctx, opt[0]);
+
+	o->name[o->name_count++] = opt;
 	o->nargs = nargs;
 	o->target = target;
 	o->type = type;
 	o->description = description;
 	o->default_value = default_value;
 	o->target_count = target_count;
+	if (target_count)
+		o->max_target_count = *target_count;
 	o->alloc = alloc;
 
 	return 0;
@@ -123,8 +161,30 @@ int cargo_init(cargo_t *ctx, size_t max_opts, size_t max_args,
 	c->progname = progname;
 	c->description = description;
 	c->add_help = 1;
+	c->prefix = CARGO_DEFAULT_PREFIX;
 
 	return 0;
+}
+
+void cargo_destroy(cargo_t *ctx)
+{
+	if (ctx)
+	{
+		if ((*ctx)->options)
+		{
+			free((*ctx)->options);
+			(*ctx)->options = NULL;
+		}
+
+		free(*ctx);
+		ctx = NULL;
+	}
+}
+
+void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
+{
+	assert(ctx);
+	ctx->prefix = prefix_chars;
 }
 
 void cargo_set_description(cargo_t ctx, const char *description)
@@ -174,22 +234,194 @@ int cargo_add_alloc(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count, nargs, 
+	return _cargo_add(ctx, opt, target, target_count, nargs,
 						default_value, type, description, 1);
+}
+
+static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
+{
+	int i;
+	const char *name;
+
+	for (i = 0; i < opt->name_count; i++)
+	{
+		name = opt->name[i];
+
+		if (!strcmp(name, arg))
+		{
+			return name;
+		}
+	}
+
+	return NULL;
+}
+
+static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
+									const char *name, char *val)
+{
+	if ((opt->type != CARGO_BOOL) && (opt->target_idx >= opt->max_target_count))
+	{
+		fprintf(stderr, "Too many arguments given for \"%s\", expected %lu "
+						"but got %lu\n",
+						name, opt->max_target_count, opt->target_idx);
+		return -1;
+	}
+
+	switch (opt->type)
+	{
+		default: return -1;
+		case CARGO_BOOL:
+			((int *)opt->target)[opt->target_idx] = 1;
+			break;
+		case CARGO_INT:
+			((int *)opt->target)[opt->target_idx] = atoi(val);
+			break;
+		case CARGO_UINT:
+			((unsigned int *)opt->target)[opt->target_idx]
+													= strtoul(val, NULL, 10); 
+			break;
+		case CARGO_FLOAT:
+			((float *)opt->target)[opt->target_idx] = atof(val);
+			break;
+		case CARGO_DOUBLE:
+			((double *)opt->target)[opt->target_idx] = (double)atof(val);
+			break;
+		case CARGO_STRING:
+			((char **)opt->target)[opt->target_idx] = val;
+			break;
+	}
+
+	if (errno != 0)
+	{
+		fprintf(stderr, "Invalid formatting %s\n", strerror(errno));
+		return -1;
+	}
+
+	opt->target_idx++;
+
+	if (opt->target_count)
+	{
+		*opt->target_count = opt->target_idx;
+	}
+
+	return 0;
+}
+
+static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
+								int argc, char **argv, int i)
+{
+	int expecter_arg_count = opt->nargs;
+
+	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
+		(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
+	{
+		expecter_arg_count = argc;
+	}
+
+	if (expecter_arg_count == 0)
+	{
+		_cargo_set_target_value(ctx, opt, name, argv[i]);
+	}
+	else
+	{
+		for (; i < expecter_arg_count; i++)
+		{
+			if (_cargo_set_target_value(ctx, opt, name, argv[i]))
+			{
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
+{
+	int j;
+	cargo_opt_t *opt;
+	const char *name = NULL;
+
+	for (j = 0; j < ctx->opt_count; j++)
+	{
+		name = NULL;
+		opt = &ctx->options[j];
+
+
+		if ((name = _cargo_is_option_name(opt, argv[i])))
+		{
+			if (_cargo_parse_option(ctx, opt, name, argc, argv, i))
+			{
+				return -1;
+			}
+			break;
+		}
+	}
+
+	return 0;
 }
 
 int cargo_parse(cargo_t ctx, int argc, char **argv)
 {
+	int i;
+	char prefix_char;
+	char *arg;
+	const char *opt;
+
+	for (i = 1; i < argc; i++)
+	{
+		arg = argv[i];
+
+		if (_cargo_check_options(ctx, argc, argv, i))
+		{
+			return -1;
+		}
+	}
+
 	return 0;
 }
 
+// -----------------------------------------------------------------------------
+// Tests.
+// -----------------------------------------------------------------------------
 #ifdef CARGO_TEST
+
+typedef struct args_s
+{
+	int hello;
+} args_t;
 
 int main(int argc, char **argv)
 {
+	int ret = 0;
+	cargo_t cargo;
+	args_t args;
 
+	cargo_init(&cargo, 32, 32, argv[0], "The parser");
 
-	return 0;
+	cargo_add(cargo, "--hello", &args.hello, 
+				NULL,	// No count to return.
+				0,		// No arguments.
+				0, 		// Default value 0.
+				CARGO_BOOL,
+				"Should we be greeted with a hello message?");
+
+	if (cargo_parse(cargo, argc, argv))
+	{
+		fprintf(stderr, "Error parsing!\n");
+		ret = -1;
+		goto fail;
+	}
+
+	if (args.hello)
+	{
+		printf("Hello!\n");
+	}
+
+fail:
+	cargo_destroy(&cargo);
+
+	return ret;
 }
 
 #endif
