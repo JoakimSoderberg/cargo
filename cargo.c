@@ -338,8 +338,7 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv, int i)
 {
-	int j;
-	int args_to_look_for;
+	int opt_arg_count = 0;
 
 	// If we have at least 1 option, start looking for it.
 	if (opt->nargs != 0)
@@ -364,6 +363,9 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 	else
 	{
+		int j;
+		int args_to_look_for;
+
 		// Keep looking until the end of the argument list.
 		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
 			(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
@@ -391,7 +393,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 		for (j = i; j < (i + args_to_look_for); j++)
 		{
-
 			CARGODBG(2, "    argv[%i]: %s\n", j, argv[j]);
 
 			if (_cargo_is_another_option(ctx, argv[j]))
@@ -405,7 +406,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 					return -1;
 				}
 
-
 				// We found another option, stop parsing arguments
 				// for this option.
 				CARGODBG(1, "%s", "    Found other option\n");
@@ -418,10 +418,10 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			}
 		}
 
-		i += j;
+		opt_arg_count = j - i;
 	}
 
-	return i;
+	return opt_arg_count;
 }
 
 static const char *_cargo_check_options(cargo_t ctx,
@@ -454,6 +454,7 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 {
 	int i;
 	int j;
+	int opt_arg_count;
 	char *arg;
 	const char *name;
 	cargo_opt_t *opt = NULL;
@@ -480,14 +481,17 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 		if ((name = _cargo_check_options(ctx, &opt, argc, argv, i)))
 		{
 			// We found an option, parse any arguments it might have.
-			if ((i = _cargo_parse_option(ctx, opt, name, argc, argv, i)) < 0)
+			if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
+													argc, argv, i)) < 0)
 			{
 				return -1;
 			}
 
+			i += opt_arg_count;
 		}
 		else
 		{
+			// Normal argument.
 			ctx->args[ctx->arg_count] = argv[i];
 			ctx->arg_count++;
 		}
