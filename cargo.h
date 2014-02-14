@@ -21,6 +21,18 @@ typedef enum cargo_type_e
 	CARGO_STRING = 5
 } cargo_type_t;
 
+#ifdef CARGO_DEBUG
+#define CARGODBG(level, fmt, ...) \
+{ \
+	if (level <= CARGO_DEBUG) \
+	{ \
+		fprintf(stderr, fmt, __VA_ARGS__); \
+	} \
+}
+#else
+#define CARGODB(level, fmt, ...)
+#endif
+
 #define CARGO_NAME_COUNT 4
 #define CARGO_DEFAULT_PREFIX "-"
 #define CARGO_DEFAULT_MAX_OPTS 32

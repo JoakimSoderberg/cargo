@@ -34,7 +34,7 @@ typedef struct cargo_s
 	size_t max_opts;
 	const char *prefix;
 
-	char *args;
+	char **args;
 	size_t arg_count;
 	size_t max_args;
 } cargo_s;
@@ -122,8 +122,15 @@ static int _cargo_add(cargo_t ctx,
 	o->type = type;
 	o->description = description;
 	o->target_count = target_count;
-	o->max_target_count = target_count ? (*target_count) : 1;
+
+	if (nargs >= 0) o->max_target_count = nargs;
+	else if (target_count) o->max_target_count = (*target_count);
+	else o->max_target_count = 0;
+
 	o->alloc = alloc;
+
+	CARGODBG(1, " cargo_add %s, max_target_count = %lu\n",
+				opt, o->max_target_count);
 
 	return 0;
 }
@@ -256,32 +263,37 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	if ((opt->type != CARGO_BOOL) 
 		&& (opt->target_idx >= opt->max_target_count))
 	{
-		fprintf(stderr, "Too many arguments given for \"%s\", expected %lu "
-						"but got %lu\n",
-						name, opt->max_target_count, opt->target_idx);
-		return -1;
+		return 0;
 	}
+
+	errno = 0;
 
 	switch (opt->type)
 	{
 		default: return -1;
 		case CARGO_BOOL:
+			CARGODBG(2, "%s", "      bool\n");
 			((int *)opt->target)[opt->target_idx] = 1;
 			break;
 		case CARGO_INT:
+			CARGODBG(2, "      int %s\n", val);
 			((int *)opt->target)[opt->target_idx] = atoi(val);
 			break;
 		case CARGO_UINT:
+			CARGODBG(2, "      uint %s\n", val);
 			((unsigned int *)opt->target)[opt->target_idx]
 													= strtoul(val, NULL, 10); 
 			break;
 		case CARGO_FLOAT:
+			CARGODBG(2, "      float %s\n", val);
 			((float *)opt->target)[opt->target_idx] = atof(val);
 			break;
 		case CARGO_DOUBLE:
+			CARGODBG(2, "      double %s\n", val);
 			((double *)opt->target)[opt->target_idx] = (double)atof(val);
 			break;
 		case CARGO_STRING:
+			CARGODBG(2, "      str \"%s\"\n", val);
 			((char **)opt->target)[opt->target_idx] = val;
 			break;
 	}
@@ -302,19 +314,43 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	return 0;
 }
 
+static int _cargo_is_another_option(cargo_t ctx, char *arg)
+{
+	int j;
+
+	for (j = 0; j < ctx->opt_count; j++)
+	{
+		if (_cargo_is_option_name(&ctx->options[j], arg))
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv, int i)
 {
-	int last_arg = (i + 1) + opt->nargs;
+	int j;
+	int args_to_look_for;
 
-	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
-		(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
+	// If we have at least 1 option, start looking for it.
+	if (opt->nargs != 0)
 	{
-		last_arg = argc;
+		if ((i + 1) >= argc)
+		{
+			printf("(%i+1) >= %d\n", i, argc);
+			return -1;
+		}
+
+		i++;
 	}
 
-	if (opt->type == CARGO_BOOL)
+	if (opt->nargs == 0)
 	{
+		CARGODBG(1, "%s", "    No arguments\n");
+		// Got no arguments, simply set the value to 1.
 		if (_cargo_set_target_value(ctx, opt, name, argv[i]))
 		{
 			return -1;
@@ -322,19 +358,61 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 	else
 	{
-		if (last_arg > argc)
-			return -1;
-
-		for (; i < last_arg; i++)
+		// Keep looking until the end of the argument list.
+		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
+			(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
 		{
-			if (_cargo_set_target_value(ctx, opt, name, argv[i]))
+			args_to_look_for = argc - i;
+		}
+		else
+		{
+			// Read (number of expected arguments) - (read so far).
+			args_to_look_for = (opt->nargs - opt->target_idx);
+		}
+
+		// Look for arguments for this option.
+		if ((i + args_to_look_for) > argc)
+		{
+			fprintf(stderr, "Not enough arguments for %s."
+							" %d expected but got only %d\n", 
+							name, opt->nargs, 
+							(int)opt->target_idx + args_to_look_for);
+			return -1;
+		}
+
+		CARGODBG(1, "  Parse %d option args for %s:\n", args_to_look_for, name);
+		CARGODBG(1, "   Start %d, End %d\n", i, i + args_to_look_for);
+
+		for (j = i; j < (i + args_to_look_for); j++)
+		{
+			CARGODBG(2, "    argv[%i]: %s\n", j, argv[j]);
+
+			if (_cargo_is_another_option(ctx, argv[j]))
+			{
+				if ((j == i) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
+				{
+					fprintf(stderr, "No argument specified for %s. "
+									"%d expected.\n",
+									name, 
+									(opt->nargs > 0) ? opt->nargs : 1);
+					return -1;
+				}
+
+
+				// We found another option, stop parsing arguments
+				// for this option.
+				CARGODBG(1, "%s", "    Found other option\n");
+				break;
+			}
+
+			if (_cargo_set_target_value(ctx, opt, name, argv[j]))
 			{
 				return -1;
 			}
 		}
 	}
 
-	return 0;
+	return i;
 }
 
 static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
@@ -350,30 +428,54 @@ static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
 
 		if ((name = _cargo_is_option_name(opt, argv[i])))
 		{
-			if (_cargo_parse_option(ctx, opt, name, argc, argv, i))
+			CARGODBG(2, "  Option %i (%i): %s\n", i, (argc - i - 1), name);
+
+			// We found an option, parse any arguments it might have.
+			if ((i = _cargo_parse_option(ctx, opt, name, argc, argv, i)) < 0)
 			{
 				return -1;
 			}
+
 			break;
 		}
 	}
 
-	return 0;
+	return i;
 }
 
 int cargo_parse(cargo_t ctx, int argc, char **argv)
 {
 	int i;
+	int j;
 	char *arg;
 
 	for (i = 1; i < argc; i++)
 	{
 		arg = argv[i];
+		j = i;
 
-		if (_cargo_check_options(ctx, argc, argv, i))
+		CARGODBG(1, "\nargv[%d] = %s\n", i, arg);
+
+		if ((i = _cargo_check_options(ctx, argc, argv, i)) < 0)
 		{
 			return -1;
 		}
+
+		#if CARGO_DEBUG
+		{
+			int k = 0;
+			int ate = (i != j) ? (i - j): 1;
+
+			CARGODBG(1, "    Ate %d args: ", ate);
+
+			for (k = j; k < (j+ate); k++)
+			{
+				CARGODBG(2, "\"%s\" ", argv[k]);
+			}
+
+			CARGODBG(2, "%s", "\n");
+		}
+		#endif
 	}
 
 	return 0;
@@ -388,6 +490,8 @@ typedef struct args_s
 {
 	int hello;
 	int geese;
+	int ducks[2];
+	size_t duck_count;
 } args_t;
 
 int main(int argc, char **argv)
@@ -409,6 +513,18 @@ int main(int argc, char **argv)
 	ret = cargo_add(cargo, "--geese", &args.geese, NULL, 1, CARGO_INT,
 				"How man geese live on the farm");
 
+	args.ducks[0] = 6;
+	args.ducks[1] = 4;
+	args.duck_count = sizeof(args.ducks) / sizeof(args.ducks[0]);
+	ret |= cargo_add(cargo, "--ducks", args.ducks, &args.duck_count, 2, CARGO_INT,
+				"How man geese live on the farm");
+
+	if (ret != 0)
+	{
+		fprintf(stderr, "Failed to add argument\n");
+		return -1;
+	}
+
 	if (cargo_parse(cargo, argc, argv))
 	{
 		fprintf(stderr, "Error parsing!\n");
@@ -419,6 +535,9 @@ int main(int argc, char **argv)
 	if (args.hello)
 	{
 		printf("Hello! %d geese lives on the farm\n", args.geese);
+		printf("Also %d + %d = %d ducks. Read %lu duck args\n", 
+			args.ducks[0], args.ducks[1], args.ducks[0] + args.ducks[1],
+			args.duck_count);
 	}
 
 fail:
