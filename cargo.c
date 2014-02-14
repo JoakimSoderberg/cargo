@@ -36,7 +36,6 @@ typedef struct cargo_s
 
 	char **args;
 	size_t arg_count;
-	size_t max_args;
 } cargo_s;
 
 static size_t _cargo_get_type_size(cargo_type_t t)
@@ -139,7 +138,7 @@ static int _cargo_add(cargo_t ctx,
 // Public functions
 // -----------------------------------------------------------------------------
 
-int cargo_init(cargo_t *ctx, size_t max_opts, size_t max_args,
+int cargo_init(cargo_t *ctx, size_t max_opts,
 				const char *progname, const char *description)
 {
 	cargo_s *c;
@@ -152,7 +151,6 @@ int cargo_init(cargo_t *ctx, size_t max_opts, size_t max_args,
 		return -1;
 
 	c->max_opts = max_opts;
-	c->max_args = max_args;
 
 	if (!(c->options = (cargo_opt_t *)calloc(max_opts, sizeof(cargo_opt_t))))
 	{
@@ -178,6 +176,14 @@ void cargo_destroy(cargo_t *ctx)
 			free((*ctx)->options);
 			(*ctx)->options = NULL;
 		}
+
+		if ((*ctx)->args)
+		{
+			free((*ctx)->args);
+			(*ctx)->args = NULL;
+			(*ctx)->arg_count = 0;
+		}
+
 
 		free(*ctx);
 		ctx = NULL;
@@ -385,6 +391,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 		for (j = i; j < (i + args_to_look_for); j++)
 		{
+
 			CARGODBG(2, "    argv[%i]: %s\n", j, argv[j]);
 
 			if (_cargo_is_another_option(ctx, argv[j]))
@@ -410,6 +417,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 				return -1;
 			}
 		}
+
+		i += j;
 	}
 
 	return i;
@@ -420,6 +429,7 @@ static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
 	int j;
 	cargo_opt_t *opt;
 	const char *name = NULL;
+	int is_option = 0;
 
 	for (j = 0; j < ctx->opt_count; j++)
 	{
@@ -436,8 +446,15 @@ static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
 				return -1;
 			}
 
+			is_option = 1;
 			break;
 		}
+	}
+
+	if (!is_option)
+	{
+		ctx->args[ctx->arg_count] = argv[i];
+		ctx->arg_count++;
 	}
 
 	return i;
@@ -448,6 +465,18 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 	int i;
 	int j;
 	char *arg;
+
+	if (ctx->args)
+	{
+		free(ctx->args);
+		ctx->args = NULL;
+		ctx->arg_count = 0;
+	}
+
+	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
+	{
+		return -1;
+	}
 
 	for (i = 1; i < argc; i++)
 	{
@@ -466,9 +495,9 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 			int k = 0;
 			int ate = (i != j) ? (i - j): 1;
 
-			CARGODBG(1, "    Ate %d args: ", ate);
+			CARGODBG(2, "    Ate %d args: ", ate);
 
-			for (k = j; k < (j+ate); k++)
+			for (k = j; k < (j + ate); k++)
 			{
 				CARGODBG(2, "\"%s\" ", argv[k]);
 			}
@@ -479,6 +508,18 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 	}
 
 	return 0;
+}
+
+char **cargo_get_args(cargo_t ctx, size_t *argc)
+{
+	assert(ctx);
+
+	if (argc)
+	{
+		*argc = ctx->arg_count;
+	}
+
+	return ctx->args;
 }
 
 // -----------------------------------------------------------------------------
@@ -496,12 +537,15 @@ typedef struct args_s
 
 int main(int argc, char **argv)
 {
+	int i;
 	int ret = 0;
 	cargo_t cargo;
 	args_t args;
+	char **extra_args;
+	size_t extra_count;
 	int default_geese = 3;
 
-	cargo_init(&cargo, 32, 32, argv[0], "The parser");
+	cargo_init(&cargo, 32, argv[0], "The parser");
 
 	ret = cargo_add(cargo, "--hello", &args.hello, 
 				NULL,	// No count to return.
@@ -538,6 +582,13 @@ int main(int argc, char **argv)
 		printf("Also %d + %d = %d ducks. Read %lu duck args\n", 
 			args.ducks[0], args.ducks[1], args.ducks[0] + args.ducks[1],
 			args.duck_count);
+	}
+
+	extra_args = cargo_get_args(cargo, &extra_count);
+
+	for (i = 0; i < extra_count; i++)
+	{
+		printf("%s\n", extra_args[i]);
 	}
 
 fail:

@@ -43,7 +43,7 @@ typedef struct cargo_s *cargo_t;
 #define CARGO_NARGS_ONE_OR_MORE -1
 #define CARGO_NARGS_NONE_OR_MORE -2
 
-int cargo_init(cargo_t *ctx, size_t max_opts, size_t max_args, 
+int cargo_init(cargo_t *ctx, size_t max_opts, 
 				const char *progname, const char *description);
 
 void cargo_destroy(cargo_t *ctx);
