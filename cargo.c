@@ -289,7 +289,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			fprintf(stderr, "Not enough arguments for %s."
 							" %d expected but got only %d\n", 
 							name, opt->nargs, 
-							(int)opt->target_idx + args_to_look_for);
+							argc - i);
 			return -1;
 		}
 
@@ -638,6 +638,9 @@ typedef struct args_s
 	float arne;
 	double weise;
 	char *awesome;
+
+	char *poems[20];
+	size_t poem_count;
 } args_t;
 
 int main(int argc, char **argv)
@@ -666,8 +669,13 @@ int main(int argc, char **argv)
 
 	args.arne = 4.4f;
 	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_FLOAT,
-				"How man geese live on the farm");
+				"Arne");
 	cargo_add_alias(cargo, "--arne", "-a");
+
+	args.poem_count = 0;
+	ret |= cargo_addv(cargo, "--poems", args.poems, &args.poem_count, 3,
+				CARGO_STRING,
+				"The poems");
 
 	if (ret != 0)
 	{
@@ -683,6 +691,12 @@ int main(int argc, char **argv)
 	}
 
 	printf("Arne %f\n", args.arne);
+
+	printf("Poems:\n");
+	for (i = 0; i < args.poem_count; i++)
+	{
+		printf("  %s\n", args.poems[i]);
+	}
 
 	if (args.hello)
 	{
