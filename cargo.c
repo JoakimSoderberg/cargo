@@ -6,6 +6,16 @@
 #include <errno.h>
 #include "cargo.h"
 
+static const char *_cargo_type_map[] = 
+{
+	"bool",
+	"int",
+	"uint",
+	"float",
+	"double",
+	"string"
+};
+
 typedef struct cargo_opt_s
 {
 	const char *name[CARGO_NAME_COUNT];
@@ -222,17 +232,27 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 int cargo_add(cargo_t ctx,
 				const char *opt,
 				void *target,
-				size_t *target_count,
-				int nargs,
 				cargo_type_t type,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count, nargs, 
+	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL), 
 						type, description, 0);
 }
 
 int cargo_add_alloc(cargo_t ctx,
+				const char *opt,
+				void *target,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL),
+						type, description, 1);
+}
+
+
+int cargo_addv(cargo_t ctx, 
 				const char *opt,
 				void *target,
 				size_t *target_count,
@@ -241,8 +261,21 @@ int cargo_add_alloc(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count, nargs,
-						type, description, 1);
+	return _cargo_add(ctx, opt, target, target_count,
+						nargs, type, description, 0);
+}
+
+int cargo_addv_alloc(cargo_t ctx, 
+				const char *opt,
+				void *target,
+				size_t *target_count,
+				int nargs,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, target_count,
+						nargs, type, description, 1);
 }
 
 static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
@@ -262,16 +295,6 @@ static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 
 	return NULL;
 }
-
-static const char *_cargo_type_map[] = 
-{
-	"bool",
-	"int",
-	"uint",
-	"float",
-	"double",
-	"string"
-};
 
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
@@ -555,6 +578,10 @@ typedef struct args_s
 	int geese;
 	int ducks[2];
 	size_t duck_count;
+
+	float arne;
+	double weise;
+	char *awesome;
 } args_t;
 
 int main(int argc, char **argv)
@@ -568,20 +595,20 @@ int main(int argc, char **argv)
 
 	cargo_init(&cargo, 32, argv[0], "The parser");
 
-	ret = cargo_add(cargo, "--hello", &args.hello, 
-				NULL,	// No count to return.
-				0,		// No arguments.
-				CARGO_BOOL,
+	ret = cargo_add(cargo, "--hello", &args.hello, CARGO_BOOL,
 				"Should we be greeted with a hello message?");
 
 	args.geese = 3;
-	ret = cargo_add(cargo, "--geese", &args.geese, NULL, 1, CARGO_INT,
+	ret = cargo_add(cargo, "--geese", &args.geese, CARGO_INT,
 				"How man geese live on the farm");
 
 	args.ducks[0] = 6;
 	args.ducks[1] = 4;
 	args.duck_count = sizeof(args.ducks) / sizeof(args.ducks[0]);
-	ret |= cargo_add(cargo, "--ducks", args.ducks, &args.duck_count, 2, CARGO_INT,
+	ret |= cargo_addv(cargo, "--ducks", args.ducks, &args.duck_count, 2, CARGO_INT,
+				"How man geese live on the farm");
+
+	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_INT,
 				"How man geese live on the farm");
 
 	if (ret != 0)

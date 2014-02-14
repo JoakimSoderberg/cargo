@@ -59,12 +59,24 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format);
 int cargo_add(cargo_t ctx,
 				const char *opt,
 				void *target,
+				cargo_type_t type,
+				const char *description);
+
+int cargo_add_alloc(cargo_t ctx,
+				const char *opt,
+				void *target,
+				cargo_type_t type,
+				const char *description);
+
+int cargo_addv(cargo_t ctx, 
+				const char *opt,
+				void *target,
 				size_t *target_count,
 				int nargs,
 				cargo_type_t type,
 				const char *description);
 
-int cargo_add_alloc(cargo_t ctx,
+int cargo_addv_alloc(cargo_t ctx, 
 				const char *opt,
 				void *target,
 				size_t *target_count,
@@ -73,7 +85,5 @@ int cargo_add_alloc(cargo_t ctx,
 				const char *description);
 
 int cargo_parse(cargo_t ctx, int argc, char **argv);
-
-
 
 #endif // __CARGO_H__
