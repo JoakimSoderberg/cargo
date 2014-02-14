@@ -424,40 +424,30 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	return i;
 }
 
-static int _cargo_check_options(cargo_t ctx, int argc, char **argv, int i)
+static const char *_cargo_check_options(cargo_t ctx,
+					cargo_opt_t **opt,
+					int argc, char **argv, int i)
 {
+	assert(opt);
 	int j;
-	cargo_opt_t *opt;
 	const char *name = NULL;
-	int is_option = 0;
 
 	for (j = 0; j < ctx->opt_count; j++)
 	{
 		name = NULL;
-		opt = &ctx->options[j];
+		*opt = &ctx->options[j];
 
-		if ((name = _cargo_is_option_name(opt, argv[i])))
+		if ((name = _cargo_is_option_name(*opt, argv[i])))
 		{
-			CARGODBG(2, "  Option %i (%i): %s\n", i, (argc - i - 1), name);
+			CARGODBG(2, "  Option argv[%i]: %s\n", i, name);
 
-			// We found an option, parse any arguments it might have.
-			if ((i = _cargo_parse_option(ctx, opt, name, argc, argv, i)) < 0)
-			{
-				return -1;
-			}
-
-			is_option = 1;
-			break;
+			return name;
 		}
 	}
 
-	if (!is_option)
-	{
-		ctx->args[ctx->arg_count] = argv[i];
-		ctx->arg_count++;
-	}
+	*opt = NULL;
 
-	return i;
+	return NULL;
 }
 
 int cargo_parse(cargo_t ctx, int argc, char **argv)
@@ -465,6 +455,8 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 	int i;
 	int j;
 	char *arg;
+	const char *name;
+	cargo_opt_t *opt = NULL;
 
 	if (ctx->args)
 	{
@@ -485,9 +477,19 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 
 		CARGODBG(1, "\nargv[%d] = %s\n", i, arg);
 
-		if ((i = _cargo_check_options(ctx, argc, argv, i)) < 0)
+		if ((name = _cargo_check_options(ctx, &opt, argc, argv, i)))
 		{
-			return -1;
+			// We found an option, parse any arguments it might have.
+			if ((i = _cargo_parse_option(ctx, opt, name, argc, argv, i)) < 0)
+			{
+				return -1;
+			}
+
+		}
+		else
+		{
+			ctx->args[ctx->arg_count] = argv[i];
+			ctx->arg_count++;
 		}
 
 		#if CARGO_DEBUG
