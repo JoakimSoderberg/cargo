@@ -153,6 +153,8 @@ static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 	{
 		name = opt->name[i];
 
+		CARGODBG(3, "    Check name \"%s\"\n", name);
+
 		if (!strcmp(name, arg))
 		{
 			return name;
@@ -592,6 +594,35 @@ char **cargo_get_args(cargo_t ctx, size_t *argc)
 	return ctx->args;
 }
 
+int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
+{
+	int opt_i;
+	int name_i;
+	cargo_opt_t *opt;
+	assert(ctx);
+
+	if (_cargo_find_option_name(ctx, name, &opt_i, &name_i))
+	{
+		return -1;
+	}
+
+	CARGODBG(1, "Found option \"%s\"\n", name);
+
+	opt = &ctx->options[opt_i];
+
+	if ((opt->name_count + 1) >= CARGO_NAME_COUNT)
+	{
+		return -1;
+	}
+
+	opt->name[opt->name_count] = alias;
+	opt->name_count++;
+
+	CARGODBG(1, "  Added alias \"%s\"\n", alias);
+
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // Tests.
 // -----------------------------------------------------------------------------
@@ -633,8 +664,10 @@ int main(int argc, char **argv)
 	ret |= cargo_addv(cargo, "--ducks", args.ducks, &args.duck_count, 2, CARGO_INT,
 				"How man geese live on the farm");
 
-	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_INT,
+	args.arne = 4.4f;
+	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_FLOAT,
 				"How man geese live on the farm");
+	cargo_add_alias(cargo, "--arne", "-a");
 
 	if (ret != 0)
 	{
@@ -648,6 +681,8 @@ int main(int argc, char **argv)
 		ret = -1;
 		goto fail;
 	}
+
+	printf("Arne %f\n", args.arne);
 
 	if (args.hello)
 	{
