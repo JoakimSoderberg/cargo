@@ -263,6 +263,16 @@ static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 	return NULL;
 }
 
+static const char *_cargo_type_map[] = 
+{
+	"bool",
+	"int",
+	"uint",
+	"float",
+	"double",
+	"string"
+};
+
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
@@ -271,6 +281,9 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	{
 		return 0;
 	}
+
+	if ((opt->type < CARGO_BOOL) || (opt->type > CARGO_STRING))
+		return -1;
 
 	errno = 0;
 
@@ -306,7 +319,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 
 	if (errno != 0)
 	{
-		fprintf(stderr, "Invalid formatting %s\n", strerror(errno));
+		fprintf(stderr, "Failed to parse \"%s\", expected %s. %s.\n", 
+				val, _cargo_type_map[opt->type], strerror(errno));
 		return -1;
 	}
 
@@ -391,6 +405,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		CARGODBG(1, "  Parse %d option args for %s:\n", args_to_look_for, name);
 		CARGODBG(1, "   Start %d, End %d\n", i, i + args_to_look_for);
 
+		// Read until we find another option, or we've "eaten" the
+		// arguments we want.
 		for (j = i; j < (i + args_to_look_for); j++)
 		{
 			CARGODBG(2, "    argv[%i]: %s\n", j, argv[j]);
@@ -549,7 +565,6 @@ int main(int argc, char **argv)
 	args_t args;
 	char **extra_args;
 	size_t extra_count;
-	int default_geese = 3;
 
 	cargo_init(&cargo, 32, argv[0], "The parser");
 
@@ -591,6 +606,7 @@ int main(int argc, char **argv)
 	}
 
 	extra_args = cargo_get_args(cargo, &extra_count);
+	printf("\nExtra arguments:\n");
 
 	for (i = 0; i < extra_count; i++)
 	{
