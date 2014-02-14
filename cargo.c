@@ -144,140 +144,6 @@ static int _cargo_add(cargo_t ctx,
 	return 0;
 }
 
-// -----------------------------------------------------------------------------
-// Public functions
-// -----------------------------------------------------------------------------
-
-int cargo_init(cargo_t *ctx, size_t max_opts,
-				const char *progname, const char *description)
-{
-	cargo_s *c;
-	assert(ctx);
-
-	*ctx = (cargo_s *)calloc(1, sizeof(cargo_s));
-	c = *ctx;
-
-	if (!c)
-		return -1;
-
-	c->max_opts = max_opts;
-
-	if (!(c->options = (cargo_opt_t *)calloc(max_opts, sizeof(cargo_opt_t))))
-	{
-		free(*ctx);
-		*ctx = NULL;
-		return -1;
-	}
-
-	c->progname = progname;
-	c->description = description;
-	c->add_help = 1;
-	c->prefix = CARGO_DEFAULT_PREFIX;
-
-	return 0;
-}
-
-void cargo_destroy(cargo_t *ctx)
-{
-	if (ctx)
-	{
-		if ((*ctx)->options)
-		{
-			free((*ctx)->options);
-			(*ctx)->options = NULL;
-		}
-
-		if ((*ctx)->args)
-		{
-			free((*ctx)->args);
-			(*ctx)->args = NULL;
-			(*ctx)->arg_count = 0;
-		}
-
-
-		free(*ctx);
-		ctx = NULL;
-	}
-}
-
-void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
-{
-	assert(ctx);
-	ctx->prefix = prefix_chars;
-}
-
-void cargo_set_description(cargo_t ctx, const char *description)
-{
-	assert(ctx);
-	ctx->description = description;
-}
-
-void cargo_set_epilog(cargo_t ctx, const char *epilog)
-{
-	assert(ctx);
-}
-
-void cargo_add_help(cargo_t ctx, int add_help)
-{
-	assert(ctx);
-	ctx->add_help = add_help;
-}
-
-void cargo_set_format(cargo_t ctx, cargo_format_t format)
-{
-	assert(ctx);
-	ctx->format = format;
-}
-
-int cargo_add(cargo_t ctx,
-				const char *opt,
-				void *target,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL), 
-						type, description, 0);
-}
-
-int cargo_add_alloc(cargo_t ctx,
-				const char *opt,
-				void *target,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL),
-						type, description, 1);
-}
-
-
-int cargo_addv(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count,
-						nargs, type, description, 0);
-}
-
-int cargo_addv_alloc(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count,
-						nargs, type, description, 1);
-}
-
 static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 {
 	int i;
@@ -487,6 +353,165 @@ static const char *_cargo_check_options(cargo_t ctx,
 	*opt = NULL;
 
 	return NULL;
+}
+
+static int _cargo_find_option_name(cargo_t ctx, const char *name, 
+									int *opt_i, int *name_i)
+{
+	int i;
+	int j;
+	cargo_opt_t *opt;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		for (j = 0; j < opt->name_count; j++)
+		{
+			if (!strcmp(opt->name[j], name))
+			{
+				*opt_i = i;
+				*name_i = j;
+				return 0;
+			}
+		}
+	}
+
+	return -1; 
+}
+
+// -----------------------------------------------------------------------------
+// Public functions
+// -----------------------------------------------------------------------------
+
+int cargo_init(cargo_t *ctx, size_t max_opts,
+				const char *progname, const char *description)
+{
+	cargo_s *c;
+	assert(ctx);
+
+	*ctx = (cargo_s *)calloc(1, sizeof(cargo_s));
+	c = *ctx;
+
+	if (!c)
+		return -1;
+
+	c->max_opts = max_opts;
+
+	if (!(c->options = (cargo_opt_t *)calloc(max_opts, sizeof(cargo_opt_t))))
+	{
+		free(*ctx);
+		*ctx = NULL;
+		return -1;
+	}
+
+	c->progname = progname;
+	c->description = description;
+	c->add_help = 1;
+	c->prefix = CARGO_DEFAULT_PREFIX;
+
+	return 0;
+}
+
+void cargo_destroy(cargo_t *ctx)
+{
+	if (ctx)
+	{
+		if ((*ctx)->options)
+		{
+			free((*ctx)->options);
+			(*ctx)->options = NULL;
+		}
+
+		if ((*ctx)->args)
+		{
+			free((*ctx)->args);
+			(*ctx)->args = NULL;
+			(*ctx)->arg_count = 0;
+		}
+
+
+		free(*ctx);
+		ctx = NULL;
+	}
+}
+
+void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
+{
+	assert(ctx);
+	ctx->prefix = prefix_chars;
+}
+
+void cargo_set_description(cargo_t ctx, const char *description)
+{
+	assert(ctx);
+	ctx->description = description;
+}
+
+void cargo_set_epilog(cargo_t ctx, const char *epilog)
+{
+	assert(ctx);
+}
+
+void cargo_add_help(cargo_t ctx, int add_help)
+{
+	assert(ctx);
+	ctx->add_help = add_help;
+}
+
+void cargo_set_format(cargo_t ctx, cargo_format_t format)
+{
+	assert(ctx);
+	ctx->format = format;
+}
+
+int cargo_add(cargo_t ctx,
+				const char *opt,
+				void *target,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL), 
+						type, description, 0);
+}
+
+int cargo_add_alloc(cargo_t ctx,
+				const char *opt,
+				void *target,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL),
+						type, description, 1);
+}
+
+
+int cargo_addv(cargo_t ctx, 
+				const char *opt,
+				void *target,
+				size_t *target_count,
+				int nargs,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, target_count,
+						nargs, type, description, 0);
+}
+
+int cargo_addv_alloc(cargo_t ctx, 
+				const char *opt,
+				void *target,
+				size_t *target_count,
+				int nargs,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, target, target_count,
+						nargs, type, description, 1);
 }
 
 int cargo_parse(cargo_t ctx, int argc, char **argv)
