@@ -85,4 +85,8 @@ int cargo_addv_alloc(cargo_t ctx,
 
 int cargo_parse(cargo_t ctx, int argc, char **argv);
 
+char **cargo_get_args(cargo_t ctx, size_t *argc);
+
+
+
 #endif // __CARGO_H__

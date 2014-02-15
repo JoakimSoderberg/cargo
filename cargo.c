@@ -151,16 +151,17 @@ static int _cargo_add(cargo_t ctx,
 	o->target_count = target_count;
 
 	// By default "nargs" is the max number of arguments the option
-	// should parse. But when allocating the space internally
-	// and nargs is set to CARGO_NARGS_ONE_OR_MORE the max allowed
-	// value is specified by the value in "target_count", or if that is 0 the
-	// size_t max value is used.
+	// should parse. 
 	if (nargs >= 0)
 	{
 		o->max_target_count = nargs;
 	}
 	else if (target_count)
 	{
+		// But when allocating the space internally
+		// and nargs is set to CARGO_NARGS_ONE_OR_MORE the max allowed
+		// value is specified by the value in "target_count", or if that 
+		// is 0 the size_t max value is used.
 		if (*target_count == 0)
 			o->max_target_count = SIZE_MAX;
 		else
@@ -171,11 +172,13 @@ static int _cargo_add(cargo_t ctx,
 		o->max_target_count = 0;
 	}
 
+
 	o->alloc = alloc;
 
 	if (alloc)
 	{
 		*(o->target) = NULL;
+		*(o->target_count) = 0;
 	}
 
 	CARGODBG(1, " cargo_add %s, max_target_count = %lu\n",
@@ -234,6 +237,10 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				// CARGO_NARGS_NONE_OR_MORE
 				// TODO: Don't allocate all of these right away.
 				alloc_count = ctx->argc - ctx->i;
+
+				// Don't allocate more than necessary.
+				if (opt->max_target_count < alloc_count)
+					alloc_count = opt->max_target_count;
 			}
 
 			if (!(new_target = (void **)calloc(alloc_count,
@@ -328,13 +335,14 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	int opt_arg_count = 0;
 
 	// If we have at least 1 option, start looking for it.
-	if (opt->nargs != 0)
+	if ((opt->nargs >= 0) || (opt->nargs == CARGO_NARGS_ONE_OR_MORE))
 	{
+		/*
 		if ((ctx->i + 1) >= argc)
 		{
 			printf("(%i+1) >= %d\n", ctx->i, argc);
 			return -1;
-		}
+		}*/
 
 		start = ctx->i + 1;
 	}
@@ -358,7 +366,13 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
 			(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
 		{
-			args_to_look_for =   argc - start;
+			args_to_look_for = (argc - start);
+
+			if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) 
+				&& (args_to_look_for == 0))
+			{
+				args_to_look_for = 1;
+			}
 		}
 		else
 		{
@@ -366,13 +380,15 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			args_to_look_for = (opt->nargs - opt->target_idx);
 		}
 
+		CARGODBG(1, "  Looking for %d args\n", args_to_look_for);
+
 		// Look for arguments for this option.
 		if ((start + args_to_look_for) > argc)
 		{
+			int expected = (opt->nargs!=CARGO_NARGS_ONE_OR_MORE) ? opt->nargs:1;
 			fprintf(stderr, "Not enough arguments for %s."
 							" %d expected but got only %d\n", 
-							name, opt->nargs, 
-							argc - start);
+							name, expected, argc - start);
 			return -1;
 		}
 
@@ -666,7 +682,7 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 
 			CARGODBG(2, "%s", "\n");
 		}
-		#endif
+		#endif // CARGO_DEBUG
 	}
 
 	return 0;
@@ -776,7 +792,7 @@ int main(int argc, char **argv)
 	ret |= cargo_addv_alloc(cargo, "--tut", (void **)&args.tut, &args.tut_count, 
 							5, CARGO_STRING, "Tutiness");
 
-	args.blurp_count = 0;
+	args.blurp_count = 5;
 	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
 							CARGO_NARGS_ONE_OR_MORE, CARGO_STRING, "Blurp");
 
