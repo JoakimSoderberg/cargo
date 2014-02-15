@@ -30,13 +30,12 @@ typedef enum cargo_type_e
 	} \
 }
 #else
-#define CARGODB(level, fmt, ...)
+#define CARGODBG(level, fmt, ...)
 #endif
 
 #define CARGO_NAME_COUNT 4
 #define CARGO_DEFAULT_PREFIX "-"
 #define CARGO_DEFAULT_MAX_OPTS 32
-#define CARGO_DEFAULT_MAX_ARGS 32
 
 typedef struct cargo_s *cargo_t;
 
