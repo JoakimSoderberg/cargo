@@ -101,19 +101,34 @@ static int _cargo_add(cargo_t ctx,
 		return -1;
 
 	if (!opt)
+	{
+		CARGODBG(1, "%s", "Null option name\n");
 		return -1;
+	}
 
 	if ((opt_len = strlen(opt)) == 0)
+	{
+		CARGODBG(1, "%s", "Option name has length 0\n");
 		return -1;
+	}
 
 	if (!target)
+	{
+		CARGODBG(1, "%s", "target NULL\n");
 		return -1;
+	}
 
 	if (!target_count && (nargs > 1))
+	{
+		CARGODBG(1, "%s", "target_count NULL, when nargs > 1\n");
 		return -1;
+	}
 
 	if (ctx->opt_count >= ctx->max_opts)
+	{
+		CARGODBG(1, "%s", "Null option name\n");
 		return -1;
+	}
 
 	// TODO: assert for argument conflicts.
 
@@ -131,9 +146,26 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 
-	if (nargs >= 0) o->max_target_count = nargs;
-	else if (target_count) o->max_target_count = (*target_count);
-	else o->max_target_count = 0;
+	// By default "nargs" is the max number of arguments the option
+	// should parse. But when allocating the space internally
+	// and nargs is set to CARGO_NARGS_ONE_OR_MORE the max allowed
+	// value is specified by the value in "target_count", or if that is 0 the
+	// size_t max value is used.
+	if (nargs >= 0)
+	{
+		o->max_target_count = nargs;
+	}
+	else if (target_count)
+	{
+		if (*target_count == 0)
+			o->max_target_count = SIZE_MAX;
+		else
+			o->max_target_count = (*target_count);
+	}
+	else
+	{
+		o->max_target_count = 0;
+	}
 
 	o->alloc = alloc;
 
