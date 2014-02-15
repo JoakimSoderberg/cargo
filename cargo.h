@@ -64,7 +64,7 @@ int cargo_add(cargo_t ctx,
 
 int cargo_add_alloc(cargo_t ctx,
 				const char *opt,
-				void *target,
+				void **target,
 				cargo_type_t type,
 				const char *description);
 
@@ -78,7 +78,7 @@ int cargo_addv(cargo_t ctx,
 
 int cargo_addv_alloc(cargo_t ctx, 
 				const char *opt,
-				void *target,
+				void **target,
 				size_t *target_count,
 				int nargs,
 				cargo_type_t type,

@@ -25,7 +25,7 @@ typedef struct cargo_opt_s
 	cargo_type_t type;
 	int nargs;
 	int alloc;
-	void *target;
+	void **target;
 	size_t target_idx;
 	size_t *target_count;
 	size_t max_target_count;
@@ -87,7 +87,7 @@ static char _cargo_is_prefix(cargo_t ctx, char c)
 
 static int _cargo_add(cargo_t ctx,
 				const char *opt,
-				void *target,
+				void **target,
 				size_t *target_count,
 				int nargs,
 				cargo_type_t type,
@@ -115,7 +115,6 @@ static int _cargo_add(cargo_t ctx,
 	if (ctx->opt_count >= ctx->max_opts)
 		return -1;
 
-
 	// TODO: assert for argument conflicts.
 
 	o = &ctx->options[ctx->opt_count];
@@ -137,6 +136,11 @@ static int _cargo_add(cargo_t ctx,
 	else o->max_target_count = 0;
 
 	o->alloc = alloc;
+
+	if (alloc)
+	{
+		*(o->target) = NULL;
+	}
 
 	CARGODBG(1, " cargo_add %s, max_target_count = %lu\n",
 				opt, o->max_target_count);
@@ -167,6 +171,8 @@ static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
+	void *target;
+
 	if ((opt->type != CARGO_BOOL) 
 		&& (opt->target_idx >= opt->max_target_count))
 	{
@@ -176,6 +182,33 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	if ((opt->type < CARGO_BOOL) || (opt->type > CARGO_STRING))
 		return -1;
 
+	if (opt->alloc)
+	{
+		if (!*(opt->target))
+		{
+			void **new_target = (void **)calloc(opt->nargs,
+								_cargo_get_type_size(opt->type));
+
+			if (!new_target)
+			{
+				fprintf(stderr, "Out of memory!\n");
+				return -1;
+			}
+
+			CARGODBG(1, "Allocated %dx %s!\n",
+					opt->nargs, _cargo_type_map[opt->type]);
+
+			*(opt->target) = new_target;
+		}
+
+		target = *(opt->target);
+	}
+	else
+	{
+		// Just a normal pointer.
+		target = (void *)opt->target;
+	}
+
 	errno = 0;
 
 	switch (opt->type)
@@ -183,11 +216,11 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		default: return -1;
 		case CARGO_BOOL:
 			CARGODBG(2, "%s", "      bool\n");
-			((int *)opt->target)[opt->target_idx] = 1;
+			((int *)target)[opt->target_idx] = 1;
 			break;
 		case CARGO_INT:
 			CARGODBG(2, "      int %s\n", val);
-			((int *)opt->target)[opt->target_idx] = atoi(val);
+			((int *)target)[opt->target_idx] = atoi(val);
 			break;
 		case CARGO_UINT:
 			CARGODBG(2, "      uint %s\n", val);
@@ -196,15 +229,15 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 		case CARGO_FLOAT:
 			CARGODBG(2, "      float %s\n", val);
-			((float *)opt->target)[opt->target_idx] = atof(val);
+			((float *)target)[opt->target_idx] = atof(val);
 			break;
 		case CARGO_DOUBLE:
 			CARGODBG(2, "      double %s\n", val);
-			((double *)opt->target)[opt->target_idx] = (double)atof(val);
+			((double *)target)[opt->target_idx] = (double)atof(val);
 			break;
 		case CARGO_STRING:
 			CARGODBG(2, "      str \"%s\"\n", val);
-			((char **)opt->target)[opt->target_idx] = val;
+			((char **)target)[opt->target_idx] = val;
 			break;
 	}
 
@@ -474,13 +507,13 @@ int cargo_add(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL), 
+	return _cargo_add(ctx, opt, (void **)target, NULL, (type != CARGO_BOOL),
 						type, description, 0);
 }
 
 int cargo_add_alloc(cargo_t ctx,
 				const char *opt,
-				void *target,
+				void **target,
 				cargo_type_t type,
 				const char *description)
 {
@@ -499,13 +532,13 @@ int cargo_addv(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count,
+	return _cargo_add(ctx, opt, (void **)target, target_count,
 						nargs, type, description, 0);
 }
 
 int cargo_addv_alloc(cargo_t ctx, 
 				const char *opt,
-				void *target,
+				void **target,
 				size_t *target_count,
 				int nargs,
 				cargo_type_t type,
@@ -641,6 +674,9 @@ typedef struct args_s
 
 	char *poems[20];
 	size_t poem_count;
+
+	char **tut;
+	size_t tut_count;
 } args_t;
 
 int main(int argc, char **argv)
@@ -677,6 +713,11 @@ int main(int argc, char **argv)
 				CARGO_STRING,
 				"The poems");
 
+	printf("args.tut = %x, &args.tut = %x\n",
+			args.tut, &args.tut);
+	ret |= cargo_addv_alloc(cargo, "--tut", &args.tut, &args.tut_count, 
+							5, CARGO_STRING, "Tutiness");
+
 	if (ret != 0)
 	{
 		fprintf(stderr, "Failed to add argument\n");
@@ -698,6 +739,12 @@ int main(int argc, char **argv)
 		printf("  %s\n", args.poems[i]);
 	}
 
+	printf("Tut %lu:\n", args.tut_count);
+	for (i = 0; i < args.tut_count; i++)
+	{
+		printf("  %s\n", args.tut[i]);
+	}
+
 	if (args.hello)
 	{
 		printf("Hello! %d geese lives on the farm\n", args.geese);
@@ -716,6 +763,8 @@ int main(int argc, char **argv)
 
 fail:
 	cargo_destroy(&cargo);
+	if (args.tut)
+		free(args.tut);
 
 	return ret;
 }
