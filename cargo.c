@@ -711,6 +711,7 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 
 	if (_cargo_find_option_name(ctx, name, &opt_i, &name_i))
 	{
+		CARGODBG(1, "Failed alias %s to %s, not found.\n", name, alias);
 		return -1;
 	}
 
@@ -727,6 +728,140 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 	opt->name_count++;
 
 	CARGODBG(1, "  Added alias \"%s\"\n", alias);
+
+	return 0;
+}
+
+static int _cargo_compare_len(const void *a, const void *b)
+{
+	return strlen(*((const char **)a)) - strlen(*((const char **)b));
+}
+
+static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
+									char *namebuf, size_t buf_size)
+{
+	int i;
+	int namepos = 0;
+	const char **sorted_names;
+
+	// Sort the names by length.
+	{
+		if (!(sorted_names = calloc(opt->name_count, sizeof(char *))))
+		{
+			fprintf(stderr, "Out of memory\n");
+			return -1;
+		}
+
+		for (i = 0; i < opt->name_count; i++)
+		{
+			sorted_names[i] = opt->name[i];
+		}
+
+		qsort(sorted_names, opt->name_count, sizeof(char *), _cargo_compare_len);
+	}
+
+	for (i = 0; i < opt->name_count; i++)
+	{
+		namepos += snprintf(&namebuf[namepos], (buf_size - namepos), 
+							"%s%s", 
+							sorted_names[i], 
+							(i+1 != opt->name_count) ? ", " : "");
+
+		if (namepos < 0)
+			goto fail;
+	}
+
+	free(sorted_names);
+	return strlen(namebuf);
+fail:
+	free(sorted_names);
+	return -1;
+}
+
+int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
+{
+	int i;
+	int pos = 0;
+	char *b;
+	char **namebufs = NULL;
+	int desclen = 0;
+	int namelen;
+	int max_name_len = 0;
+	size_t b_size;
+	assert(ctx);
+	assert(buf);
+
+	// First get option names and their length.
+	// We get the widest one so we know the column width to use
+	// for the final result.
+	if (!(namebufs = calloc(ctx->opt_count, sizeof(char *))))
+	{
+		fprintf(stderr, "Out of memory!\n");
+		return -1;
+	}
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		namebufs[i] = malloc(40);
+		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
+											namebufs[i], 40);
+
+		if (namelen < 0)
+			return -1;
+
+		if (namelen > max_name_len)
+			max_name_len = namelen;
+
+		desclen += namelen + strlen(ctx->options[i].description);
+	}
+
+	if (buf_size)
+	{
+		*buf_size = desclen;
+	}
+
+	// Allocate the final buffer.
+	if (!(b = malloc(desclen)))
+	{
+		fprintf(stderr, "Out of memory!\n");
+
+		*buf = NULL;
+
+		for (i = 0; i < ctx->opt_count; i++)
+		{
+			free(namebufs[i]);
+		}
+
+		free(namebufs);
+		return -1;
+	}
+
+	*buf = b;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		pos += snprintf(&b[pos], (desclen - pos), "  %-*s%*s%s\n",
+					max_name_len, namebufs[i],
+					2, "",
+					ctx->options[i].description);
+
+		free(namebufs[i]);
+	}
+
+	free(namebufs);
+
+	return 0;
+}
+
+int cargo_print_usage(cargo_t ctx)
+{
+	char *buf;
+	size_t buf_size;
+	assert(ctx);
+
+	cargo_get_usage(ctx, &buf, NULL);
+	printf("%s\n", buf);
+	free(buf);
 
 	return 0;
 }
@@ -846,6 +981,8 @@ int main(int argc, char **argv)
 	{
 		printf("%s\n", extra_args[i]);
 	}
+
+	cargo_print_usage(cargo);
 
 fail:
 	cargo_destroy(&cargo);

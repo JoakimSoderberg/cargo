@@ -85,6 +85,10 @@ int cargo_addv_alloc(cargo_t ctx,
 
 int cargo_parse(cargo_t ctx, int argc, char **argv);
 
+int cargo_print_usage(cargo_t ctx);
+
+int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
+
 char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 
