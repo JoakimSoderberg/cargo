@@ -780,6 +780,7 @@ fail:
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 {
+	int ret = 0;
 	int i;
 	int pos = 0;
 	char *b;
@@ -802,12 +803,19 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		namebufs[i] = malloc(40);
+		if (!(namebufs[i] = malloc(40)))
+		{
+			ret = -1;
+			goto fail;
+		}
 		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
 											namebufs[i], 40);
 
 		if (namelen < 0)
-			return -1;
+		{
+			ret = -1;
+			goto fail;
+		}
 
 		if (namelen > max_name_len)
 			max_name_len = namelen;
@@ -815,27 +823,21 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		desclen += namelen + strlen(ctx->options[i].description);
 	}
 
+	// Allocate the final buffer.
+	if (!(b = malloc(desclen)))
+	{
+		fprintf(stderr, "Out of memory!\n");
+		*buf = NULL;
+		ret = -1;
+		goto fail;
+	}
+
 	if (buf_size)
 	{
 		*buf_size = desclen;
 	}
 
-	// Allocate the final buffer.
-	if (!(b = malloc(desclen)))
-	{
-		fprintf(stderr, "Out of memory!\n");
-
-		*buf = NULL;
-
-		for (i = 0; i < ctx->opt_count; i++)
-		{
-			free(namebufs[i]);
-		}
-
-		free(namebufs);
-		return -1;
-	}
-
+	// Output to the buffer.
 	*buf = b;
 
 	for (i = 0; i < ctx->opt_count; i++)
@@ -844,13 +846,23 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 					max_name_len, namebufs[i],
 					2, "",
 					ctx->options[i].description);
-
-		free(namebufs[i]);
 	}
 
-	free(namebufs);
+fail:
+	if (namebufs)
+	{
+		for (i = 0; i < ctx->opt_count; i++)
+		{
+			if (namebufs[i])
+			{
+				free(namebufs[i]);
+			}
+		}
 
-	return 0;
+		free(namebufs);
+	}
+
+	return ret;
 }
 
 int cargo_print_usage(cargo_t ctx)
