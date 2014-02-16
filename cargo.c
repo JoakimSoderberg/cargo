@@ -73,6 +73,11 @@ static int _cargo_nargs_is_valid(int nargs)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
 }
 
+static int _cargo_starts_with_prefix(cargo_t ctx, const char *arg)
+{
+	return (strpbrk(arg, ctx->prefix) == arg);
+}
+
 static char _cargo_is_prefix(cargo_t ctx, char c)
 {
 	int i;
@@ -187,10 +192,14 @@ static int _cargo_add(cargo_t ctx,
 	return 0;
 }
 
-static const char *_cargo_is_option_name(cargo_opt_t *opt, const char *arg)
+static const char *_cargo_is_option_name(cargo_t ctx, 
+					cargo_opt_t *opt, const char *arg)
 {
 	int i;
 	const char *name;
+
+	if (!_cargo_starts_with_prefix(ctx, arg))
+		return NULL;
 
 	for (i = 0; i < opt->name_count; i++)
 	{
@@ -251,7 +260,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			}
 
 			CARGODBG(1, "Allocated %dx %s!\n",
-					opt->nargs, _cargo_type_map[opt->type]);
+					alloc_count, _cargo_type_map[opt->type]);
 
 			*(opt->target) = new_target;
 		}
@@ -319,7 +328,7 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 
 	for (j = 0; j < ctx->opt_count; j++)
 	{
-		if (_cargo_is_option_name(&ctx->options[j], arg))
+		if (_cargo_is_option_name(ctx, &ctx->options[j], arg))
 		{
 			return 1;
 		}
@@ -331,21 +340,8 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
-	int start = 0;
+	int start = ctx->i + 1;
 	int opt_arg_count = 0;
-
-	// If we have at least 1 option, start looking for it.
-	if ((opt->nargs >= 0) || (opt->nargs == CARGO_NARGS_ONE_OR_MORE))
-	{
-		/*
-		if ((ctx->i + 1) >= argc)
-		{
-			printf("(%i+1) >= %d\n", ctx->i, argc);
-			return -1;
-		}*/
-
-		start = ctx->i + 1;
-	}
 
 	if (opt->nargs == 0)
 	{
@@ -444,12 +440,15 @@ static const char *_cargo_check_options(cargo_t ctx,
 	int j;
 	const char *name = NULL;
 
+	if (!_cargo_starts_with_prefix(ctx, argv[i]))
+		return NULL;
+
 	for (j = 0; j < ctx->opt_count; j++)
 	{
 		name = NULL;
 		*opt = &ctx->options[j];
 
-		if ((name = _cargo_is_option_name(*opt, argv[i])))
+		if ((name = _cargo_is_option_name(ctx, *opt, argv[i])))
 		{
 			CARGODBG(2, "  Option argv[%i]: %s\n", i, name);
 			return name;
@@ -467,6 +466,9 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	int i;
 	int j;
 	cargo_opt_t *opt;
+
+	if (!_cargo_starts_with_prefix(ctx, name))
+		return -1;
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
@@ -671,11 +673,11 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 		#if CARGO_DEBUG
 		{
 			int k = 0;
-			int ate = (ctx->i != start) ? (ctx->i - start): 1;
+			int ate = (ctx->i - start) + 1;
 
 			CARGODBG(2, "    Ate %d args: ", ate);
 
-			for (k = start; k < (start + ate); k++)
+			for (k = start; k < (start + ate ); k++)
 			{
 				CARGODBG(2, "\"%s\" ", argv[k]);
 			}
@@ -794,7 +796,7 @@ int main(int argc, char **argv)
 
 	args.blurp_count = 5;
 	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
-							CARGO_NARGS_ONE_OR_MORE, CARGO_STRING, "Blurp");
+							CARGO_NARGS_NONE_OR_MORE, CARGO_STRING, "Blurp");
 
 	if (ret != 0)
 	{
