@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <ctype.h>
 #include "cargo.h"
 
 static const char *_cargo_type_map[] = 
@@ -21,6 +22,7 @@ typedef struct cargo_opt_s
 	const char *name[CARGO_NAME_COUNT];
 	size_t name_count;
 	const char *description;
+	const char *metavar;
 	int optional;
 	cargo_type_t type;
 	int nargs;
@@ -732,7 +734,7 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 	return 0;
 }
 
-static int _cargo_compare_len(const void *a, const void *b)
+static int _cargo_compare_strlen(const void *a, const void *b)
 {
 	return strlen(*((const char **)a)) - strlen(*((const char **)b));
 }
@@ -740,6 +742,7 @@ static int _cargo_compare_len(const void *a, const void *b)
 static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 									char *namebuf, size_t buf_size)
 {
+	int ret = 0;
 	int i;
 	int namepos = 0;
 	const char **sorted_names;
@@ -757,25 +760,71 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 			sorted_names[i] = opt->name[i];
 		}
 
-		qsort(sorted_names, opt->name_count, sizeof(char *), _cargo_compare_len);
+		qsort(sorted_names, opt->name_count, 
+			sizeof(char *), _cargo_compare_strlen);
 	}
 
+	// Print the option names.
 	for (i = 0; i < opt->name_count; i++)
 	{
-		namepos += snprintf(&namebuf[namepos], (buf_size - namepos), 
-							"%s%s", 
-							sorted_names[i], 
-							(i+1 != opt->name_count) ? ", " : "");
-
-		if (namepos < 0)
+		if ((ret = snprintf(&namebuf[namepos], (buf_size - namepos), 
+						"%s%s", 
+						sorted_names[i], 
+						(i+1 != opt->name_count) ? ", " : "")) < 0) 
+		{
 			goto fail;
+		}
+
+		namepos += ret;
 	}
 
-	free(sorted_names);
-	return strlen(namebuf);
+	// If the option has an argument, add a "metavar".
+	if ((opt->nargs != 0) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
+	{
+		char metavarbuf[20];
+		const char *metavar = NULL;
+
+		if (opt->metavar)
+		{
+			metavar = opt->metavar;
+		}
+		else
+		{
+			// Got no user supplied metavar, simply use the
+			// option name in upper case instead.
+			int j = 0;
+			i = 0;
+
+			while (_cargo_is_prefix(ctx, opt->name[0][i]))
+			{
+				i++;
+			}
+
+			while (opt->name[0][i] && (j < (sizeof(metavarbuf) - 1)))
+			{
+				metavarbuf[j++] = toupper(opt->name[0][i++]);
+			}
+
+			metavarbuf[j] = '\0';
+			metavar = metavarbuf;
+		}
+
+		if ((ret = snprintf(&namebuf[namepos], (buf_size - namepos),
+					" [%s%s]",
+					metavar,
+					(opt->nargs != 1) ? " ..." : "")) < 0) 
+		{
+			goto fail;
+		}
+
+		namepos += ret;
+	}
+
+	ret = strlen(namebuf);
+
 fail:
 	free(sorted_names);
-	return -1;
+	return ret;
 }
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
@@ -808,6 +857,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			ret = -1;
 			goto fail;
 		}
+
 		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
 											namebufs[i], 40);
 
@@ -822,6 +872,9 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 		desclen += namelen + strlen(ctx->options[i].description);
 	}
+
+	// Add some extra to fit padding.
+	desclen = (int)(desclen * 1.5);
 
 	// Allocate the final buffer.
 	if (!(b = malloc(desclen)))
