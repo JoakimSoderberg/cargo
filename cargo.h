@@ -4,13 +4,6 @@
 
 #include <stdio.h>
 
-typedef enum cargo_format_e
-{
-	CARGO_FORMAT_RAW_HELP = (1 << 0),
-	CARGO_FORMAT_RAW_DESCRIPTION = (1 << 1),
-	CARGO_FORMAT_AUTO_CLEAN = (1 << 2)
-} cargo_format_t;
-
 typedef enum cargo_type_e
 {
 	CARGO_BOOL = 0,
@@ -53,8 +46,6 @@ void cargo_set_epilog(cargo_t ctx, const char *epilog);
 
 void cargo_add_help(cargo_t ctx, int add_help);
 
-void cargo_set_format(cargo_t ctx, cargo_format_t format);
-
 int cargo_add(cargo_t ctx,
 				const char *opt,
 				void *target,
@@ -83,9 +74,26 @@ int cargo_addv_alloc(cargo_t ctx,
 				cargo_type_t type,
 				const char *description);
 
-int cargo_parse(cargo_t ctx, int argc, char **argv);
+int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
+
+typedef enum cargo_format_e
+{
+	CARGO_FORMAT_RAW_HELP = (1 << 0),
+	CARGO_FORMAT_RAW_DESCRIPTION = (1 << 1),
+	CARGO_FORMAT_RAW_OPT_DESCRIPTION = (1 << 2),
+	CARGO_FORMAT_HIDE_DESCRIPTION = (1 << 3),
+	CARGO_FORMAT_HIDE_EPILOG = (1 << 4),
+} cargo_format_t;
+
+typedef struct cargo_usage_settings_s
+{
+	int max_width;
+	cargo_format_t format;
+} cargo_usage_settings_t;
 
 int cargo_print_usage(cargo_t ctx);
+
+int cargo_set_usage_settings(cargo_usage_settings_t settings);
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
 

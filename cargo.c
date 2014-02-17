@@ -37,6 +37,8 @@ typedef struct cargo_s
 {
 	const char *progname;
 	const char *description;
+	const char *epilog;
+	cargo_usage_settings_t usage;
 	cargo_format_t format;
 
 	int i;
@@ -519,6 +521,7 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	c->description = description;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
+	c->usage.max_width = 80;
 
 	return 0;
 }
@@ -561,6 +564,7 @@ void cargo_set_description(cargo_t ctx, const char *description)
 void cargo_set_epilog(cargo_t ctx, const char *epilog)
 {
 	assert(ctx);
+	ctx->epilog = epilog;
 }
 
 void cargo_add_help(cargo_t ctx, int add_help)
@@ -624,7 +628,7 @@ int cargo_addv_alloc(cargo_t ctx,
 						nargs, type, description, 1);
 }
 
-int cargo_parse(cargo_t ctx, int argc, char **argv)
+int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
 	int start;
 	int opt_arg_count;
@@ -647,7 +651,7 @@ int cargo_parse(cargo_t ctx, int argc, char **argv)
 		return -1;
 	}
 
-	for (ctx->i = 1; ctx->i < argc; ctx->i++)
+	for (ctx->i = start_index; ctx->i < argc; ctx->i++)
 	{
 		arg = argv[ctx->i];
 		start = ctx->i;
@@ -827,17 +831,72 @@ fail:
 	return ret;
 }
 
+static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
+{
+	char **ss;
+	int i = 0;
+	char *p = s;
+
+	*count = 1;
+
+	while (*p)
+	{
+		if (*p == '\n')
+			(*count)++;
+		p++;
+	}
+
+	if (!(ss = calloc(*count, sizeof(char *))))
+		return NULL;
+
+	p = strtok(s, "\n");
+	while (p)
+	{
+		ss[i] = p;
+		p = strtok(NULL, "\n");
+		i++;
+	}
+
+	return ss;
+}
+
+static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
+{
+	char *s = strdup(str);
+	char *start = s;
+	char *prev = s;
+	char *p = NULL;
+
+	if (!s)
+		return NULL;
+
+	p = strpbrk(s, " ");
+	while (p != NULL)
+	{
+		if ((p - start) > width)
+		{
+			*prev = '\n';
+			start = p;
+		}
+
+		prev = p;
+		p = strpbrk(p + 1, " ");
+	}
+
+	return s;
+}
+
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 {
 	int ret = 0;
 	int i;
+	int j;
 	int pos = 0;
 	char *b;
 	char **namebufs = NULL;
 	int desclen = 0;
 	int namelen;
 	int max_name_len = 0;
-	size_t b_size;
 	assert(ctx);
 	assert(buf);
 
@@ -873,6 +932,12 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		desclen += namelen + strlen(ctx->options[i].description);
 	}
 
+	if (ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
+		desclen += strlen(ctx->description); 
+
+	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
+		desclen += strlen(ctx->epilog);
+
 	// Add some extra to fit padding.
 	desclen = (int)(desclen * 1.5);
 
@@ -893,13 +958,64 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	// Output to the buffer.
 	*buf = b;
 
+	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
+		pos += snprintf(&b[pos], (desclen - pos), "%s\n\n", ctx->description);
+
+	pos += snprintf(&b[pos], (desclen - pos), "Optional arguments:\n");
+
+	// Option names + descriptions.
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		pos += snprintf(&b[pos], (desclen - pos), "  %-*s%*s%s\n",
-					max_name_len, namebufs[i],
-					2, "",
-					ctx->options[i].description);
+		// Print the option names.
+		pos += snprintf(&b[pos], (desclen - pos), "  %-*s",
+					max_name_len, namebufs[i]);
+
+		// Option description.
+		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
+		{
+			pos += snprintf(&b[pos], (desclen - pos), "%*s%s\n",
+					2, "", ctx->options[i].description);
+		}
+		else
+		{
+			// Add line breaks to fit the width we want.
+			char **desc_lines = NULL;
+			size_t line_count = 0;
+			int padding = 0;
+			char *opt_description = _cargo_linebreak(ctx,
+								ctx->options[i].description,
+								ctx->usage.max_width - max_name_len - 4);
+
+			if (!opt_description)
+			{
+				ret = -1;
+				goto fail;
+			}
+
+			if (!(desc_lines = _cargo_linebreak_to_list(ctx,
+									opt_description, &line_count)))
+			{
+				ret = -1;
+				goto fail;
+			}
+
+			for (j = 0; j < line_count; j++)
+			{
+				padding = (j == 0) ? 0 : (max_name_len + 2);
+
+				pos += snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
+					padding, "",
+					desc_lines[j]);
+			}
+
+			free(opt_description);
+			free(desc_lines);
+		}
 	}
+
+	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
+		pos += snprintf(&b[pos], (desclen - pos), "%s\n", ctx->epilog);
 
 fail:
 	if (namebufs)
@@ -921,7 +1037,6 @@ fail:
 int cargo_print_usage(cargo_t ctx)
 {
 	char *buf;
-	size_t buf_size;
 	assert(ctx);
 
 	cargo_get_usage(ctx, &buf, NULL);
@@ -989,7 +1104,9 @@ int main(int argc, char **argv)
 	args.poem_count = 0;
 	ret |= cargo_addv(cargo, "--poems", args.poems, &args.poem_count, 3,
 				CARGO_STRING,
-				"The poems");
+				"The poems. A very very long description for an option, "
+				"this couldn't possibly fit just one line, let's see if "
+				"we get any more?");
 
 	ret |= cargo_addv_alloc(cargo, "--tut", (void **)&args.tut, &args.tut_count, 
 							5, CARGO_STRING, "Tutiness");
@@ -1004,7 +1121,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (cargo_parse(cargo, argc, argv))
+	if (cargo_parse(cargo, 1, argc, argv))
 	{
 		fprintf(stderr, "Error parsing!\n");
 		ret = -1;
@@ -1048,7 +1165,7 @@ int main(int argc, char **argv)
 	}
 
 	cargo_print_usage(cargo);
-
+	
 fail:
 	cargo_destroy(&cargo);
 	if (args.tut)
