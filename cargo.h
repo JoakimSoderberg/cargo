@@ -99,6 +99,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
 
 char **cargo_get_args(cargo_t ctx, size_t *argc);
 
+int cargo_add_alias(cargo_t ctx, const char *name, const char *alias);
 
 
 #endif // __CARGO_H__
