@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -172,7 +171,7 @@ static int _cargo_add(cargo_t ctx,
 		// value is specified by the value in "target_count", or if that 
 		// is 0 the size_t max value is used.
 		if (*target_count == 0)
-			o->max_target_count = SIZE_MAX;
+			o->max_target_count = (size_t)-1;
 		else
 			o->max_target_count = (*target_count);
 	}
