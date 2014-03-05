@@ -5,6 +5,40 @@
 #include <errno.h>
 #include <ctype.h>
 #include "cargo.h"
+#include <stdarg.h>
+
+int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
+{
+	int r;
+	if (!buflen)
+		return 0;
+	#if defined(_MSC_VER) || defined(_WIN32)
+	r = _vsnprintf(buf, buflen, format, ap);
+	if (r < 0)
+		r = _vscprintf(format, ap);
+	#elif defined(sgi)
+	/* Make sure we always use the correct vsnprintf on IRIX */
+	extern int      _xpg5_vsnprintf(char * __restrict,
+		__SGI_LIBC_NAMESPACE_QUALIFIER size_t,
+		const char * __restrict, /* va_list */ char *);
+
+	r = _xpg5_vsnprintf(buf, buflen, format, ap);
+	#else
+	r = vsnprintf(buf, buflen, format, ap);
+	#endif
+	buf[buflen - 1] = '\0';
+	return r;
+}
+
+int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
+{
+	int r;
+	va_list ap;
+	va_start(ap, format);
+	r = cargo_vsnprintf(buf, buflen, format, ap);
+	va_end(ap);
+	return r;
+}
 
 static const char *_cargo_type_map[] = 
 {
@@ -18,7 +52,7 @@ static const char *_cargo_type_map[] =
 
 typedef struct cargo_opt_s
 {
-	const char *name[CARGO_NAME_COUNT];
+	char *name[CARGO_NAME_COUNT];
 	size_t name_count;
 	const char *description;
 	const char *metavar;
@@ -83,7 +117,7 @@ static int _cargo_starts_with_prefix(cargo_t ctx, const char *arg)
 
 static char _cargo_is_prefix(cargo_t ctx, char c)
 {
-	int i;
+	size_t i;
 	size_t prefix_len = strlen(ctx->prefix);
 
 	for (i = 0; i < prefix_len; i++)
@@ -198,7 +232,7 @@ static int _cargo_add(cargo_t ctx,
 static const char *_cargo_is_option_name(cargo_t ctx, 
 					cargo_opt_t *opt, const char *arg)
 {
-	int i;
+	size_t i;
 	const char *name;
 
 	if (!_cargo_starts_with_prefix(ctx, arg))
@@ -249,9 +283,10 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				// CARGO_NARGS_NONE_OR_MORE
 				// TODO: Don't allocate all of these right away.
 				alloc_count = ctx->argc - ctx->i;
+				assert(alloc_count >= 0);
 
 				// Don't allocate more than necessary.
-				if (opt->max_target_count < alloc_count)
+				if (opt->max_target_count < (size_t)alloc_count)
 					alloc_count = opt->max_target_count;
 			}
 
@@ -296,7 +331,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 		case CARGO_FLOAT:
 			CARGODBG(2, "      float %s\n", val);
-			((float *)target)[opt->target_idx] = atof(val);
+			((float *)target)[opt->target_idx] = (float)atof(val);
 			break;
 		case CARGO_DOUBLE:
 			CARGODBG(2, "      double %s\n", val);
@@ -327,7 +362,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 
 static int _cargo_is_another_option(cargo_t ctx, char *arg)
 {
-	int j;
+	size_t j;
 
 	for (j = 0; j < ctx->opt_count; j++)
 	{
@@ -440,7 +475,7 @@ static const char *_cargo_check_options(cargo_t ctx,
 					int argc, char **argv, int i)
 {
 	assert(opt);
-	int j;
+	size_t j;
 	const char *name = NULL;
 
 	if (!_cargo_starts_with_prefix(ctx, argv[i]))
@@ -466,8 +501,8 @@ static const char *_cargo_check_options(cargo_t ctx,
 static int _cargo_find_option_name(cargo_t ctx, const char *name, 
 									int *opt_i, int *name_i)
 {
-	int i;
-	int j;
+	size_t i;
+	size_t j;
 	cargo_opt_t *opt;
 
 	if (!_cargo_starts_with_prefix(ctx, name))
@@ -746,9 +781,9 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 									char *namebuf, size_t buf_size)
 {
 	int ret = 0;
-	int i;
+	size_t i;
 	int namepos = 0;
-	const char **sorted_names;
+	char **sorted_names;
 
 	// Sort the names by length.
 	{
@@ -770,7 +805,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	// Print the option names.
 	for (i = 0; i < opt->name_count; i++)
 	{
-		if ((ret = snprintf(&namebuf[namepos], (buf_size - namepos), 
+		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
 						"%s%s", 
 						sorted_names[i], 
 						(i+1 != opt->name_count) ? ", " : "")) < 0) 
@@ -812,7 +847,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 			metavar = metavarbuf;
 		}
 
-		if ((ret = snprintf(&namebuf[namepos], (buf_size - namepos),
+		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
 					" [%s%s]",
 					metavar,
 					(opt->nargs != 1) ? " ..." : "")) < 0) 
@@ -872,7 +907,7 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	p = strpbrk(s, " ");
 	while (p != NULL)
 	{
-		if ((p - start) > width)
+		if ((size_t)(p - start) > width)
 		{
 			*prev = '\n';
 			start = p;
@@ -888,8 +923,8 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 {
 	int ret = 0;
-	int i;
-	int j;
+	size_t i;
+	size_t j;
 	int pos = 0;
 	char *b;
 	char **namebufs = NULL;
@@ -958,22 +993,22 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	*buf = b;
 
 	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
-		pos += snprintf(&b[pos], (desclen - pos), "%s\n\n", ctx->description);
+		pos += cargo_snprintf(&b[pos], (desclen - pos), "%s\n\n", ctx->description);
 
-	pos += snprintf(&b[pos], (desclen - pos), "Optional arguments:\n");
+	pos += cargo_snprintf(&b[pos], (desclen - pos), "Optional arguments:\n");
 
 	// Option names + descriptions.
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		// Print the option names.
-		pos += snprintf(&b[pos], (desclen - pos), "  %-*s",
+		pos += cargo_snprintf(&b[pos], (desclen - pos), "  %-*s",
 					max_name_len, namebufs[i]);
 
 		// Option description.
 		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
 			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
 		{
-			pos += snprintf(&b[pos], (desclen - pos), "%*s%s\n",
+			pos += cargo_snprintf(&b[pos], (desclen - pos), "%*s%s\n",
 					2, "", ctx->options[i].description);
 		}
 		else
@@ -1003,7 +1038,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			{
 				padding = (j == 0) ? 0 : (max_name_len + 2);
 
-				pos += snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
+				pos += cargo_snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
 					padding, "",
 					desc_lines[j]);
 			}
@@ -1014,7 +1049,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	}
 
 	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
-		pos += snprintf(&b[pos], (desclen - pos), "%s\n", ctx->epilog);
+		pos += cargo_snprintf(&b[pos], (desclen - pos), "%s\n", ctx->epilog);
 
 fail:
 	if (namebufs)

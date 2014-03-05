@@ -87,7 +87,7 @@ typedef enum cargo_format_e
 
 typedef struct cargo_usage_settings_s
 {
-	int max_width;
+	size_t max_width;
 	cargo_format_t format;
 } cargo_usage_settings_t;
 
