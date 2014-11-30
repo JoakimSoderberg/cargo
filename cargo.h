@@ -83,7 +83,10 @@ typedef enum cargo_format_e
 	CARGO_FORMAT_RAW_OPT_DESCRIPTION = (1 << 2),
 	CARGO_FORMAT_HIDE_DESCRIPTION = (1 << 3),
 	CARGO_FORMAT_HIDE_EPILOG = (1 << 4),
+	CARGO_FORMAT_HIDE_SHORT = (1 << 5)
 } cargo_format_t;
+
+#define CARGO_DEFAULT_MAX_WIDTH 80
 
 typedef struct cargo_usage_settings_s
 {

@@ -52,7 +52,7 @@ static const char *_cargo_type_map[] =
 
 typedef struct cargo_opt_s
 {
-	char *name[CARGO_NAME_COUNT];
+	const char *name[CARGO_NAME_COUNT];
 	size_t name_count;
 	const char *description;
 	const char *metavar;
@@ -555,7 +555,7 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	c->description = description;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
-	c->usage.max_width = 80;
+	c->usage.max_width = CARGO_DEFAULT_MAX_WIDTH;
 
 	return 0;
 }
@@ -783,7 +783,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	int ret = 0;
 	size_t i;
 	int namepos = 0;
-	char **sorted_names;
+	const char **sorted_names;
 
 	// Sort the names by length.
 	{
@@ -973,7 +973,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		desclen += strlen(ctx->epilog);
 
 	// Add some extra to fit padding.
-	desclen = (int)(desclen * 1.5);
+	desclen = (int)(desclen * 2.5);
 
 	// Allocate the final buffer.
 	if (!(b = malloc(desclen)))
@@ -1013,6 +1013,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 		else
 		{
+			// TODO: Break out into separate function.
 			// Add line breaks to fit the width we want.
 			char **desc_lines = NULL;
 			size_t line_count = 0;
@@ -1036,6 +1037,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 			for (j = 0; j < line_count; j++)
 			{
+				// First line does not need the extra padding.
 				padding = (j == 0) ? 0 : (max_name_len + 2);
 
 				pos += cargo_snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
@@ -1079,6 +1081,9 @@ int cargo_print_usage(cargo_t ctx)
 
 	return 0;
 }
+
+// TODO: Add cargo_print_short_usage(cargo_t ctx)
+// program [-h] [-s]  
 
 // -----------------------------------------------------------------------------
 // Tests.
@@ -1193,13 +1198,20 @@ int main(int argc, char **argv)
 	extra_args = cargo_get_args(cargo, &extra_count);
 	printf("\nExtra arguments:\n");
 
-	for (i = 0; i < extra_count; i++)
+	if (extra_count > 0)
 	{
-		printf("%s\n", extra_args[i]);
+		for (i = 0; i < extra_count; i++)
+		{
+			printf("%s\n", extra_args[i]);
+		}
+	}
+	else
+	{
+		printf("  [None]\n");
 	}
 
 	cargo_print_usage(cargo);
-	
+
 fail:
 	cargo_destroy(&cargo);
 	if (args.tut)
