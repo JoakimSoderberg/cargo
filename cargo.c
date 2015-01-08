@@ -821,7 +821,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	int ret = 0;
 	size_t i;
 	int namepos = 0;
-	const char **sorted_names;
+	char **sorted_names;
 
 	// Sort the names by length.
 	{
