@@ -1,0 +1,2 @@
+sudo: false
+script: gcc -DCARGO_TEST -o cargo_test *.c && ./cargo_test
