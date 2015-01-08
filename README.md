@@ -19,3 +19,9 @@ To compile the tests simply define `CARGO_TEST`. For example using `gcc`:
 ```bash
 $ gcc -DCARGO_TEST=1 cargo.c
 ```
+
+Or on Windows using the visual studio command line:
+
+```bash
+> cl.exe /DCARGO_TEST cargo.c
+```
