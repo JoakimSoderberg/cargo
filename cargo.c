@@ -506,9 +506,9 @@ static const char *_cargo_check_options(cargo_t ctx,
 					cargo_opt_t **opt,
 					int argc, char **argv, int i)
 {
-	assert(opt);
 	size_t j;
 	const char *name = NULL;
+	assert(opt);
 
 	if (!_cargo_starts_with_prefix(ctx, argv[i]))
 		return NULL;
