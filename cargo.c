@@ -6,6 +6,38 @@
 #include <ctype.h>
 #include "cargo.h"
 #include <stdarg.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif // _WIN32
+
+int cargo_get_console_width()
+{
+	#ifdef _WIN32
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+
+	if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+	{
+		return -1;
+	}
+
+	return (int)(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+
+	#else // Unix
+
+	struct winsize w;
+	ioctl(0, TIOCGWINSZ , &w);
+
+	if (!ioctl(0, TIOCGWINSZ , &w))
+	{
+		return w.ws_col;
+	}
+
+	return -1;
+	#endif // _WIN32
+}
 
 int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 {
@@ -533,6 +565,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 int cargo_init(cargo_t *ctx, size_t max_opts,
 				const char *progname, const char *description)
 {
+	int console_width = -1;
 	cargo_s *c;
 	assert(ctx);
 
@@ -556,6 +589,11 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	c->usage.max_width = CARGO_DEFAULT_MAX_WIDTH;
+
+	if ((console_width = cargo_get_console_width()) > 0)
+	{
+		c->usage.max_width = console_width;
+	}
 
 	return 0;
 }
@@ -933,6 +971,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	int max_name_len = 0;
 	assert(ctx);
 	assert(buf);
+	#define MAX_OPT_NAME_LEN 40
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -945,19 +984,17 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		if (!(namebufs[i] = malloc(40)))
+		if (!(namebufs[i] = malloc(MAX_OPT_NAME_LEN)))
 		{
-			ret = -1;
-			goto fail;
+			ret = -1; goto fail;
 		}
 
 		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
-											namebufs[i], 40);
+											namebufs[i], MAX_OPT_NAME_LEN);
 
 		if (namelen < 0)
 		{
-			ret = -1;
-			goto fail;
+			ret = -1; goto fail;
 		}
 
 		if (namelen > max_name_len)
@@ -980,8 +1017,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	{
 		fprintf(stderr, "Out of memory!\n");
 		*buf = NULL;
-		ret = -1;
-		goto fail;
+		ret = -1; goto fail;
 	}
 
 	if (buf_size)
@@ -1024,15 +1060,13 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 			if (!opt_description)
 			{
-				ret = -1;
-				goto fail;
+				ret = -1; goto fail;
 			}
 
 			if (!(desc_lines = _cargo_linebreak_to_list(ctx,
 									opt_description, &line_count)))
 			{
-				ret = -1;
-				goto fail;
+				ret = -1; goto fail;
 			}
 
 			for (j = 0; j < line_count; j++)
