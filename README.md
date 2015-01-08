@@ -1,3 +1,7 @@
+[![Travis CI build status (Linux)](https://travis-ci.org/JoakimSoderberg/cargo.svg)](https://travis-ci.org/JoakimSoderberg/cargo)
+[![Appveyor Build status (Windows)](https://ci.appveyor.com/api/projects/status/hia4q08852puktpf?svg=true)](https://ci.appveyor.com/project/JoakimSoderberg/cargo)
+
+
 cargo
 =====
 
