@@ -23,6 +23,8 @@ int cargo_get_console_width()
 		return -1;
 	}
 
+	CARGODBG(3, "Console width: %d\n", (int)(csbi.srWindow.Right - csbi.srWindow.Left));
+
 	return (int)(csbi.srWindow.Right - csbi.srWindow.Left);
 
 	#else // Unix
@@ -592,9 +594,6 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 
 	if ((console_width = cargo_get_console_width()) > 0)
 	{
-		#ifdef _WIN32
-		console_width -= 8;
-		#endif
 		c->usage.max_width = console_width;
 	}
 
@@ -914,6 +913,8 @@ static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
 
 	*count = 1;
 
+	CARGODBG(3, "_cargo_linebreak_to_list:\n\n");
+
 	while (*p)
 	{
 		if (*p == '\n')
@@ -928,6 +929,8 @@ static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
 	while (p)
 	{
 		ss[i] = p;
+		CARGODBG(3, "%d: %s\n", i, ss[i]);
+
 		p = strtok(NULL, "\n");
 		i++;
 	}
@@ -940,30 +943,39 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	char *s = strdup(str);
 	char *start = s;
 	char *prev = s;
-	char *p = NULL;
+	char *p = s;
 
 	if (!s)
 		return NULL;
 
+	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %d):\n%d\"%s\"\n\n", width, strlen(s), s);
+
 	// TODO: If we already have a linebreak, use that instead of adding a new one.
-	p = strpbrk(s, " \n");
+	p = strpbrk(p, " \n");
 	while (p != NULL)
 	{
+		CARGODBG(4, "(p - start) = %d: %.*s\n", (p - start), (p - start), start);
+
 		// Restart on already existing explicit line breaks.
 		if (*p == '\n')
 		{
+			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n", (p - start), (p - start), start);
 			start = p;
 		}
 		else if ((size_t)(p - start) > width)
 		{
 			// We found a word that goes beyond the width we're
-			// aimin for, so add the line break before that word.
+			// aiming for, so add the line break before that word.
 			*prev = '\n';
-			start = p;
+			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n", (prev - start), (prev - start), start);
+			start = prev;
+			continue;
 		}
 
 		prev = p;
 		p = strpbrk(p + 1, " \n");
+
+		CARGODBG(4, "\n");
 	}
 
 	return s;
@@ -977,13 +989,13 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	int pos;
 	char *b;
 	char **namebufs = NULL;
-	int desclen = 0;
+	int usagelen = 0;
 	int namelen;
 	int max_name_len = 0;
 	assert(ctx);
 	assert(buf);
 	#define MAX_OPT_NAME_LEN 40
-	#define NAME_PADDING 3
+	#define NAME_PADDING 2
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -1014,24 +1026,24 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			max_name_len = namelen;
 		}
 
-		desclen += namelen + strlen(ctx->options[i].description);
+		usagelen += namelen + strlen(ctx->options[i].description);
 	}
 
 	if (ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		desclen += strlen(ctx->description);
+		usagelen += strlen(ctx->description);
 	}
 
 	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
 	{
-		desclen += strlen(ctx->epilog);
+		usagelen += strlen(ctx->epilog);
 	}
 
 	// Add some extra to fit padding.
-	desclen = (int)(desclen * 2.5);
+	usagelen = (int)(usagelen * 2.5);
 
 	// Allocate the final buffer.
-	if (!(b = malloc(desclen)))
+	if (!(b = malloc(usagelen)))
 	{
 		fprintf(stderr, "Out of memory!\n");
 		*buf = NULL;
@@ -1040,7 +1052,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	if (buf_size)
 	{
-		*buf_size = desclen;
+		*buf_size = usagelen;
 	}
 
 	// Output to the buffer.
@@ -1049,24 +1061,26 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		pos += cargo_snprintf(&b[pos], (desclen - pos), "%s\n\n", ctx->description);
+		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n\n", ctx->description);
 	}
 
-	// TODO: Replace cargo_snprintf(&b[pos], (desclen - pos) .... with a cargo_appendf function instead.
-	pos += cargo_snprintf(&b[pos], (desclen - pos), "Optional arguments:\n");
+	// TODO: Replace cargo_snprintf(&b[pos], (usagelen - pos) .... with a cargo_appendf function instead.
+	pos += cargo_snprintf(&b[pos], (usagelen - pos), "Optional arguments:\n");
+
+	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n", max_name_len, ctx->usage.max_width);
 
 	// Option names + descriptions.
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		// Print the option names.
-		pos += cargo_snprintf(&b[pos], (desclen - pos), "  %-*s",
+		pos += cargo_snprintf(&b[pos], (usagelen - pos), "  %-*s",
 					max_name_len, namebufs[i]);
 
 		// Option description.
 		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
 			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
 		{
-			pos += cargo_snprintf(&b[pos], (desclen - pos), "%*s%s\n",
+			pos += cargo_snprintf(&b[pos], (usagelen - pos), "%*s%s\n",
 					NAME_PADDING, "", ctx->options[i].description);
 		}
 		else
@@ -1079,7 +1093,10 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			int padding = 0;
 			char *opt_description = _cargo_linebreak(ctx,
 								ctx->options[i].description,
-								ctx->usage.max_width - max_name_len - (2 * NAME_PADDING));
+								ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
+
+			CARGODBG(1, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n%d - 2 - %d - (2 * %d) = %d\n",
+					ctx->usage.max_width, max_name_len, NAME_PADDING, ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
 
 			if (!opt_description)
 			{
@@ -1095,9 +1112,10 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			for (j = 0; j < line_count; j++)
 			{
 				// First line does not need the extra padding.
-				padding = (j == 0) ? (NAME_PADDING / 2) : (max_name_len + NAME_PADDING);
+				padding = (j == 0) ? 0 : (max_name_len + NAME_PADDING);
+				CARGODBG(1, "line len: %d\n", strlen(desc_lines[j]));
 
-				pos += cargo_snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
+				pos += cargo_snprintf(&b[pos], (usagelen - pos), "  %*s%s\n",
 					padding, "",
 					desc_lines[j]);
 			}
@@ -1108,7 +1126,9 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	}
 
 	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
-		pos += cargo_snprintf(&b[pos], (desclen - pos), "%s\n", ctx->epilog);
+	{
+		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n", ctx->epilog);
+	}
 
 fail:
 	if (namebufs)
@@ -1200,9 +1220,11 @@ int main(int argc, char **argv)
 	args.poem_count = 0;
 	ret |= cargo_addv(cargo, "--poems", args.poems, &args.poem_count, 3,
 				CARGO_STRING,
-				"The poems. A very very long descriptionfor an option, "
+				"The poems. A very very long\ndescription for an option, "
 				"this couldn't possibly fit just one line, let's see if "
-				"we get any more?");
+				"we get any more? Let's try even more crap here! Awesomely "
+				"long sentences going on forever, so much crap in this text "
+				"that it's hard to read");
 
 	ret |= cargo_addv_alloc(cargo, "--tut", (void **)&args.tut, &args.tut_count, 
 							5, CARGO_STRING, "Tutiness");

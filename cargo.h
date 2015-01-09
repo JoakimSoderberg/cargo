@@ -19,7 +19,7 @@ typedef enum cargo_type_e
 { \
 	if (level <= CARGO_DEBUG) \
 	{ \
-		fprintf(stderr, fmt, __VA_ARGS__); \
+		fprintf(stderr, "DEBUG %d: "fmt, level, __VA_ARGS__); \
 	} \
 }
 #else
