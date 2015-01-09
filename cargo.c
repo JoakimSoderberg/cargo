@@ -23,7 +23,7 @@ int cargo_get_console_width()
 		return -1;
 	}
 
-	return (int)(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+	return (int)(csbi.srWindow.Right - csbi.srWindow.Left);
 
 	#else // Unix
 
@@ -592,6 +592,9 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 
 	if ((console_width = cargo_get_console_width()) > 0)
 	{
+		#ifdef _WIN32
+		console_width -= 8;
+		#endif
 		c->usage.max_width = console_width;
 	}
 
@@ -942,17 +945,25 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	if (!s)
 		return NULL;
 
-	p = strpbrk(s, " ");
+	// TODO: If we already have a linebreak, use that instead of adding a new one.
+	p = strpbrk(s, " \n");
 	while (p != NULL)
 	{
-		if ((size_t)(p - start) > width)
+		// Restart on already existing explicit line breaks.
+		if (*p == '\n')
 		{
+			start = p;
+		}
+		else if ((size_t)(p - start) > width)
+		{
+			// We found a word that goes beyond the width we're
+			// aimin for, so add the line break before that word.
 			*prev = '\n';
 			start = p;
 		}
 
 		prev = p;
-		p = strpbrk(p + 1, " ");
+		p = strpbrk(p + 1, " \n");
 	}
 
 	return s;
@@ -963,7 +974,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	int ret = 0;
 	size_t i;
 	size_t j;
-	int pos = 0;
+	int pos;
 	char *b;
 	char **namebufs = NULL;
 	int desclen = 0;
@@ -972,6 +983,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	assert(ctx);
 	assert(buf);
 	#define MAX_OPT_NAME_LEN 40
+	#define NAME_PADDING 3
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -998,16 +1010,22 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 
 		if (namelen > max_name_len)
+		{
 			max_name_len = namelen;
+		}
 
 		desclen += namelen + strlen(ctx->options[i].description);
 	}
 
 	if (ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
-		desclen += strlen(ctx->description); 
+	{
+		desclen += strlen(ctx->description);
+	}
 
 	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
+	{
 		desclen += strlen(ctx->epilog);
+	}
 
 	// Add some extra to fit padding.
 	desclen = (int)(desclen * 2.5);
@@ -1027,10 +1045,14 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	// Output to the buffer.
 	*buf = b;
+	pos = 0;
 
 	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
+	{
 		pos += cargo_snprintf(&b[pos], (desclen - pos), "%s\n\n", ctx->description);
+	}
 
+	// TODO: Replace cargo_snprintf(&b[pos], (desclen - pos) .... with a cargo_appendf function instead.
 	pos += cargo_snprintf(&b[pos], (desclen - pos), "Optional arguments:\n");
 
 	// Option names + descriptions.
@@ -1045,7 +1067,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
 		{
 			pos += cargo_snprintf(&b[pos], (desclen - pos), "%*s%s\n",
-					2, "", ctx->options[i].description);
+					NAME_PADDING, "", ctx->options[i].description);
 		}
 		else
 		{
@@ -1053,10 +1075,11 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			// Add line breaks to fit the width we want.
 			char **desc_lines = NULL;
 			size_t line_count = 0;
+
 			int padding = 0;
 			char *opt_description = _cargo_linebreak(ctx,
 								ctx->options[i].description,
-								ctx->usage.max_width - max_name_len - 4);
+								ctx->usage.max_width - max_name_len - (2 * NAME_PADDING));
 
 			if (!opt_description)
 			{
@@ -1072,7 +1095,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 			for (j = 0; j < line_count; j++)
 			{
 				// First line does not need the extra padding.
-				padding = (j == 0) ? 0 : (max_name_len + 2);
+				padding = (j == 0) ? (NAME_PADDING / 2) : (max_name_len + NAME_PADDING);
 
 				pos += cargo_snprintf(&b[pos], (desclen - pos), "  %*s%s\n",
 					padding, "",
@@ -1177,7 +1200,7 @@ int main(int argc, char **argv)
 	args.poem_count = 0;
 	ret |= cargo_addv(cargo, "--poems", args.poems, &args.poem_count, 3,
 				CARGO_STRING,
-				"The poems. A very very long description for an option, "
+				"The poems. A very very long descriptionfor an option, "
 				"this couldn't possibly fit just one line, let's see if "
 				"we get any more?");
 
