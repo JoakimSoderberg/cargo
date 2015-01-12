@@ -119,6 +119,9 @@ typedef struct cargo_s
 	size_t max_opts;
 	const char *prefix;
 
+	char **unknown_opts;
+	size_t unknown_opts_count;
+
 	char **args;
 	size_t arg_count;
 } cargo_s;
@@ -247,7 +250,6 @@ static int _cargo_add(cargo_t ctx,
 	{
 		o->max_target_count = 0;
 	}
-
 
 	o->alloc = alloc;
 
@@ -617,6 +619,12 @@ void cargo_destroy(cargo_t *ctx)
 			(*ctx)->arg_count = 0;
 		}
 
+		if ((*ctx)->unknown_opts)
+		{
+			free((*ctx)->unknown_opts);
+			(*ctx)->unknown_opts = NULL;
+			(*ctx)->unknown_opts_count = 0;
+		}
 
 		free(*ctx);
 		ctx = NULL;
@@ -717,10 +725,24 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	{
 		free(ctx->args);
 		ctx->args = NULL;
-		ctx->arg_count = 0;
 	}
 
+	ctx->arg_count = 0;
+
+	if (ctx->unknown_opts)
+	{
+		free(ctx->unknown_opts);
+		ctx->unknown_opts = NULL;
+	}
+
+	ctx->unknown_opts_count = 0;
+
 	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
+	{
+		return -1;
+	}
+
+	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
 	{
 		return -1;
 	}
@@ -745,9 +767,20 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		}
 		else
 		{
-			// Normal argument.
-			ctx->args[ctx->arg_count] = argv[ctx->i];
-			ctx->arg_count++;
+			// TODO: Optional to fail on unknown options!
+			if (_cargo_is_prefix(ctx, argv[ctx->i][0]))
+			{
+				CARGODBG(2, "    Unknown option: %s\n", argv[ctx->i]);
+				ctx->unknown_opts[ctx->unknown_opts_count] = argv[ctx->i];
+				ctx->unknown_opts_count++;
+			}
+			else
+			{
+				// Normal argument.
+				CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
+				ctx->args[ctx->arg_count] = argv[ctx->i];
+				ctx->arg_count++;
+			}
 		}
 
 		#if CARGO_DEBUG
@@ -767,7 +800,34 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		#endif // CARGO_DEBUG
 	}
 
+	if (ctx->unknown_opts_count > 0)
+	{
+		size_t i;
+		// TODO: Don't print to stderr here, instead enable getting as a string.
+		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
+		fprintf(stderr, "Unknown options:\n");
+
+		for (i = 0; i < ctx->unknown_opts_count; i++)
+		{
+			fprintf(stderr, "%s\n", ctx->unknown_opts[i]);
+		}
+
+		return -1;
+	}
+
 	return 0;
+}
+
+char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
+{
+	assert(ctx);
+
+	if (unknown_count)
+	{
+		return ctx->unknown_opts_count;
+	}
+
+	return ctx->unknown_opts;
 }
 
 char **cargo_get_args(cargo_t ctx, size_t *argc)

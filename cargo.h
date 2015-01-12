@@ -19,7 +19,7 @@ typedef enum cargo_type_e
 { \
 	if (level <= CARGO_DEBUG) \
 	{ \
-		fprintf(stderr, "DEBUG %d: "fmt, level, __VA_ARGS__); \
+		fprintf(stderr, fmt, ##__VA_ARGS__); \
 	} \
 }
 #else
@@ -99,6 +99,8 @@ int cargo_print_usage(cargo_t ctx);
 int cargo_set_usage_settings(cargo_usage_settings_t settings);
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
+
+char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 char **cargo_get_args(cargo_t ctx, size_t *argc);
 
