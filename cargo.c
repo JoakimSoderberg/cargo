@@ -823,7 +823,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	int ret = 0;
 	size_t i;
 	int namepos = 0;
-	char **sorted_names;
+	char **sorted_names = NULL;
 
 	// Sort the names by length.
 	{
@@ -835,7 +835,10 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 
 		for (i = 0; i < opt->name_count; i++)
 		{
-			sorted_names[i] = opt->name[i];
+			if (!(sorted_names[i] = strdup(opt->name[i])))
+			{
+				ret = -1; goto fail;
+			}
 		}
 
 		qsort(sorted_names, opt->name_count, 
@@ -901,6 +904,14 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	ret = strlen(namebuf);
 
 fail:
+	for (i = 0; i < opt->name_count; i++)
+	{
+		if (sorted_names[i])
+		{
+			free(sorted_names[i]);
+		}
+	}
+
 	free(sorted_names);
 	return ret;
 }
