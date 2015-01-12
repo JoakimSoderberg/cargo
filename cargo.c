@@ -1075,6 +1075,10 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
 	// for the final result.
+	//   --option_a         Some description.
+	//   --longer_option_b  Another description...
+	// ^-------------------^
+	// What should the above width be.
 	if (!(namebufs = calloc(ctx->opt_count, sizeof(char *))))
 	{
 		fprintf(stderr, "Out of memory!\n");
@@ -1083,20 +1087,23 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		if (!(namebufs[i] = malloc(MAX_OPT_NAME_LEN)))
+		if (!(namebufs[i] = malloc(ctx->usage.max_width)))
 		{
 			ret = -1; goto fail;
 		}
 
 		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
-											namebufs[i], MAX_OPT_NAME_LEN);
+											namebufs[i], ctx->usage.max_width);
 
 		if (namelen < 0)
 		{
 			ret = -1; goto fail;
 		}
 
-		if (namelen > max_name_len)
+		// Get the longest option name.
+		// (However, if it's too long don't count it, then we'll just
+		// do a line break before printing the description).
+		if ((namelen > max_name_len) && (namelen <= MAX_OPT_NAME_LEN))
 		{
 			max_name_len = namelen;
 		}
@@ -1115,41 +1122,60 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	}
 
 	// Add some extra to fit padding.
+	// TODO: Let's be more strict here and use the exact padding instead.
 	usagelen = (int)(usagelen * 2.5);
 
-	// Allocate the final buffer.
-	if (!(b = malloc(usagelen)))
-	{
-		fprintf(stderr, "Out of memory!\n");
-		*buf = NULL;
-		ret = -1; goto fail;
-	}
-
+	// Make sure we where given a buffer that is large enough.
 	if (buf_size)
 	{
+		if (*buf_size < usagelen)
+		{
+			ret = -1; goto fail;
+		}
+
 		*buf_size = usagelen;
 	}
+	else
+	{
+		// Allocate the final buffer.
+		if (!(b = malloc(usagelen)))
+		{
+			fprintf(stderr, "Out of memory!\n");
+			*buf = NULL;
+			ret = -1; goto fail;
+		}
 
-	// Output to the buffer.
-	*buf = b;
+		// Output to the buffer.
+		*buf = b;
+	}
+
 	pos = 0;
 
 	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n\n", ctx->description);
+		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n\n",
+				ctx->description);
 	}
 
-	// TODO: Replace cargo_snprintf(&b[pos], (usagelen - pos) .... with a cargo_appendf function instead.
+	// TODO: Replace cargo_snprintf(&b[pos], (usagelen - pos) .... 
+	// with a cargo_appendf function instead.
 	pos += cargo_snprintf(&b[pos], (usagelen - pos), "Optional arguments:\n");
 
-	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n", max_name_len, ctx->usage.max_width);
+	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n",
+		max_name_len, ctx->usage.max_width);
 
 	// Option names + descriptions.
 	for (i = 0; i < ctx->opt_count; i++)
 	{
+		// Is the option name so long we need a new line before the description?
+		int option_causes_newline = strlen(namebufs[i]) > max_name_len;
+
 		// Print the option names.
-		pos += cargo_snprintf(&b[pos], (usagelen - pos), "  %-*s",
-					max_name_len, namebufs[i]);
+		// "  --ducks [DUCKS ...]  "
+		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%*s%-*s%s",
+				NAME_PADDING, " ",
+				max_name_len, namebufs[i],
+				(option_causes_newline ? "\n" : ""));
 
 		// Option description.
 		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
@@ -1187,8 +1213,22 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 			for (j = 0; j < line_count; j++)
 			{
-				// First line does not need the extra padding.
-				padding = (j == 0) ? 0 : (max_name_len + NAME_PADDING);
+				if ((j == 0) && !option_causes_newline)
+				{
+					// --theoption  Description <- First line of description.
+					padding = 0;
+				}
+				else
+				{
+					// --theoption  Description
+					//              continues here <- Now we want pre-padding.
+					// ---------------------------------------------------------
+					// --reallyreallyreallyreallylongoption
+					//              Description    <- First line but pad anyway.
+					//              continues here 
+					padding = max_name_len + NAME_PADDING;
+				}
+
 				CARGODBG(1, "line len: %d\n", strlen(desc_lines[j]));
 
 				pos += cargo_snprintf(&b[pos], (usagelen - pos), "  %*s%s\n",
@@ -1294,7 +1334,7 @@ int main(int argc, char **argv)
 	cargo_add_alias(cargo, "--arne", "-a");
 
 	args.poem_count = 0;
-	ret |= cargo_addv(cargo, "--poems", args.poems, &args.poem_count, 3,
+	ret |= cargo_addv(cargo, "--poemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoems", args.poems, &args.poem_count, 3,
 				CARGO_STRING,
 				"The poems. A very very long\ndescription for an option, "
 				"this couldn't possibly fit just one line, let's see if "
