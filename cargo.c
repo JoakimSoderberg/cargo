@@ -1019,18 +1019,21 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	if (!s)
 		return NULL;
 
-	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %d):\n%d\"%s\"\n\n", width, strlen(s), s);
+	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %lu):\n%lu\"%s\"\n\n",
+		width, strlen(s), s);
 
 	// TODO: If we already have a linebreak, use that instead of adding a new one.
 	p = strpbrk(p, " \n");
 	while (p != NULL)
 	{
-		CARGODBG(4, "(p - start) = %d: %.*s\n", (p - start), (p - start), start);
+		CARGODBG(4, "(p - start) = %d: %.*s\n",
+			(p - start), (p - start), start);
 
 		// Restart on already existing explicit line breaks.
 		if (*p == '\n')
 		{
-			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n", (p - start), (p - start), start);
+			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n",
+				(p - start), (p - start), start);
 			start = p;
 		}
 		else if ((size_t)(p - start) > width)
@@ -1038,7 +1041,8 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 			// We found a word that goes beyond the width we're
 			// aiming for, so add the line break before that word.
 			*prev = '\n';
-			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n", (prev - start), (prev - start), start);
+			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n",
+				(prev - start), (prev - start), start);
 			start = prev;
 			continue;
 		}
@@ -1163,8 +1167,9 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 			int padding = 0;
 			char *opt_description = _cargo_linebreak(ctx,
-								ctx->options[i].description,
-								ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
+										ctx->options[i].description,
+										ctx->usage.max_width - 2
+										- max_name_len - (2 * NAME_PADDING));
 
 			CARGODBG(1, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n%d - 2 - %d - (2 * %d) = %d\n",
 					ctx->usage.max_width, max_name_len, NAME_PADDING, ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
@@ -1281,7 +1286,7 @@ int main(int argc, char **argv)
 	args.ducks[1] = 4;
 	args.duck_count = sizeof(args.ducks) / sizeof(args.ducks[0]);
 	ret |= cargo_addv(cargo, "--ducks", (void **)&args.ducks, &args.duck_count,
-				 2, CARGO_INT, "How man geese live on the farm");
+				 2, CARGO_INT, "How man ducks live on the farm");
 
 	args.arne = 4.4f;
 	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_FLOAT,
