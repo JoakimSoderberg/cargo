@@ -562,6 +562,190 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	return -1; 
 }
 
+static int _cargo_compare_strlen(const void *a, const void *b)
+{
+	return strlen(*((const char **)a)) - strlen(*((const char **)b));
+}
+
+static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
+	char *namebuf, size_t buf_size)
+{
+	int ret = 0;
+	size_t i;
+	int namepos = 0;
+	char **sorted_names = NULL;
+
+	// Sort the names by length.
+	{
+		if (!(sorted_names = calloc(opt->name_count, sizeof(char *))))
+		{
+			fprintf(stderr, "Out of memory\n");
+			return -1;
+		}
+
+		for (i = 0; i < opt->name_count; i++)
+		{
+			if (!(sorted_names[i] = strdup(opt->name[i])))
+			{
+				ret = -1; goto fail;
+			}
+		}
+
+		qsort(sorted_names, opt->name_count,
+			sizeof(char *), _cargo_compare_strlen);
+	}
+
+	// Print the option names.
+	for (i = 0; i < opt->name_count; i++)
+	{
+		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
+			"%s%s",
+			sorted_names[i],
+			(i + 1 != opt->name_count) ? ", " : "")) < 0)
+		{
+			goto fail;
+		}
+
+		namepos += ret;
+	}
+
+	// If the option has an argument, add a "metavar".
+	if ((opt->nargs != 0) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
+	{
+		char metavarbuf[20];
+		const char *metavar = NULL;
+
+		if (opt->metavar)
+		{
+			metavar = opt->metavar;
+		}
+		else
+		{
+			// Got no user supplied metavar, simply use the
+			// option name in upper case instead.
+			int j = 0;
+			i = 0;
+
+			while (_cargo_is_prefix(ctx, opt->name[0][i]))
+			{
+				i++;
+			}
+
+			while (opt->name[0][i] && (j < (sizeof(metavarbuf)-1)))
+			{
+				metavarbuf[j++] = toupper(opt->name[0][i++]);
+			}
+
+			metavarbuf[j] = '\0';
+			metavar = metavarbuf;
+		}
+
+		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
+			" [%s%s]",
+			metavar,
+			(opt->nargs != 1) ? " ..." : "")) < 0)
+		{
+			goto fail;
+		}
+
+		namepos += ret;
+	}
+
+	ret = strlen(namebuf);
+
+fail:
+	for (i = 0; i < opt->name_count; i++)
+	{
+		if (sorted_names[i])
+		{
+			free(sorted_names[i]);
+		}
+	}
+
+	free(sorted_names);
+	return ret;
+}
+
+static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
+{
+	char **ss;
+	int i = 0;
+	char *p = s;
+
+	*count = 1;
+
+	CARGODBG(3, "_cargo_linebreak_to_list:\n\n");
+
+	while (*p)
+	{
+		if (*p == '\n')
+			(*count)++;
+		p++;
+	}
+
+	if (!(ss = calloc(*count, sizeof(char *))))
+		return NULL;
+
+	p = strtok(s, "\n");
+	while (p)
+	{
+		ss[i] = p;
+		CARGODBG(3, "%d: %s\n", i, ss[i]);
+
+		p = strtok(NULL, "\n");
+		i++;
+	}
+
+	return ss;
+}
+
+static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
+{
+	char *s = strdup(str);
+	char *start = s;
+	char *prev = s;
+	char *p = s;
+
+	if (!s)
+		return NULL;
+
+	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %lu):\n%lu\"%s\"\n\n",
+		width, strlen(s), s);
+
+	// TODO: If we already have a linebreak, use that instead of adding a new one.
+	p = strpbrk(p, " \n");
+	while (p != NULL)
+	{
+		CARGODBG(4, "(p - start) = %d: %.*s\n",
+			(p - start), (p - start), start);
+
+		// Restart on already existing explicit line breaks.
+		if (*p == '\n')
+		{
+			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n",
+				(p - start), (p - start), start);
+			start = p;
+		}
+		else if ((size_t)(p - start) > width)
+		{
+			// We found a word that goes beyond the width we're
+			// aiming for, so add the line break before that word.
+			*prev = '\n';
+			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n",
+				(prev - start), (prev - start), start);
+			start = prev;
+			continue;
+		}
+
+		prev = p;
+		p = strpbrk(p + 1, " \n");
+
+		CARGODBG(4, "\n");
+	}
+
+	return s;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -870,190 +1054,6 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 	CARGODBG(1, "  Added alias \"%s\"\n", alias);
 
 	return 0;
-}
-
-static int _cargo_compare_strlen(const void *a, const void *b)
-{
-	return strlen(*((const char **)a)) - strlen(*((const char **)b));
-}
-
-static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
-									char *namebuf, size_t buf_size)
-{
-	int ret = 0;
-	size_t i;
-	int namepos = 0;
-	char **sorted_names = NULL;
-
-	// Sort the names by length.
-	{
-		if (!(sorted_names = calloc(opt->name_count, sizeof(char *))))
-		{
-			fprintf(stderr, "Out of memory\n");
-			return -1;
-		}
-
-		for (i = 0; i < opt->name_count; i++)
-		{
-			if (!(sorted_names[i] = strdup(opt->name[i])))
-			{
-				ret = -1; goto fail;
-			}
-		}
-
-		qsort(sorted_names, opt->name_count, 
-			sizeof(char *), _cargo_compare_strlen);
-	}
-
-	// Print the option names.
-	for (i = 0; i < opt->name_count; i++)
-	{
-		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
-						"%s%s", 
-						sorted_names[i], 
-						(i+1 != opt->name_count) ? ", " : "")) < 0) 
-		{
-			goto fail;
-		}
-
-		namepos += ret;
-	}
-
-	// If the option has an argument, add a "metavar".
-	if ((opt->nargs != 0) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
-	{
-		char metavarbuf[20];
-		const char *metavar = NULL;
-
-		if (opt->metavar)
-		{
-			metavar = opt->metavar;
-		}
-		else
-		{
-			// Got no user supplied metavar, simply use the
-			// option name in upper case instead.
-			int j = 0;
-			i = 0;
-
-			while (_cargo_is_prefix(ctx, opt->name[0][i]))
-			{
-				i++;
-			}
-
-			while (opt->name[0][i] && (j < (sizeof(metavarbuf) - 1)))
-			{
-				metavarbuf[j++] = toupper(opt->name[0][i++]);
-			}
-
-			metavarbuf[j] = '\0';
-			metavar = metavarbuf;
-		}
-
-		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
-					" [%s%s]",
-					metavar,
-					(opt->nargs != 1) ? " ..." : "")) < 0) 
-		{
-			goto fail;
-		}
-
-		namepos += ret;
-	}
-
-	ret = strlen(namebuf);
-
-fail:
-	for (i = 0; i < opt->name_count; i++)
-	{
-		if (sorted_names[i])
-		{
-			free(sorted_names[i]);
-		}
-	}
-
-	free(sorted_names);
-	return ret;
-}
-
-static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
-{
-	char **ss;
-	int i = 0;
-	char *p = s;
-
-	*count = 1;
-
-	CARGODBG(3, "_cargo_linebreak_to_list:\n\n");
-
-	while (*p)
-	{
-		if (*p == '\n')
-			(*count)++;
-		p++;
-	}
-
-	if (!(ss = calloc(*count, sizeof(char *))))
-		return NULL;
-
-	p = strtok(s, "\n");
-	while (p)
-	{
-		ss[i] = p;
-		CARGODBG(3, "%d: %s\n", i, ss[i]);
-
-		p = strtok(NULL, "\n");
-		i++;
-	}
-
-	return ss;
-}
-
-static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
-{
-	char *s = strdup(str);
-	char *start = s;
-	char *prev = s;
-	char *p = s;
-
-	if (!s)
-		return NULL;
-
-	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %lu):\n%lu\"%s\"\n\n",
-		width, strlen(s), s);
-
-	// TODO: If we already have a linebreak, use that instead of adding a new one.
-	p = strpbrk(p, " \n");
-	while (p != NULL)
-	{
-		CARGODBG(4, "(p - start) = %d: %.*s\n",
-			(p - start), (p - start), start);
-
-		// Restart on already existing explicit line breaks.
-		if (*p == '\n')
-		{
-			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n",
-				(p - start), (p - start), start);
-			start = p;
-		}
-		else if ((size_t)(p - start) > width)
-		{
-			// We found a word that goes beyond the width we're
-			// aiming for, so add the line break before that word.
-			*prev = '\n';
-			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n",
-				(prev - start), (prev - start), start);
-			start = prev;
-			continue;
-		}
-
-		prev = p;
-		p = strpbrk(p + 1, " \n");
-
-		CARGODBG(4, "\n");
-	}
-
-	return s;
 }
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
