@@ -113,6 +113,7 @@ typedef struct cargo_s
 	char **argv;
 
 	int add_help;
+	int help;
 
 	cargo_opt_t *options;
 	size_t opt_count;
@@ -552,8 +553,8 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 		{
 			if (!strcmp(opt->name[j], name))
 			{
-				*opt_i = i;
-				*name_i = j;
+				if (opt_i) *opt_i = i;
+				if (name_i) *name_i = j;
 				return 0;
 			}
 		}
@@ -746,6 +747,24 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	return s;
 }
 
+static void _cargo_add_help_if_missing(cargo_t ctx)
+{
+	assert(ctx);
+
+	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
+	{
+		if (cargo_add(ctx, "--help", &ctx->help, CARGO_BOOL, "Show this help."))
+		{
+			return;
+		}
+
+		if (_cargo_find_option_name(ctx, "-h", NULL, NULL))
+		{
+			cargo_add_alias(ctx, "--help", "-h");
+		}
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -905,6 +924,8 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	ctx->argc = argc;
 	ctx->argv = argv;
 
+	_cargo_add_help_if_missing(ctx);
+
 	if (ctx->args)
 	{
 		free(ctx->args);
@@ -999,6 +1020,12 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		return -1;
 	}
 
+	if (ctx->help)
+	{
+		cargo_print_usage(ctx);
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -1008,7 +1035,7 @@ char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
 
 	if (unknown_count)
 	{
-		return ctx->unknown_opts_count;
+		*unknown_count = ctx->unknown_opts_count;
 	}
 
 	return ctx->unknown_opts;
@@ -1352,14 +1379,18 @@ int main(int argc, char **argv)
 	if (ret != 0)
 	{
 		fprintf(stderr, "Failed to add argument\n");
-		return -1;
+		ret = -1; goto fail;
 	}
 
-	if (cargo_parse(cargo, 1, argc, argv))
+	if ((ret = cargo_parse(cargo, 1, argc, argv)))
 	{
-		fprintf(stderr, "Error parsing!\n");
-		ret = -1;
-		goto fail;
+		if (ret < 0)
+		{
+			fprintf(stderr, "Error parsing!\n");
+			ret = -1; goto fail;
+		}
+
+		ret = 0; goto done;
 	}
 
 	printf("Arne %f\n", args.arne);
@@ -1406,7 +1437,7 @@ int main(int argc, char **argv)
 	}
 
 	cargo_print_usage(cargo);
-
+done:
 fail:
 	cargo_destroy(&cargo);
 	if (args.tut)
