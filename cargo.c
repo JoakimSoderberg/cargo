@@ -74,6 +74,40 @@ int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 	return r;
 }
 
+typedef struct cargo_str_s
+{
+	char *s;
+	size_t l;
+	size_t offset;
+} cargo_str_t;
+
+int cargo_vappendf(cargo_str_t *str, const char *format, va_list ap)
+{
+	int ret;
+	assert(str);
+
+	if ((ret = cargo_vsnprintf(&str->s[str->offset],
+			(str->l - str->offset), format, ap)) < 0)
+	{
+		return -1;
+	}
+
+	str->offset += ret;
+
+	return ret;
+}
+
+int cargo_appendf(cargo_str_t *str, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+	assert(str);
+	va_start(ap, fmt);
+	ret = cargo_vappendf(str, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
 static const char *_cargo_type_map[] = 
 {
 	"bool",
@@ -641,15 +675,29 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 			metavar = metavarbuf;
 		}
 
-		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
-			" [%s%s]",
-			metavar,
-			(opt->nargs != 1) ? " ..." : "")) < 0)
+		if (opt->nargs < 0)
 		{
-			goto fail;
-		}
+			// List the number of arguments.
+			if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
+				" [%s ...]", metavar)) < 0)
+			{
+				goto fail;
+			}
 
-		namepos += ret;
+			namepos += ret;
+		}
+		else if (opt->nargs > 0)
+		{
+			cargo_str_t str = { namebuf, buf_size, namepos };
+			if (cargo_appendf(&str, " [%s", metavar) < 0) goto fail;
+
+			for (i = 1; i < opt->nargs; i++)
+			{
+				if (cargo_appendf(&str, " %s", metavar) < 0) goto fail;
+			}
+
+			if (cargo_appendf(&str, "]") < 0) goto fail;
+		}
 	}
 
 	ret = strlen(namebuf);
