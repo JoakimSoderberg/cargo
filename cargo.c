@@ -607,8 +607,8 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 {
 	int ret = 0;
 	size_t i;
-	int namepos = 0;
 	char **sorted_names = NULL;
+	cargo_str_t str = { namebuf, buf_size, 0 };
 
 	// Sort the names by length.
 	{
@@ -633,15 +633,12 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	// Print the option names.
 	for (i = 0; i < opt->name_count; i++)
 	{
-		if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
-			"%s%s",
+		if (cargo_appendf(&str, "%s%s", 
 			sorted_names[i],
-			(i + 1 != opt->name_count) ? ", " : "")) < 0)
+			(i + 1 != opt->name_count) ? ", " : "") < 0)
 		{
 			goto fail;
 		}
-
-		namepos += ret;
 	}
 
 	// If the option has an argument, add a "metavar".
@@ -678,17 +675,10 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		if (opt->nargs < 0)
 		{
 			// List the number of arguments.
-			if ((ret = cargo_snprintf(&namebuf[namepos], (buf_size - namepos),
-				" [%s ...]", metavar)) < 0)
-			{
-				goto fail;
-			}
-
-			namepos += ret;
+			if (cargo_appendf(&str, " [%s ...]", metavar) < 0) goto fail;
 		}
 		else if (opt->nargs > 0)
 		{
-			cargo_str_t str = { namebuf, buf_size, namepos };
 			if (cargo_appendf(&str, " [%s", metavar) < 0) goto fail;
 
 			for (i = 1; i < opt->nargs; i++)
@@ -1136,12 +1126,12 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	int ret = 0;
 	size_t i;
 	size_t j;
-	int pos;
 	char *b;
 	char **namebufs = NULL;
 	int usagelen = 0;
 	int namelen;
 	int max_name_len = 0;
+	cargo_str_t str;
 	assert(ctx);
 	assert(buf);
 	#define MAX_OPT_NAME_LEN 40
@@ -1224,17 +1214,18 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		*buf = b;
 	}
 
-	pos = 0;
+	str.s = b;
+	str.l = usagelen;
+	str.offset = 0;
 
 	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n\n",
-				ctx->description);
+		if (cargo_appendf(&str, "%s\nn", ctx->description) < 0) goto fail;
 	}
 
 	// TODO: Replace cargo_snprintf(&b[pos], (usagelen - pos) .... 
 	// with a cargo_appendf function instead.
-	pos += cargo_snprintf(&b[pos], (usagelen - pos), "Optional arguments:\n");
+	if (cargo_appendf(&str,  "Optional arguments:\n") < 0) goto fail;
 
 	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n",
 		max_name_len, ctx->usage.max_width);
@@ -1247,17 +1238,23 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 		// Print the option names.
 		// "  --ducks [DUCKS ...]  "
-		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%*s%-*s%s",
+		if (cargo_appendf(&str, "%*s%-*s%s",
 				NAME_PADDING, " ",
 				max_name_len, namebufs[i],
-				(option_causes_newline ? "\n" : ""));
+				(option_causes_newline ? "\n" : "")) < 0)
+		{
+			ret = -1; goto fail;
+		}
 
 		// Option description.
 		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
 			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
 		{
-			pos += cargo_snprintf(&b[pos], (usagelen - pos), "%*s%s\n",
-					NAME_PADDING, "", ctx->options[i].description);
+			if (cargo_appendf(&str, "%*s%s\n",
+				NAME_PADDING, "", ctx->options[i].description) < 0)
+			{
+				ret = -1; goto fail;
+			}
 		}
 		else
 		{
@@ -1306,9 +1303,11 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 				CARGODBG(1, "line len: %d\n", strlen(desc_lines[j]));
 
-				pos += cargo_snprintf(&b[pos], (usagelen - pos), "  %*s%s\n",
-					padding, "",
-					desc_lines[j]);
+				if (cargo_appendf(&str, "  %*s%s\n",
+					padding, "", desc_lines[j]) < 0)
+				{
+					ret = -1; goto fail;
+				}
 			}
 
 			free(opt_description);
@@ -1318,7 +1317,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
 	{
-		pos += cargo_snprintf(&b[pos], (usagelen - pos), "%s\n", ctx->epilog);
+		if (cargo_appendf(&str, "%s\n", ctx->epilog) < 0) goto fail;
 	}
 
 fail:
