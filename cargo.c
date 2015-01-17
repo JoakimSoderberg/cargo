@@ -207,6 +207,7 @@ static int _cargo_add(cargo_t ctx,
 				const char *opt,
 				void **target,
 				size_t *target_count,
+				size_t lenstr,
 				int nargs,
 				cargo_type_t type,
 				const char *description,
@@ -918,8 +919,18 @@ int cargo_add(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, (void **)target, NULL, (type != CARGO_BOOL),
+	return _cargo_add(ctx, opt, (void **)target, NULL, 0, (type != CARGO_BOOL),
 						type, description, 0);
+}
+
+int cargo_add_str(cargo_t ctx,
+				const char *opt,
+				void *target,
+				size_t lenstr,
+				const char *description)
+{
+	return _cargo_add(ctx, opt, target, NULL, 0, 1,
+						CARGO_STRING, description, 0);
 }
 
 int cargo_add_alloc(cargo_t ctx,
@@ -929,7 +940,7 @@ int cargo_add_alloc(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, NULL, (type != CARGO_BOOL),
+	return _cargo_add(ctx, opt, target, NULL, 0, (type != CARGO_BOOL),
 						type, description, 1);
 }
 
@@ -943,9 +954,23 @@ int cargo_addv(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, (void **)target, target_count,
+	return _cargo_add(ctx, opt, (void **)target, target_count, 0,
 						nargs, type, description, 0);
 }
+
+int cargo_addv_str(cargo_t ctx, 
+				const char *opt,
+				void *target,
+				size_t *target_count,
+				size_t lenstr,
+				int nargs,
+				cargo_type_t type,
+				const char *description)
+{
+	assert(ctx);
+	return _cargo_add(ctx, opt, (void **)target, target_count, lenstr,
+						nargs, CARGO_STRING, description, 0);
+}	
 
 int cargo_addv_alloc(cargo_t ctx, 
 				const char *opt,
@@ -956,7 +981,7 @@ int cargo_addv_alloc(cargo_t ctx,
 				const char *description)
 {
 	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count,
+	return _cargo_add(ctx, opt, target, target_count, 0,
 						nargs, type, description, 1);
 }
 
