@@ -35,6 +35,12 @@ typedef struct cargo_s *cargo_t;
 #define CARGO_NARGS_ONE_OR_MORE -1
 #define CARGO_NARGS_NONE_OR_MORE -2
 
+typedef enum cargo_copy_type_e
+{
+	CARGO_STATIC,
+	CARGO_ALLOC
+} cargo_copy_type_t;
+
 int cargo_init(cargo_t *ctx, size_t max_opts, 
 				const char *progname, const char *description);
 

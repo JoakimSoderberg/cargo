@@ -705,27 +705,31 @@ fail:
 	return ret;
 }
 
-static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
+static char **_cargo_split(cargo_t ctx, char *s, char *splitchars, size_t *count)
 {
 	char **ss;
 	int i = 0;
 	char *p = s;
+	size_t splitlen = strlen(splitchars);
 
 	*count = 1;
 
-	CARGODBG(3, "_cargo_linebreak_to_list:\n\n");
+	CARGODBG(3, "_cargo_split:\n\n");
 
 	while (*p)
 	{
-		if (*p == '\n')
-			(*count)++;
+		for (i = 0; i < splitlen; i++)
+		{
+			if (*p == splitchars[i])
+				(*count)++;
+		}
 		p++;
 	}
 
 	if (!(ss = calloc(*count, sizeof(char *))))
 		return NULL;
 
-	p = strtok(s, "\n");
+	p = strtok(s, splitchars);
 	while (p)
 	{
 		ss[i] = p;
@@ -736,6 +740,11 @@ static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
 	}
 
 	return ss;
+}
+
+static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
+{
+	return _cargo_split(ctx, s, "\n", count);
 }
 
 static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
@@ -1351,6 +1360,150 @@ int cargo_print_usage(cargo_t ctx)
 
 // TODO: Add cargo_print_short_usage(cargo_t ctx)
 // program [-h] [-s]  
+
+// ARRAYS:
+// -------
+// 4 required
+// float *flist;
+// size_t fcount;
+// cargo_add_option(cargo, "-s --sum", CARGO_ALLOC, "[f4]", &flist, &fcount);
+//
+// 0 or up to 4.
+// float flist[4];
+// size_t fcount;
+// cargo_add_option(cargo, "-s --sum", CARGO_STATIC, "[f0-4]", flist, &fcount);
+//
+// 2 or more
+// float *flist;
+// size_t fcount;
+// cargo_add_option(cargo, "-s --sum", CARGO_ALLOC, "![f2+]", &flist, &fcount);
+//
+// Multiple items (4 required dcount = number read)
+// int d[4];
+// size_t dcount;
+// cargo_add_option(cargo, "-e --errors", CARGO_STATIC, "i i i i #",
+//					&d[0], &d[1], &d[2], &d[3], &dcount);
+//
+// Flag:
+// int all;
+// cargo_add_option("-a --all", CARGO_STATIC, "b", &all);
+// 
+// String (optional argument)
+// char laddr[256];
+// cargo_add_option("-l --listen", CARGO_STATIC, "s?",
+// 					laddr, sizeof(laddr));
+//
+// char *laddr;
+// cargo_add_option("-l --listen", CARGO_ALLOC, "=s?", &laddr);
+//
+static int _cargo_parse_opt_format(cargo_t ctx)
+{
+
+}
+
+int cargo_add_optionv(cargo_t ctx, const char *optnames, 
+					  const char *description, const char *fmt, va_list ap)
+{
+	const char *s = fmt;
+	cargo_type_t type;
+	int ret;
+	int array = 0;
+	size_t optcount = 0;
+	char **optname_list  = NULL;
+	int alloc = 0;
+	void *target = NULL;
+	size_t *target_count = NULL;
+	void **alloc_target = NULL;
+	assert(ctx);
+
+	// TODO: Split the optnames list.
+	if (!(optname_list = _cargo_split(ctx, optnames, " ", &optcount))
+		|| (optcount <= 0))
+	{
+		fprintf(stderr, "Failed to split option name list: \"%s\"\n", optnames);
+		return -1;
+	}
+
+	// Parse format.
+	s += strspn(s, " \t");
+
+	if (*s == '=')
+	{
+		alloc = 1;
+		s++;
+	}
+
+	if (*s == '[')
+	{
+		if (!strchr(s, ']'))
+		{
+			fprintf(stderr, "Format parse error: Expected ']'\n");
+			return -1;
+		}
+
+		array = 1;
+		s++;
+	}
+
+	while (*s)
+	{
+		s += strspn(s, " \t");
+
+		if (array)
+		{
+
+		}
+		else
+		{
+			if (alloc)
+			{
+				
+			}
+			else
+			{
+				if (*s == 'f')
+				{
+					float *f;
+					type = CARGO_FLOAT;
+					target = (void *)va_arg(ap, float *);
+					target_count = NULL;
+				}
+				else if (*s == 's')
+				{
+					type = CARGO_STRING;
+					target = (void *)va_arg(ap, const char *);
+					target_count = va_arg(ap, size_t *);
+				}
+			}
+
+			// TODO: static allocation of string, how?
+			ret = cargo_add(ctx, optname_list[0], (void *)target, 
+							type, description);
+			/*ret = cargo_add(cargo, "--ducks",
+						(void **)&args.ducks, &args.duck_count,
+						2, CARGO_INT, "How man ducks live on the farm");*/
+		}
+	}
+
+fail:
+	free(optname_list);
+
+	return ret;
+}
+
+int cargo_add_option(cargo_t ctx, const char *optnames,
+					 const char *description, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+	assert(ctx);
+
+	va_start(ap, fmt);
+	ret = cargo_add_optionv(ctx, optnames, description, fmt, ap);
+	va_end(ap);
+
+	return ret;
+}
 
 // -----------------------------------------------------------------------------
 // Tests.
