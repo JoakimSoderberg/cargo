@@ -1448,10 +1448,12 @@ int cargo_print_usage(cargo_t ctx)
 // 					laddr, sizeof(laddr));
 //
 // char *laddr;
-// cargo_add_option("-l --listen", CARGO_ALLOC, "=s?", &laddr);
+// cargo_add_option("-l --listen", CARGO_ALLOC, "=s?:", &laddr, "example.com");
 //
 // =s?     Allocate optional string    const char *s;    &s
 // =s      Allocate string             const char *s;    &s
+// s10     Static string size 10 bytes char s[10];       &s
+// s#      Static string size # bytes  char s[10];       &s, 10
 // f       Required float              float f;          &f
 // f?:     Required float              float f;          &f, 0.3
 // f?      Optional float              float f;          &f
@@ -1462,9 +1464,22 @@ int cargo_print_usage(cargo_t ctx)
 // [f4+]   4 or more static            float f[20];      &f, &fc, max,
 //                                     size_t fc;
 //                                     size_t max = 20;
-// ![f4+]  4 or more allocated.        float *f;         &f, &fc      
+// [s10,4] 4  static strings           char strs[4][10]; &strs, &count,
+//          with buflen of 10.         size_t count;
+// [s10,4+] 4 or more static strings   char strs[4][10]; &strs, &count, max
+//          with buflen of 10.         size_t count;
+//                                     size_t max = 4;
+// [s#,4]   4 static strings           char strs[4][10]; &strs, &count, lenstr, max
+//          with buflen of #.          size_t count;
+//          Specify lenstr via var     size_t lenstr = 10;
+//                                     size_t max = 4;
+// =[s4]   4 alloc strings             char *strs;       &strs, &count
+//                                     size_t count;
+// =[s,4]  4 alloc strings             char *strs;       &strs, &count
+//                                     size_t count;
+// =[f4+]  4 or more allocated.        float *f;         &f, &fc      
 //                                     size_t fc:
-// ![f*]   None or more allocated.     float *f;         &f, &fc
+// =[f*]   None or more allocated.     float *f;         &f, &fc
 //                                     size_t fc;
 // [f*]    None or more static.        float f[40];      &f, &fc, max
 //                                     size_t fc;
@@ -1488,16 +1503,37 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	int alloc = 0;
 	void *target = NULL;
 	size_t *target_count = NULL;
+	size_t lenstr = 0;
+	int nargs;
 	void **alloc_target = NULL;
+	char *tmp = NULL;
+	size_t i;
 	assert(ctx);
 
+	CARGODBG(1, "ADD OPTION VARIADIC\n");
+
 	// TODO: Split the optnames list.
-	if (!(optname_list = _cargo_split(ctx, optnames, " ", &optcount))
+	if (!(tmp = strdup(optnames)))
+	{
+		return -1;
+	}
+
+	if (!(optname_list = _cargo_split(ctx, tmp, " ", &optcount))
 		|| (optcount <= 0))
 	{
 		fprintf(stderr, "Failed to split option name list: \"%s\"\n", optnames);
 		return -1;
 	}
+
+	CARGODBG(3, "Got %lu option names:\n", optcount);
+	#ifdef CARGODBG
+	for (i = 0; i < optcount; i++)
+	{
+		CARGODBG(3, " %s\n", optname_list[i]);
+	}
+	#endif
+
+	free(tmp);
 
 	// Parse format.
 	s += strspn(s, " \t");
@@ -1530,6 +1566,8 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 		}
 		else
 		{
+			nargs = 1;
+
 			if (alloc)
 			{
 				
@@ -1541,24 +1579,58 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 					type = CARGO_FLOAT;
 					target = (void *)va_arg(ap, float *);
 					target_count = NULL;
+					lenstr = 0;
 				}
 				else if (*s == 's')
 				{
 					type = CARGO_STRING;
 					target = (void *)va_arg(ap, const char *);
-					target_count = va_arg(ap, size_t *);
+					//target_count = va_arg(ap, size_t *);
+					lenstr = 0;
+					s++;
+					CARGODBG(3, "  String format char\n");
+
+					// TODO: Make function:
+					// # means the string buffer length is specified
+					// as a variadic argument.
+					if (*s == '#')
+					{
+						lenstr = va_arg(ap, size_t);
+						CARGODBG(3, "  Variadic string length: %lu\n", lenstr);
+						s++;
+					}
+					else
+					{
+						char *end;
+						lenstr = (size_t)strtoul(s, &end, 10);
+
+						CARGODBG(3, "  Fixed string length: %lu\n", lenstr);
+
+						if (s == end)
+						{
+							CARGODBG(1, "  %s: Missing static string length\n",
+										optname_list[0]);
+							ret = -1; goto fail;
+						}
+
+						s = end + 1;
+					}
 				}
 				else
 				{
 					fprintf(stderr, "Unknown format character '%c'\n", *s);
 				}
-
-				s++;
 			}
 
+			ret = _cargo_add(ctx, optname_list[0],
+							target, target_count, lenstr,
+							nargs, type, description,
+							alloc, alloc);
+
+			//s++;
 			// TODO: static allocation of string, how?
-			ret = cargo_add(ctx, optname_list[0], (void *)target, 
-							type, description);
+			/*ret = cargo_add(ctx, optname_list[0], (void *)target, 
+							type, description);*/
 			/*ret = cargo_add(cargo, "--ducks",
 						(void **)&args.ducks, &args.duck_count,
 						2, CARGO_INT, "How man ducks live on the farm");*/
@@ -1614,6 +1686,8 @@ typedef struct args_s
 
 	char nja[3][10];
 	size_t nja_count;
+
+	char party[10];
 } args_t;
 
 int main(int argc, char **argv)
@@ -1669,6 +1743,12 @@ int main(int argc, char **argv)
 	args.blurp_count = 5;
 	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
 							CARGO_NARGS_NONE_OR_MORE, CARGO_STRING, "Blurp");
+
+	ret |= cargo_add_option(cargo, "--party -p",
+							"Party string", 
+							"s#",
+							&args.party, 10);
+							//sizeof(args.party) / sizeof(args.party[0]));
 
 	if (ret != 0)
 	{
