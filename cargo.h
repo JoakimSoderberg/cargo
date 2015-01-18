@@ -37,8 +37,8 @@ typedef struct cargo_s *cargo_t;
 
 typedef enum cargo_copy_type_e
 {
-	CARGO_STATIC,
-	CARGO_ALLOC
+	CARGO_STATIC = 0,
+	CARGO_ALLOC = 1
 } cargo_copy_type_t;
 
 int cargo_init(cargo_t *ctx, size_t max_opts, 
@@ -58,6 +58,12 @@ int cargo_add(cargo_t ctx,
 				cargo_type_t type,
 				const char *description);
 
+int cargo_add_str(cargo_t ctx,
+				const char *opt,
+				void *target,
+				size_t lenstr,
+				const char *description);
+
 int cargo_add_alloc(cargo_t ctx,
 				const char *opt,
 				void **target,
@@ -70,6 +76,14 @@ int cargo_addv(cargo_t ctx,
 				size_t *target_count,
 				int nargs,
 				cargo_type_t type,
+				const char *description);
+
+int cargo_addv_str(cargo_t ctx, 
+				const char *opt,
+				void *target,
+				size_t *target_count,
+				size_t lenstr,
+				int nargs,
 				const char *description);
 
 int cargo_addv_alloc(cargo_t ctx, 

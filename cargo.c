@@ -128,9 +128,11 @@ typedef struct cargo_opt_s
 	cargo_type_t type;
 	int nargs;
 	int alloc;
+	int alloc_item;
 	void **target;
 	size_t target_idx;
 	size_t *target_count;
+	size_t lenstr;
 	size_t max_target_count;
 } cargo_opt_t;
 
@@ -211,7 +213,8 @@ static int _cargo_add(cargo_t ctx,
 				int nargs,
 				cargo_type_t type,
 				const char *description,
-				int alloc)
+				int alloc,
+				int alloc_item)
 {
 	size_t opt_len;
 	cargo_opt_t *o = NULL;
@@ -221,7 +224,7 @@ static int _cargo_add(cargo_t ctx,
 
 	if (!opt)
 	{
-		CARGODBG(1, "%s", "Null option name\n");
+		CARGODBG(1, "Null option name\n");
 		return -1;
 	}
 
@@ -233,19 +236,27 @@ static int _cargo_add(cargo_t ctx,
 
 	if (!target)
 	{
-		CARGODBG(1, "%s", "target NULL\n");
+		CARGODBG(1, "%s", "%s: target NULL\n", opt);
 		return -1;
 	}
 
 	if (!target_count && (nargs > 1))
 	{
-		CARGODBG(1, "%s", "target_count NULL, when nargs > 1\n");
+		CARGODBG(1, "%s", "%s: target_count NULL, when nargs > 1\n", opt);
+		return -1;
+	}
+
+	if ((type == CARGO_STRING) && !alloc_item && !lenstr)
+	{
+		CARGODBG(1, "%s: String length cannot be 0 for static strings. alloc_item = %d, lenstr = %d\n",
+				opt, alloc_item, lenstr);
 		return -1;
 	}
 
 	if (ctx->opt_count >= ctx->max_opts)
 	{
-		CARGODBG(1, "%s", "Null option name\n");
+		CARGODBG(1, "%s", "%s: Too many options given %d (max %d)\n",
+					ctx->opt_count, ctx->max_opts);
 		return -1;
 	}
 
@@ -264,6 +275,8 @@ static int _cargo_add(cargo_t ctx,
 	o->type = type;
 	o->description = description;
 	o->target_count = target_count;
+	o->lenstr = lenstr;
+	CARGODBG(2, "%s, lenstr = %d\n", opt, lenstr);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -288,6 +301,7 @@ static int _cargo_add(cargo_t ctx,
 	}
 
 	o->alloc = alloc;
+	o->alloc_item = alloc_item;
 
 	if (alloc)
 	{
@@ -411,7 +425,20 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 		case CARGO_STRING:
 			CARGODBG(2, "      str \"%s\"\n", val);
-			((char **)target)[opt->target_idx] = val;
+			if (opt->alloc_item)
+			{
+				if (!(((char **)target)[opt->target_idx] = strdup(val)))
+				{
+					return -1;
+				}
+			}
+			else
+			{
+				char **tt = (char **)target;
+				char *t = (char *)&tt[opt->target_idx];
+				CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
+				strncpy(t, val, opt->lenstr);
+			}
 			break;
 	}
 
@@ -706,7 +733,8 @@ fail:
 	return ret;
 }
 
-static char **_cargo_split(cargo_t ctx, char *s, char *splitchars, size_t *count)
+static char **_cargo_split(cargo_t ctx, char *s,
+							const char *splitchars, size_t *count)
 {
 	char **ss;
 	int i = 0;
@@ -722,7 +750,10 @@ static char **_cargo_split(cargo_t ctx, char *s, char *splitchars, size_t *count
 		for (i = 0; i < splitlen; i++)
 		{
 			if (*p == splitchars[i])
+			{
 				(*count)++;
+				break;
+			}
 		}
 		p++;
 	}
@@ -731,12 +762,13 @@ static char **_cargo_split(cargo_t ctx, char *s, char *splitchars, size_t *count
 		return NULL;
 
 	p = strtok(s, splitchars);
+	i = 0;
 	while (p)
 	{
 		ss[i] = p;
 		CARGODBG(3, "%d: %s\n", i, ss[i]);
 
-		p = strtok(NULL, "\n");
+		p = strtok(NULL, splitchars);
 		i++;
 	}
 
@@ -920,7 +952,7 @@ int cargo_add(cargo_t ctx,
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, (void **)target, NULL, 0, (type != CARGO_BOOL),
-						type, description, 0);
+						type, description, 0, 0);
 }
 
 int cargo_add_str(cargo_t ctx,
@@ -929,8 +961,8 @@ int cargo_add_str(cargo_t ctx,
 				size_t lenstr,
 				const char *description)
 {
-	return _cargo_add(ctx, opt, target, NULL, 0, 1,
-						CARGO_STRING, description, 0);
+	return _cargo_add(ctx, opt, target, NULL, lenstr, 1,
+						CARGO_STRING, description, 0, 0);
 }
 
 int cargo_add_alloc(cargo_t ctx,
@@ -941,7 +973,7 @@ int cargo_add_alloc(cargo_t ctx,
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, target, NULL, 0, (type != CARGO_BOOL),
-						type, description, 1);
+						type, description, 1, 1);
 }
 
 
@@ -955,7 +987,7 @@ int cargo_addv(cargo_t ctx,
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, (void **)target, target_count, 0,
-						nargs, type, description, 0);
+						nargs, type, description, 0, 1);
 }
 
 int cargo_addv_str(cargo_t ctx, 
@@ -964,12 +996,11 @@ int cargo_addv_str(cargo_t ctx,
 				size_t *target_count,
 				size_t lenstr,
 				int nargs,
-				cargo_type_t type,
 				const char *description)
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, (void **)target, target_count, lenstr,
-						nargs, CARGO_STRING, description, 0);
+						nargs, CARGO_STRING, description, 0, 0);
 }	
 
 int cargo_addv_alloc(cargo_t ctx, 
@@ -982,7 +1013,7 @@ int cargo_addv_alloc(cargo_t ctx,
 {
 	assert(ctx);
 	return _cargo_add(ctx, opt, target, target_count, 0,
-						nargs, type, description, 1);
+						nargs, type, description, 1, 1);
 }
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
@@ -1257,8 +1288,6 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		if (cargo_appendf(&str, "%s\nn", ctx->description) < 0) goto fail;
 	}
 
-	// TODO: Replace cargo_snprintf(&b[pos], (usagelen - pos) .... 
-	// with a cargo_appendf function instead.
 	if (cargo_appendf(&str,  "Optional arguments:\n") < 0) goto fail;
 
 	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n",
@@ -1335,7 +1364,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 					padding = max_name_len + NAME_PADDING;
 				}
 
-				CARGODBG(1, "line len: %d\n", strlen(desc_lines[j]));
+				CARGODBG(1, "line len: %lu\n", strlen(desc_lines[j]));
 
 				if (cargo_appendf(&str, "  %*s%s\n",
 					padding, "", desc_lines[j]) < 0)
@@ -1421,6 +1450,27 @@ int cargo_print_usage(cargo_t ctx)
 // char *laddr;
 // cargo_add_option("-l --listen", CARGO_ALLOC, "=s?", &laddr);
 //
+// =s?     Allocate optional string    const char *s;    &s
+// =s      Allocate string             const char *s;    &s
+// f       Required float              float f;          &f
+// f?:     Required float              float f;          &f, 0.3
+// f?      Optional float              float f;          &f
+// f4      4 required                  float f1;         &f1, &f2, &f3, &f4
+//                                     float f2;
+//                                     float f3;
+//                                     float f4;
+// [f4+]   4 or more static            float f[20];      &f, &fc, max,
+//                                     size_t fc;
+//                                     size_t max = 20;
+// ![f4+]  4 or more allocated.        float *f;         &f, &fc      
+//                                     size_t fc:
+// ![f*]   None or more allocated.     float *f;         &f, &fc
+//                                     size_t fc;
+// [f*]    None or more static.        float f[40];      &f, &fc, max
+//                                     size_t fc;
+//                                     size_t max = 40;
+// f_      Validate function           float f;          &f, valf
+//                                     validate_f valf;
 static int _cargo_parse_opt_format(cargo_t ctx)
 {
 
@@ -1488,7 +1538,6 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 			{
 				if (*s == 'f')
 				{
-					float *f;
 					type = CARGO_FLOAT;
 					target = (void *)va_arg(ap, float *);
 					target_count = NULL;
@@ -1499,6 +1548,12 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 					target = (void *)va_arg(ap, const char *);
 					target_count = va_arg(ap, size_t *);
 				}
+				else
+				{
+					fprintf(stderr, "Unknown format character '%c'\n", *s);
+				}
+
+				s++;
 			}
 
 			// TODO: static allocation of string, how?
@@ -1554,6 +1609,11 @@ typedef struct args_s
 
 	char **blurp;
 	size_t blurp_count;
+
+	char tjo[10];
+
+	char nja[3][10];
+	size_t nja_count;
 } args_t;
 
 int main(int argc, char **argv)
@@ -1569,6 +1629,14 @@ int main(int argc, char **argv)
 
 	ret = cargo_add(cargo, "--hello", &args.hello, CARGO_BOOL,
 				"Should we be greeted with a hello message?");
+
+	ret = cargo_add_str(cargo, "--tjo", args.tjo,
+				sizeof(args.tjo) / sizeof(args.tjo[0]),
+				"Tjo the string?");
+
+	ret = cargo_addv_str(cargo, "--nja", args.nja,
+				&args.nja_count, 10, 3,
+				"Nja string list");
 
 	args.geese = 3;
 	ret = cargo_add(cargo, "--geese", &args.geese, CARGO_INT,
@@ -1586,7 +1654,8 @@ int main(int argc, char **argv)
 	cargo_add_alias(cargo, "--arne", "-a");
 
 	args.poem_count = 0;
-	ret |= cargo_addv(cargo, "--poemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoems", args.poems, &args.poem_count, 3,
+	ret |= cargo_addv(cargo, "--poemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoems",
+				args.poems, &args.poem_count, 3,
 				CARGO_STRING,
 				"The poems. A very very long\ndescription for an option, "
 				"this couldn't possibly fit just one line, let's see if "
@@ -1645,6 +1714,8 @@ int main(int argc, char **argv)
 			args.ducks[0], args.ducks[1], args.ducks[0] + args.ducks[1],
 			args.duck_count);
 	}
+
+	printf("Tjo: %s\n", args.tjo);
 
 	extra_args = cargo_get_args(cargo, &extra_count);
 	printf("\nExtra arguments:\n");
