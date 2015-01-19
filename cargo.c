@@ -218,6 +218,7 @@ static int _cargo_add(cargo_t ctx,
 {
 	size_t opt_len;
 	cargo_opt_t *o = NULL;
+	char *optcpy = NULL;
 
 	if (!_cargo_nargs_is_valid(nargs))
 		return -1;
@@ -261,6 +262,11 @@ static int _cargo_add(cargo_t ctx,
 	}
 
 	// TODO: assert for argument conflicts.
+	if (!(optcpy = strdup(opt)))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return -1;
+	}
 
 	o = &ctx->options[ctx->opt_count];
 	ctx->opt_count++;
@@ -269,7 +275,7 @@ static int _cargo_add(cargo_t ctx,
 	// (this means it's optional).
 	o->optional = _cargo_is_prefix(ctx, opt[0]);
 
-	o->name[o->name_count++] = opt;
+	o->name[o->name_count++] = optcpy;
 	o->nargs = nargs;
 	o->target = target;
 	o->type = type;
@@ -887,10 +893,21 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 
 void cargo_destroy(cargo_t *ctx)
 {
+	size_t i;
+	size_t j;
+
 	if (ctx)
 	{
 		if ((*ctx)->options)
 		{
+			for (i = 0; i < (*ctx)->opt_count; i++)
+			{
+				for (j = 0; j < (*ctx)->options[i].name_count; j++ )
+				{
+					free((*ctx)->options[i].name[j]);
+				}
+			}
+
 			free((*ctx)->options);
 			(*ctx)->options = NULL;
 		}
@@ -1175,10 +1192,16 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 
 	if ((opt->name_count + 1) >= CARGO_NAME_COUNT)
 	{
+		CARGODBG(1, "Too many aliases for option: %s\n", opt->name[0]);
 		return -1;
 	}
 
-	opt->name[opt->name_count] = alias;
+	if (!(opt->name[opt->name_count] = strdup(alias)))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return -1;
+	}
+
 	opt->name_count++;
 
 	CARGODBG(1, "  Added alias \"%s\"\n", alias);
@@ -1496,7 +1519,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 {
 	const char *s = fmt;
 	cargo_type_t type;
-	int ret;
+	int ret = 0;
 	int array = 0;
 	size_t optcount = 0;
 	char **optname_list  = NULL;
@@ -1508,6 +1531,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	void **alloc_target = NULL;
 	char *tmp = NULL;
 	size_t i;
+	size_t j;
 	assert(ctx);
 
 	CARGODBG(1, "ADD OPTION VARIADIC\n");
@@ -1535,30 +1559,32 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 
 	free(tmp);
 
-	// Parse format.
-	s += strspn(s, " \t");
+	i = 0;
 
-	if (*s == '=')
+	// Parse format.
+	i += strspn(&s[i], " \t");
+
+	if (s[i] == '=')
 	{
 		alloc = 1;
-		s++;
+		i++;
 	}
 
-	if (*s == '[')
+	if (s[i] == '[')
 	{
-		if (!strchr(s, ']'))
+		if (!strchr(&s[i], ']'))
 		{
-			fprintf(stderr, "Format parse error: Expected ']'\n");
+			CARGODBG(1, "Format parse error: Expected ']'\n");
 			return -1;
 		}
 
 		array = 1;
-		s++;
+		i++;
 	}
 
-	while (*s)
+	while (s[i])
 	{
-		s += strspn(s, " \t");
+		i += strspn(&s[i], " \t");
 
 		if (array)
 		{
@@ -1567,75 +1593,70 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 		else
 		{
 			nargs = 1;
+			lenstr = 0;
 
-			if (alloc)
+			if (s[i] == 'f')
 			{
-				
+				i++;
+				type = CARGO_FLOAT;
+				target = (void *)va_arg(ap, float *);
 			}
-			else
+			else if (s[i] == 'b')
 			{
-				if (*s == 'f')
+				i++;
+				type = CARGO_BOOL;
+				target = (void *)va_arg(ap, int *);
+			}
+			else if (s[i] == 's')
+			{
+				i++;
+				type = CARGO_STRING;
+				target = (void *)va_arg(ap, const char *);
+				if (array) target_count = va_arg(ap, size_t *);
+				CARGODBG(3, "  String format char\n");
+
+				// TODO: Make function:
+				// # means the string buffer length is specified
+				// as a variadic argument.
+				if (s[i] == '#')
 				{
-					type = CARGO_FLOAT;
-					target = (void *)va_arg(ap, float *);
-					target_count = NULL;
-					lenstr = 0;
-				}
-				else if (*s == 's')
-				{
-					type = CARGO_STRING;
-					target = (void *)va_arg(ap, const char *);
-					//target_count = va_arg(ap, size_t *);
-					lenstr = 0;
-					s++;
-					CARGODBG(3, "  String format char\n");
-
-					// TODO: Make function:
-					// # means the string buffer length is specified
-					// as a variadic argument.
-					if (*s == '#')
-					{
-						lenstr = va_arg(ap, size_t);
-						CARGODBG(3, "  Variadic string length: %lu\n", lenstr);
-						s++;
-					}
-					else
-					{
-						char *end;
-						lenstr = (size_t)strtoul(s, &end, 10);
-
-						CARGODBG(3, "  Fixed string length: %lu\n", lenstr);
-
-						if (s == end)
-						{
-							CARGODBG(1, "  %s: Missing static string length\n",
-										optname_list[0]);
-							ret = -1; goto fail;
-						}
-
-						s = end + 1;
-					}
+					lenstr = va_arg(ap, size_t);
+					CARGODBG(3, "  Variadic string length: %lu\n", lenstr);
+					i++;
 				}
 				else
 				{
-					fprintf(stderr, "Unknown format character '%c'\n", *s);
+					char *end;
+					lenstr = (size_t)strtoul(&s[i], &end, 10);
+
+					CARGODBG(3, "  Fixed string length: %lu\n", lenstr);
+
+					if (&s[i] == end)
+					{
+						CARGODBG(1, "  %s: Missing static string length in format string:\n", optname_list[0]);
+						CARGODBG(1, "      \"%s\"\n", fmt);
+						CARGODBG(1, "        %*s\n", i, "^");
+						ret = -1; goto fail;
+					}
+
+					i = (end - s);
 				}
 			}
-
-			ret = _cargo_add(ctx, optname_list[0],
-							target, target_count, lenstr,
-							nargs, type, description,
-							alloc, alloc);
-
-			//s++;
-			// TODO: static allocation of string, how?
-			/*ret = cargo_add(ctx, optname_list[0], (void *)target, 
-							type, description);*/
-			/*ret = cargo_add(cargo, "--ducks",
-						(void **)&args.ducks, &args.duck_count,
-						2, CARGO_INT, "How man ducks live on the farm");*/
+			else
+			{
+				CARGODBG(1, "  %s: Unknown format character '%c' at index %lu\n",
+						optname_list[0], s[i], i);
+				CARGODBG(1, "      \"%s\"\n", fmt);
+				CARGODBG(1, "        %*s\n", i, "^");
+				ret = -1; goto fail;
+			}
 		}
 	}
+
+	ret = _cargo_add(ctx, optname_list[0],
+					target, target_count, lenstr,
+					nargs, type, description,
+					alloc, alloc);
 
 fail:
 	free(optname_list);
@@ -1688,6 +1709,8 @@ typedef struct args_s
 	size_t nja_count;
 
 	char party[10];
+
+	char *bored;
 } args_t;
 
 int main(int argc, char **argv)
@@ -1747,8 +1770,14 @@ int main(int argc, char **argv)
 	ret |= cargo_add_option(cargo, "--party -p",
 							"Party string", 
 							"s#",
-							&args.party, 10);
-							//sizeof(args.party) / sizeof(args.party[0]));
+							&args.party,
+							sizeof(args.party) / sizeof(args.party[0]));
+
+	ret |= cargo_add_option(cargo, "--bored -b",
+							"Bored string", 
+							"s#",
+							&args.party,
+							sizeof(args.party) / sizeof(args.party[0]));
 
 	if (ret != 0)
 	{
