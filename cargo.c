@@ -120,7 +120,7 @@ static const char *_cargo_type_map[] =
 
 typedef struct cargo_opt_s
 {
-	const char *name[CARGO_NAME_COUNT];
+	char *name[CARGO_NAME_COUNT];
 	size_t name_count;
 	const char *description;
 	const char *metavar;
@@ -237,27 +237,27 @@ static int _cargo_add(cargo_t ctx,
 
 	if (!target)
 	{
-		CARGODBG(1, "%s", "%s: target NULL\n", opt);
+		CARGODBG(1, "%s: target NULL\n", opt);
 		return -1;
 	}
 
 	if (!target_count && (nargs > 1))
 	{
-		CARGODBG(1, "%s", "%s: target_count NULL, when nargs > 1\n", opt);
+		CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", opt);
 		return -1;
 	}
 
 	if ((type == CARGO_STRING) && !alloc_item && !lenstr)
 	{
-		CARGODBG(1, "%s: String length cannot be 0 for static strings. alloc_item = %d, lenstr = %d\n",
+		CARGODBG(1, "%s: String length cannot be 0 for static strings. alloc_item = %d, lenstr = %lu\n",
 				opt, alloc_item, lenstr);
 		return -1;
 	}
 
 	if (ctx->opt_count >= ctx->max_opts)
 	{
-		CARGODBG(1, "%s", "%s: Too many options given %d (max %d)\n",
-					ctx->opt_count, ctx->max_opts);
+		CARGODBG(1, "%s: Too many options given %lu (max %lu)\n",
+					opt, ctx->opt_count, ctx->max_opts);
 		return -1;
 	}
 
@@ -282,7 +282,7 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
-	CARGODBG(2, "%s, lenstr = %d\n", opt, lenstr);
+	CARGODBG(2, "%s, lenstr = %lu\n", opt, lenstr);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -312,7 +312,11 @@ static int _cargo_add(cargo_t ctx,
 	if (alloc)
 	{
 		*(o->target) = NULL;
-		*(o->target_count) = 0;
+
+		if (o->target_count)
+		{
+			*(o->target_count) = 0;
+		}
 	}
 
 	CARGODBG(1, " cargo_add %s, max_target_count = %lu\n",
@@ -430,13 +434,16 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			((double *)target)[opt->target_idx] = (double)atof(val);
 			break;
 		case CARGO_STRING:
-			CARGODBG(2, "      str \"%s\"\n", val);
+			CARGODBG(2, "      string \"%s\"\n", val);
 			if (opt->alloc_item)
 			{
-				if (!(((char **)target)[opt->target_idx] = strdup(val)))
-				{
-					return -1;
-				}
+				//char *t = (char *)target[opt->target_idx];
+				CARGODBG(2, "       ALLOCATED STRING\n");
+				((char **)target)[opt->target_idx] = strdup(val);
+				//if (!(((char **)target)[opt->target_idx] = strdup(val)))
+				//{
+				//	return -1;
+				//}
 			}
 			else
 			{
@@ -455,6 +462,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		return -1;
 	}
 
+	// TODO: For single options that are repeated this will cause write beyond buffer!
+	// --bla 1 --bla 2 <-- Second call will be written outside
 	opt->target_idx++;
 
 	if (opt->target_count)
@@ -803,14 +812,14 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	p = strpbrk(p, " \n");
 	while (p != NULL)
 	{
-		CARGODBG(4, "(p - start) = %d: %.*s\n",
-			(p - start), (p - start), start);
+		CARGODBG(4, "(p - start) = %ld: %.*s\n",
+			(p - start), (int)(p - start), start);
 
 		// Restart on already existing explicit line breaks.
 		if (*p == '\n')
 		{
-			CARGODBG(3, "EXISTING NEW LINE len %d:\n%.*s\n\n",
-				(p - start), (p - start), start);
+			CARGODBG(3, "EXISTING NEW LINE len %ld:\n%.*s\n\n",
+				(p - start), (int)(p - start), start);
 			start = p;
 		}
 		else if ((size_t)(p - start) > width)
@@ -818,8 +827,8 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 			// We found a word that goes beyond the width we're
 			// aiming for, so add the line break before that word.
 			*prev = '\n';
-			CARGODBG(3, "ADD NEW LINE len %d:\n%.*s\n\n",
-				(prev - start), (prev - start), start);
+			CARGODBG(3, "ADD NEW LINE len %ld:\n%.*s\n\n",
+				(prev - start), (int)(prev - start), start);
 			start = prev;
 			continue;
 		}
@@ -1313,7 +1322,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	if (cargo_appendf(&str,  "Optional arguments:\n") < 0) goto fail;
 
-	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %d\n",
+	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %lu\n",
 		max_name_len, ctx->usage.max_width);
 
 	// Option names + descriptions.
@@ -1355,8 +1364,11 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 										ctx->usage.max_width - 2
 										- max_name_len - (2 * NAME_PADDING));
 
-			CARGODBG(1, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n%d - 2 - %d - (2 * %d) = %d\n",
-					ctx->usage.max_width, max_name_len, NAME_PADDING, ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
+			CARGODBG(1, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
+			CARGODBG(1, "%lu - 2 - %d - (2 * %d) = %lu\n",
+					ctx->usage.max_width, max_name_len,
+					NAME_PADDING, 
+					ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
 
 			if (!opt_description)
 			{
@@ -1489,7 +1501,7 @@ int cargo_print_usage(cargo_t ctx)
 //                                     size_t max = 20;
 // [s10,4] 4  static strings           char strs[4][10]; &strs, &count,
 //          with buflen of 10.         size_t count;
-// [s10,4+] 4 or more static strings   char strs[4][10]; &strs, &count, max
+// [s10,4] 4 static strings            char strs[4][10]; &strs, &count, max
 //          with buflen of 10.         size_t count;
 //                                     size_t max = 4;
 // [s#,4]   4 static strings           char strs[4][10]; &strs, &count, lenstr, max
@@ -1500,7 +1512,7 @@ int cargo_print_usage(cargo_t ctx)
 //                                     size_t count;
 // =[s,4]  4 alloc strings             char *strs;       &strs, &count
 //                                     size_t count;
-// =[f4+]  4 or more allocated.        float *f;         &f, &fc      
+// =[f+]  4 or more allocated.        float *f;         &f, &fc      
 //                                     size_t fc:
 // =[f*]   None or more allocated.     float *f;         &f, &fc
 //                                     size_t fc;
@@ -1509,10 +1521,6 @@ int cargo_print_usage(cargo_t ctx)
 //                                     size_t max = 40;
 // f_      Validate function           float f;          &f, valf
 //                                     validate_f valf;
-static int _cargo_parse_opt_format(cargo_t ctx)
-{
-
-}
 
 int cargo_add_optionv(cargo_t ctx, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap)
@@ -1586,38 +1594,28 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	{
 		i += strspn(&s[i], " \t");
 
-		if (array)
+		nargs = 1;
+		lenstr = 0;
+
+		if (s[i] == 's')
 		{
+			i++;
+			type = CARGO_STRING;
+			
+			target = (void *)va_arg(ap, const char *);
 
-		}
-		else
-		{
-			nargs = 1;
-			lenstr = 0;
-
-			if (s[i] == 'f')
+			if (array)
 			{
-				i++;
-				type = CARGO_FLOAT;
-				target = (void *)va_arg(ap, float *);
+				target_count = va_arg(ap, size_t *);
 			}
-			else if (s[i] == 'b')
-			{
-				i++;
-				type = CARGO_BOOL;
-				target = (void *)va_arg(ap, int *);
-			}
-			else if (s[i] == 's')
-			{
-				i++;
-				type = CARGO_STRING;
-				target = (void *)va_arg(ap, const char *);
-				if (array) target_count = va_arg(ap, size_t *);
-				CARGODBG(3, "  String format char\n");
 
-				// TODO: Make function:
-				// # means the string buffer length is specified
-				// as a variadic argument.
+			CARGODBG(3, "  String format char\n");
+
+			// TODO: Make function:
+			// # means the string buffer length is specified
+			// as a variadic argument.
+			if (!alloc)
+			{
 				if (s[i] == '#')
 				{
 					lenstr = va_arg(ap, size_t);
@@ -1635,21 +1633,83 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 					{
 						CARGODBG(1, "  %s: Missing static string length in format string:\n", optname_list[0]);
 						CARGODBG(1, "      \"%s\"\n", fmt);
-						CARGODBG(1, "        %*s\n", i, "^");
+						CARGODBG(1, "        %*s\n", (int)i, "^");
 						ret = -1; goto fail;
 					}
 
 					i = (end - s);
 				}
 			}
+
+			if (s[i] == ',')
+			{
+				i++;
+			}
+		}
+		else
+		{
+			switch (s[i])
+			{
+				case 'f': type = CARGO_FLOAT; break;
+				case 'd': type = CARGO_DOUBLE; break;
+				case 'b': type = CARGO_BOOL; break;
+				case 'i': type = CARGO_INT; break;
+				case 'u': type = CARGO_UINT; break;
+				default:
+				{
+					CARGODBG(1, "  %s: Unknown format character '%c' at index %lu\n",
+							optname_list[0], s[i], i);
+					CARGODBG(1, "      \"%s\"\n", fmt);
+					CARGODBG(1, "        %*s\n", (int)i, "^");
+					ret = -1; goto fail;
+				}
+			}
+
+			i++;
+
+			target = (void *)va_arg(ap, void *);
+
+			if (array)
+			{
+				target_count = va_arg(ap, size_t *);
+			}
+		}
+
+		if (array)
+		{
+			if (s[i] == '*')
+			{
+				nargs = CARGO_NARGS_NONE_OR_MORE;
+				CARGODBG(3, "  None or more nargs\n");
+			}
+			else if (s[i] == '+')
+			{
+				nargs = CARGO_NARGS_ONE_OR_MORE;
+				CARGODBG(3, "  One ore more nargs\n");
+			}
+			else if (s[i] == '#')
+			{
+				nargs = va_arg(ap, int);
+				CARGODBG(3, "  Variadic nargs: %d\n", nargs);
+			}
 			else
 			{
-				CARGODBG(1, "  %s: Unknown format character '%c' at index %lu\n",
-						optname_list[0], s[i], i);
-				CARGODBG(1, "      \"%s\"\n", fmt);
-				CARGODBG(1, "        %*s\n", i, "^");
-				ret = -1; goto fail;
+				char *end;
+				nargs = strtoul(&s[i], &end, 10);
+
+				// TODO: This is copy paste form static string length. Make function?
+				if (&s[i] == end)
+				{
+					CARGODBG(1, "  %s: Missing static nargs length in format string:\n", optname_list[0]);
+					CARGODBG(1, "      \"%s\"\n", fmt);
+					CARGODBG(1, "        %*s\n", (int)i, "^");
+					ret = -1; goto fail;
+				}
+
+				i = (end - s) - 1;
 			}
+
+			i++;
 		}
 	}
 
@@ -1765,7 +1825,7 @@ int main(int argc, char **argv)
 
 	args.blurp_count = 5;
 	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
-							CARGO_NARGS_NONE_OR_MORE, CARGO_STRING, "Blurp");
+							CARGO_NARGS_ONE_OR_MORE, CARGO_STRING, "Blurp");
 
 	ret |= cargo_add_option(cargo, "--party -p",
 							"Party string", 
@@ -1775,9 +1835,8 @@ int main(int argc, char **argv)
 
 	ret |= cargo_add_option(cargo, "--bored -b",
 							"Bored string", 
-							"s#",
-							&args.party,
-							sizeof(args.party) / sizeof(args.party[0]));
+							"=s",
+							&args.bored);
 
 	if (ret != 0)
 	{
@@ -1825,6 +1884,7 @@ int main(int argc, char **argv)
 	}
 
 	printf("Tjo: %s\n", args.tjo);
+	printf("Bored: \"%s\"\n", args.bored);
 
 	extra_args = cargo_get_args(cargo, &extra_count);
 	printf("\nExtra arguments:\n");
