@@ -363,6 +363,10 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	if ((opt->type < CARGO_BOOL) || (opt->type > CARGO_STRING))
 		return -1;
 
+	CARGODBG(2, "_cargo_set_target_value:\n");
+	CARGODBG(2, "  alloc: %d\n", opt->alloc);
+	CARGODBG(2, "  alloc_item: %d\n", opt->alloc_item);
+
 	if (opt->alloc)
 	{
 		// Allocate the memory needed.
@@ -438,12 +442,13 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			if (opt->alloc_item)
 			{
 				//char *t = (char *)target[opt->target_idx];
+				//char **tt = &t;
 				CARGODBG(2, "       ALLOCATED STRING\n");
 				((char **)target)[opt->target_idx] = strdup(val);
-				//if (!(((char **)target)[opt->target_idx] = strdup(val)))
-				//{
-				//	return -1;
-				//}
+				if (!(((char **)target)[opt->target_idx] = strdup(val)))
+				{
+					return -1;
+				}
 			}
 			else
 			{
@@ -1499,7 +1504,7 @@ int cargo_print_usage(cargo_t ctx)
 // [f4+]   4 or more static            float f[20];      &f, &fc, max,
 //                                     size_t fc;
 //                                     size_t max = 20;
-// [s10,4] 4  static strings           char strs[4][10]; &strs, &count,
+// [s10,4]    4  static strings           char strs[4][10]; &strs, &count,
 //          with buflen of 10.         size_t count;
 // [s10,4] 4 static strings            char strs[4][10]; &strs, &count, max
 //          with buflen of 10.         size_t count;
@@ -1508,6 +1513,7 @@ int cargo_print_usage(cargo_t ctx)
 //          with buflen of #.          size_t count;
 //          Specify lenstr via var     size_t lenstr = 10;
 //                                     size_t max = 4;
+// =[s+]   Alloc 1 or more strings
 // =[s4]   4 alloc strings             char *strs;       &strs, &count
 //                                     size_t count;
 // =[s,4]  4 alloc strings             char *strs;       &strs, &count
@@ -1521,17 +1527,277 @@ int cargo_print_usage(cargo_t ctx)
 //                                     size_t max = 40;
 // f_      Validate function           float f;          &f, valf
 //                                     validate_f valf;
+// =[s#]
+
+typedef struct cargo_fmt_token_s
+{
+	int line;
+	int column;
+	size_t pos;
+	char token;
+} cargo_fmt_token_t;
+
+typedef struct cargo_fmt_scanner_s
+{
+	const char *fmt;
+	const char *start;
+	cargo_fmt_token_t prev_token;
+	cargo_fmt_token_t token;
+	cargo_fmt_token_t next_token;
+	
+	int line;
+	int column;
+	size_t pos;
+
+	int array;
+	int alloc_flag;
+	int alloc_array;
+	int alloc_item;
+} cargo_fmt_scanner_t;
+
+#define _token(scanner) ((scanner)->token.token)
+
+static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s, const char *fmt)
+{
+	assert(s);
+	memset(s, 0, sizeof(cargo_fmt_scanner_t));
+
+	s->fmt = fmt;
+	s->start = fmt;
+	s->line = 1;
+	s->column = 0;
+	s->pos = 0;
+}
+
+static void _next_token(cargo_fmt_scanner_t *s)
+{
+	const char *fmt;
+	s->prev_token = s->token;
+	s->column++;
+	s->pos++;
+
+	fmt = s->fmt;
+	while ((*fmt == ' ') || (*fmt == '\t') || (*fmt == '\n'))
+	{
+		if (*fmt == '\n')
+		{
+			s->line++;
+			s->column = 0;
+		}
+		else
+		{
+			s->column++;
+		}
+
+		s->pos++;
+		fmt++;
+	}
+
+	s->token.token = *fmt;
+	s->token.line = s->line;
+	s->token.column = s->column;
+	s->token.pos = s->pos;
+
+	fmt++;
+	s->fmt = fmt;
+}
+
+static void _prev_token(cargo_fmt_scanner_t *s)
+{
+	s->next_token = s->token;
+	s->token = s->prev_token;
+}
+
+typedef struct cargo_fmt_str_s
+{
+	cargo_type_t type;
+
+} cargo_fmt_str_t;
+
+static void *_read_str(cargo_fmt_scanner_t *s, 
+						size_t **target_count, size_t *lenstr, va_list ap)
+{
+	void *target = va_arg(ap, char *);
+
+	if (s->array)
+	{
+		*target_count = va_arg(ap, size_t *);
+	}
+
+	_next_token(s);
+
+	if (s->array)
+	{
+		if (_token(s) == '#')
+		{
+			*lenstr = va_arg(ap, size_t);
+		}
+		else
+		{
+			_prev_token(s);
+		}
+	}
+	/*
+	else
+	{
+		char *end;
+		lenstr = (size_t)strtoul(&s[i], &end, 10);
+	}*/
+
+	return target;
+}
 
 int cargo_add_optionv(cargo_t ctx, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap)
 {
+	size_t optcount = 0;
+	char **optname_list = NULL;
+	cargo_type_t type;
+	void *target = NULL;
+	size_t *target_count = NULL;
+	int ret;
+	int alloc;
+	int alloc_item;
+	int alloc_flag;
+	char *tmp;
+	size_t lenstr;
+	int nargs;
+	size_t i;
+	cargo_fmt_scanner_t s;
+	char c;
+	int array = 0;
+	assert(ctx);
+
+	CARGODBG(1, "ADD OPTION VARIADIC\n");
+
+	if (!(tmp = strdup(optnames)))
+	{
+		return -1;
+	}
+
+	if (!(optname_list = _cargo_split(ctx, tmp, " ", &optcount))
+		|| (optcount <= 0))
+	{
+		fprintf(stderr, "Failed to split option name list: \"%s\"\n", optnames);
+		return -1;
+	}
+
+	CARGODBG(3, "Got %lu option names:\n", optcount);
+	#ifdef CARGODBG
+	for (i = 0; i < optcount; i++)
+	{
+		CARGODBG(3, " %s\n", optname_list[i]);
+	}
+	#endif
+
+	free(tmp);
+
+	// Start parsing the format string.
+	_cargo_fmt_scanner_init(&s, fmt);
+
+	// Get the first token.
+	if (_token(&s) == '.')
+	{
+		s.alloc_array = 0;
+		s.alloc_item = 0;
+		_next_token(&s);
+	}
+	else
+	{
+		s.alloc_array = 1;
+		s.alloc_item = 1;
+	}
+
+	if (_token(&s) == '[')
+	{
+		s.array = 1;
+		_next_token(&s);
+	}
+
+	switch (_token(&s))
+	{
+		case 's': type = CARGO_STRING; target = _read_str(&s, &target_count, &lenstr, ap); break;
+		case 'i': type = CARGO_INT;    target = (void *)va_arg(ap, void *); break;
+		case 'd': type = CARGO_DOUBLE; target = (void *)va_arg(ap, void *); break;
+		case 'b': type = CARGO_BOOL;   target = (void *)va_arg(ap, void *); break;
+		case 'u': type = CARGO_UINT;   target = (void *)va_arg(ap, void *); break;
+		case 'f': type = CARGO_FLOAT;  target = (void *)va_arg(ap, void *); break;
+		default:
+		{
+			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
+					optname_list[0], _token(&s), s.column);
+			CARGODBG(1, "      \"%s\"\n", fmt);
+			CARGODBG(1, "        %*s\n", s.column, "^");
+			ret = -1; goto fail;
+		}
+	}
+
+	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
+ 	// [s#]+     char *s[10];   size_t c;    &s, &c, 10     // Alloc 1 or more strings of len 10
+ 	// [s#]#     char *s[10];   size_t c;    &s, &c, 10, 5  // Alloc 5 str of len 10 
+	// [s]+      char **s;      size_t c;    &s, &c         // Alloc 1 or more strings.
+	// [s]#      char **s       size_t c;    &s, &c, 10     // Alloc 10 strings of any size.
+	// [s]#      char **s;      size_t c;    &s, &c, 5      // Alloc 5 strings
+
+	if (array && (type != CARGO_STRING))
+	{
+		target_count = va_arg(ap, size_t *);
+	}
+
+	if ((type == CARGO_STRING) && (lenstr > 0))
+	{
+		// [s#]+        <-- The # sets the max length for the string.
+		// char *s[10]; <-- Something like this is passed. 
+		s.alloc_item = 0;
+	}
+
+	_next_token(&s);
+
+	if (s.array)
+	{
+		if (_token(&s) != ']')
+		{
+			CARGODBG(1, "%s: Expected ']'\n", optname_list[0]);
+			CARGODBG(1, "      \"%s\"\n", fmt);
+			CARGODBG(1, "        %*s\n", s.column, "^");
+			ret = -1; goto fail;
+		}
+	}
+
+	switch (_token(&s))
+	{
+		case '*': nargs = CARGO_NARGS_NONE_OR_MORE; break;
+		case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+		case '#': nargs = va_arg(ap, int); break;
+		default:
+		{
+			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
+					optname_list[0], _token(&s), s.column);
+			CARGODBG(1, "      \"%s\"\n", fmt);
+			CARGODBG(1, "        %*s\n", s.column, "^");
+			ret = -1; goto fail;
+		}
+	}
+
+	ret = _cargo_add(ctx, optname_list[0],
+					target, target_count, lenstr,
+					nargs, type, description,
+					s.alloc_array, s.alloc_item);
+
+fail:
+	free(optname_list);
+	
+	return ret;
+	#if 0
 	const char *s = fmt;
 	cargo_type_t type;
 	int ret = 0;
 	int array = 0;
 	size_t optcount = 0;
 	char **optname_list  = NULL;
+	int alloc_flag = 0;
 	int alloc = 0;
+	int alloc_item = 0;
 	void *target = NULL;
 	size_t *target_count = NULL;
 	size_t lenstr = 0;
@@ -1574,7 +1840,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 
 	if (s[i] == '=')
 	{
-		alloc = 1;
+		alloc_flag = 1;
 		i++;
 	}
 
@@ -1587,63 +1853,98 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 		}
 
 		array = 1;
+		alloc = alloc_flag;
 		i++;
+	}
+	else
+	{
+		// Don't allocate space for array if there's only one item.
+		alloc = 0;
 	}
 
 	while (s[i])
 	{
-		i += strspn(&s[i], " \t");
+		i += strspn(&s[i], " \t]");
 
 		nargs = 1;
 		lenstr = 0;
 
 		if (s[i] == 's')
 		{
+			size_t start_i;
+			CARGODBG(3, "  String format char\n");
 			i++;
+			start_i = i;
 			type = CARGO_STRING;
 			
-			target = (void *)va_arg(ap, const char *);
+			target = (void *)va_arg(ap, char *);
 
 			if (array)
 			{
+				CARGODBG(3, "  Array, getting target_count pointer\n");
 				target_count = va_arg(ap, size_t *);
 			}
-
-			CARGODBG(3, "  String format char\n");
 
 			// TODO: Make function:
 			// # means the string buffer length is specified
 			// as a variadic argument.
-			if (!alloc)
+			if (s[i] == '#')
 			{
-				if (s[i] == '#')
-				{
-					lenstr = va_arg(ap, size_t);
-					CARGODBG(3, "  Variadic string length: %lu\n", lenstr);
-					i++;
-				}
-				else
-				{
-					char *end;
-					lenstr = (size_t)strtoul(&s[i], &end, 10);
-
-					CARGODBG(3, "  Fixed string length: %lu\n", lenstr);
-
-					if (&s[i] == end)
-					{
-						CARGODBG(1, "  %s: Missing static string length in format string:\n", optname_list[0]);
-						CARGODBG(1, "      \"%s\"\n", fmt);
-						CARGODBG(1, "        %*s\n", (int)i, "^");
-						ret = -1; goto fail;
-					}
-
-					i = (end - s);
-				}
+				lenstr = va_arg(ap, size_t);
+				CARGODBG(3, "  Variadic string length: %lu\n", lenstr);
+				i++;
 			}
+			else
+			{
+				char *end;
+				lenstr = (size_t)strtoul(&s[i], &end, 10);
+
+				CARGODBG(3, "  Fixed string length: %lu\n", lenstr);
+
+				if (alloc_flag)
+				{
+
+				}
+				if (&s[i] == end)
+				{
+					CARGODBG(1, "  %s: Missing static string length in format string:\n", optname_list[0]);
+					CARGODBG(1, "      \"%s\"\n", fmt);
+					CARGODBG(1, "        %*s\n", (int)i, "^");
+					ret = -1; goto fail;
+				}
+
+				i = (end - s);
+			}
+
+			CARGODBG(3, "  After reading lenstr: %c\n", s[i]);
+
+			i += strspn(&s[i], " \t]");
 
 			if (s[i] == ',')
 			{
+				if (alloc_flag)
+				{
+					CARGODBG(1, "  %s: Static string length makes no sense when allocating string\n", optname_list[0]);
+					CARGODBG(1, "      \"%s\"\n", fmt);
+					CARGODBG(1, "        %*s\n", (int)i, "^");
+					ret = -1; goto fail;
+				}
+
+				// [s10,4]  <= 4 static strings with buf len of 10 for each.
+				// =[s10,4] <= 4 allocated strings
 				i++;
+			}
+
+			// No static size was given, so we will allocate
+			// the item size as well.
+			//   char **bla;
+			// compared to:
+			//   char *bla[10];
+			if (alloc_flag && (lenstr == 0))
+			{
+				// =[s4]  <= Allocate 4 strings.
+				alloc_item = 1;
+				i = start_i;
 			}
 		}
 		else
@@ -1655,6 +1956,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 				case 'b': type = CARGO_BOOL; break;
 				case 'i': type = CARGO_INT; break;
 				case 'u': type = CARGO_UINT; break;
+				//case ']': i++; continue;
 				default:
 				{
 					CARGODBG(1, "  %s: Unknown format character '%c' at index %lu\n",
@@ -1677,6 +1979,8 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 
 		if (array)
 		{
+			CARGODBG(3, "%lu: %c\n", i, s[i]);
+
 			if (s[i] == '*')
 			{
 				nargs = CARGO_NARGS_NONE_OR_MORE;
@@ -1700,7 +2004,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 				// TODO: This is copy paste form static string length. Make function?
 				if (&s[i] == end)
 				{
-					CARGODBG(1, "  %s: Missing static nargs length in format string:\n", optname_list[0]);
+					CARGODBG(1, "  %s: Missing number of arguments to read in format string:\n", optname_list[0]);
 					CARGODBG(1, "      \"%s\"\n", fmt);
 					CARGODBG(1, "        %*s\n", (int)i, "^");
 					ret = -1; goto fail;
@@ -1712,16 +2016,18 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 			i++;
 		}
 	}
+	
 
 	ret = _cargo_add(ctx, optname_list[0],
 					target, target_count, lenstr,
 					nargs, type, description,
-					alloc, alloc);
+					alloc, alloc_item);
 
 fail:
 	free(optname_list);
-
+	
 	return ret;
+	#endif
 }
 
 int cargo_add_option(cargo_t ctx, const char *optnames,
@@ -1771,6 +2077,9 @@ typedef struct args_s
 	char party[10];
 
 	char *bored;
+
+	char *crazy[10];
+	size_t crazy_count;
 } args_t;
 
 int main(int argc, char **argv)
@@ -1835,8 +2144,15 @@ int main(int argc, char **argv)
 
 	ret |= cargo_add_option(cargo, "--bored -b",
 							"Bored string", 
-							"=s",
+							"s",
 							&args.bored);
+
+	ret |= cargo_add_option(cargo, "--crazy -c",
+							"Crazy strings", 
+							"[s#]",
+							&args.crazy,
+							&args.crazy_count,
+							10);
 
 	if (ret != 0)
 	{
@@ -1885,6 +2201,11 @@ int main(int argc, char **argv)
 
 	printf("Tjo: %s\n", args.tjo);
 	printf("Bored: \"%s\"\n", args.bored);
+
+	for (i = 0; i < args.crazy_count; i++)
+	{
+		printf("Crazy %d: %s\n", i, args.crazy[i]);
+	}
 
 	extra_args = cargo_get_args(cargo, &extra_count);
 	printf("\nExtra arguments:\n");
