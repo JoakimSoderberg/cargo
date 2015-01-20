@@ -74,6 +74,25 @@ int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 	return r;
 }
 
+char *cargo_strndup(const char *s, size_t n)
+{
+	char *res;
+	size_t len = strlen(s);
+
+	if (n < len)
+	{
+		len = n;
+	}
+
+	if (!(res = (char *) malloc(len + 1)))
+	{
+		return NULL;
+	}
+
+	res[len] = '\0';
+	return (char *)memcpy(res, s, len);
+}
+
 typedef struct cargo_str_s
 {
 	char *s;
@@ -247,12 +266,18 @@ static int _cargo_add(cargo_t ctx,
 		return -1;
 	}
 
+	/*
 	if ((type == CARGO_STRING) && !alloc_item && !lenstr)
 	{
 		CARGODBG(1, "%s: String length cannot be 0 for static strings. alloc_item = %d, lenstr = %lu\n",
 				opt, alloc_item, lenstr);
 		return -1;
-	}
+	}*/
+	/*if ((type == CARGO_STRING) && (lenstr > 0) && (alloc || alloc_item))
+	{
+		CARGODBG(1, "%s: String length should only be specified for static strings!\n", opt);
+		return -1;
+	}*/
 
 	if (ctx->opt_count >= ctx->max_opts)
 	{
@@ -282,7 +307,7 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
-	CARGODBG(2, "%s, lenstr = %lu\n", opt, lenstr);
+	CARGODBG(2, "%s, lenstr = %lu, nargs = %d\n", opt, lenstr, nargs);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -312,15 +337,18 @@ static int _cargo_add(cargo_t ctx,
 	if (alloc)
 	{
 		*(o->target) = NULL;
-
-		if (o->target_count)
-		{
-			*(o->target_count) = 0;
-		}
 	}
 
-	CARGODBG(1, " cargo_add %s, max_target_count = %lu\n",
-				opt, o->max_target_count);
+	if (o->target_count)
+	{
+		*(o->target_count) = 0;
+	}
+
+	CARGODBG(1, " cargo_add %s:\n", opt);
+	CARGODBG(1, "   max_target_count = %lu\n", o->max_target_count);
+	CARGODBG(1, "   alloc = %d\n", o->alloc);
+	CARGODBG(1, "   alloc_item = %d\n", o->alloc_item);
+	CARGODBG(1, "   \n"); 
 
 	return 0;
 }
@@ -441,13 +469,23 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			CARGODBG(2, "      string \"%s\"\n", val);
 			if (opt->alloc_item)
 			{
-				//char *t = (char *)target[opt->target_idx];
-				//char **tt = &t;
 				CARGODBG(2, "       ALLOCATED STRING\n");
-				((char **)target)[opt->target_idx] = strdup(val);
-				if (!(((char **)target)[opt->target_idx] = strdup(val)))
+				if (opt->lenstr == 0)
 				{
-					return -1;
+					CARGODBG(2, "          COPY FULL STRING\n");
+					if (!(((char **)target)[opt->target_idx] = strdup(val)))
+					{
+						return -1;
+					}
+				}
+				else
+				{
+					CARGODBG(2, "          MAX LENGTH: %lu\n", opt->lenstr);
+					if (!(((char **)target)[opt->target_idx] 
+							= cargo_strndup(val, opt->lenstr)))
+					{
+						return -1;
+					}
 				}
 			}
 			else
@@ -456,6 +494,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				char *t = (char *)&tt[opt->target_idx];
 				CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
 				strncpy(t, val, opt->lenstr);
+				CARGODBG(2, "       \"%s\"\n", t);
 			}
 			break;
 	}
@@ -1555,24 +1594,38 @@ typedef struct cargo_fmt_scanner_s
 	int alloc_item;
 } cargo_fmt_scanner_t;
 
-#define _token(scanner) ((scanner)->token.token)
+//#define _token(scanner) ((scanner)->token.token)
+
+static char _token(cargo_fmt_scanner_t *s)
+{
+	CARGODBG(4, "TOKEN: '%c'\n", s->token.token);
+	return s->token.token;
+}
 
 static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s, const char *fmt)
 {
 	assert(s);
 	memset(s, 0, sizeof(cargo_fmt_scanner_t));
 
+	CARGODBG(2, "FMT scanner init: \"%s\"\n", fmt);
 	s->fmt = fmt;
 	s->start = fmt;
 	s->line = 1;
 	s->column = 0;
 	s->pos = 0;
+
+	s->token.token = *fmt;
 }
 
 static void _next_token(cargo_fmt_scanner_t *s)
 {
 	const char *fmt;
+
+	CARGODBG(4, "\"%s\"\n", s->start);
+	CARGODBG(4, " %*s\n", s->token.column, "^");
+
 	s->prev_token = s->token;
+
 	s->column++;
 	s->pos++;
 
@@ -1604,45 +1657,36 @@ static void _next_token(cargo_fmt_scanner_t *s)
 
 static void _prev_token(cargo_fmt_scanner_t *s)
 {
+	CARGODBG(4, "PREV TOKEN\n");
 	s->next_token = s->token;
 	s->token = s->prev_token;
+	s->fmt = &s->start[s->token.pos];
+
+	CARGODBG(4, "\"%s\"\n", s->start);
+	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
-
-typedef struct cargo_fmt_str_s
-{
-	cargo_type_t type;
-
-} cargo_fmt_str_t;
 
 static void *_read_str(cargo_fmt_scanner_t *s, 
 						size_t **target_count, size_t *lenstr, va_list ap)
 {
-	void *target = va_arg(ap, char *);
+	void *target = (void *)va_arg(ap, char *);
 
-	if (s->array)
-	{
-		*target_count = va_arg(ap, size_t *);
-	}
-
+	CARGODBG(4, "Read string\n");
 	_next_token(s);
 
 	if (s->array)
 	{
 		if (_token(s) == '#')
 		{
-			*lenstr = va_arg(ap, size_t);
+			*lenstr = (size_t)va_arg(ap, int);
+			CARGODBG(4, "String length: %lu\n", *lenstr);
 		}
 		else
 		{
+			*lenstr = 0;
 			_prev_token(s);
 		}
 	}
-	/*
-	else
-	{
-		char *end;
-		lenstr = (size_t)strtoul(&s[i], &end, 10);
-	}*/
 
 	return target;
 }
@@ -1694,10 +1738,14 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, fmt);
+	_next_token(&s);
+
+	//CARGODBG(1, "TOKEN: '%c'\n", _token(&s));
 
 	// Get the first token.
 	if (_token(&s) == '.')
 	{
+		CARGODBG(1, "Static\n");
 		s.alloc_array = 0;
 		s.alloc_item = 0;
 		_next_token(&s);
@@ -1710,6 +1758,7 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 
 	if (_token(&s) == '[')
 	{
+		CARGODBG(4, "   [ ARRAY\n");
 		s.array = 1;
 		_next_token(&s);
 	}
@@ -1727,34 +1776,20 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
 					optname_list[0], _token(&s), s.column);
 			CARGODBG(1, "      \"%s\"\n", fmt);
-			CARGODBG(1, "        %*s\n", s.column, "^");
+			CARGODBG(1, "       %*s\n", s.column, "^");
 			ret = -1; goto fail;
 		}
 	}
 
-	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
- 	// [s#]+     char *s[10];   size_t c;    &s, &c, 10     // Alloc 1 or more strings of len 10
- 	// [s#]#     char *s[10];   size_t c;    &s, &c, 10, 5  // Alloc 5 str of len 10 
-	// [s]+      char **s;      size_t c;    &s, &c         // Alloc 1 or more strings.
-	// [s]#      char **s       size_t c;    &s, &c, 10     // Alloc 10 strings of any size.
-	// [s]#      char **s;      size_t c;    &s, &c, 5      // Alloc 5 strings
-
-	if (array && (type != CARGO_STRING))
-	{
-		target_count = va_arg(ap, size_t *);
-	}
-
-	if ((type == CARGO_STRING) && (lenstr > 0))
-	{
-		// [s#]+        <-- The # sets the max length for the string.
-		// char *s[10]; <-- Something like this is passed. 
-		s.alloc_item = 0;
-	}
-
-	_next_token(&s);
-
 	if (s.array)
 	{
+		target_count = va_arg(ap, size_t *);
+		*target_count = 0;
+
+		_next_token(&s);
+
+		CARGODBG(4, "Look for ']'\n");
+
 		if (_token(&s) != ']')
 		{
 			CARGODBG(1, "%s: Expected ']'\n", optname_list[0]);
@@ -1762,21 +1797,54 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 			CARGODBG(1, "        %*s\n", s.column, "^");
 			ret = -1; goto fail;
 		}
+
+		_next_token(&s);
+
+		switch (_token(&s))
+		{
+			case '*': nargs = CARGO_NARGS_NONE_OR_MORE; break;
+			case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+			case '#': nargs = va_arg(ap, int); break;
+			default:
+			{
+				CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
+						optname_list[0], _token(&s), s.column);
+				CARGODBG(1, "      \"%s\"\n", fmt);
+				CARGODBG(1, "       %*s\n", s.column, "^");
+				ret = -1; goto fail;
+			}
+		}
+
+		*target_count = nargs;
 	}
 
-	switch (_token(&s))
+	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
+ 	// X[s#]+     char *s[10];   size_t c;    &s, 10, &c     // Alloc 1 or more strings of len 10
+ 	// X[s#]#     char *s[10];   size_t c;    &s, 10, &c, 5  // Alloc 5 str of len 10 
+	// [s]+      char **s;      size_t c;    &s, &c         // Alloc 1 or more strings.
+	// [s]#      char **s       size_t c;    &s, &c, 10     // Alloc 10 strings of any size.
+	// [s]#      char **s;      size_t c;    &s, &c, 5      // Alloc 5 strings
+	// .[f]#
+	/*if ((type == CARGO_STRING) && (lenstr > 0))
 	{
-		case '*': nargs = CARGO_NARGS_NONE_OR_MORE; break;
-		case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
-		case '#': nargs = va_arg(ap, int); break;
-		default:
+		// Look for the case [s#]+ which means we 
+		if (nargs < 0)
 		{
-			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-					optname_list[0], _token(&s), s.column);
+			CARGODBG(1, "%s: Static string requires static array length (#)\n", 
+					optname_list[0]);
 			CARGODBG(1, "      \"%s\"\n", fmt);
-			CARGODBG(1, "        %*s\n", s.column, "^");
+			CARGODBG(1, "       %*s\n", s.column, "^");
 			ret = -1; goto fail;
 		}
+	}
+	else */
+
+	if (!s.alloc_array && (nargs < 0))
+	{
+		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", optname_list[0]);
+		CARGODBG(1, "      \"%s\"\n", fmt);
+		CARGODBG(1, "       %*s\n", s.column, "^");
+		ret = -1; goto fail;
 	}
 
 	ret = _cargo_add(ctx, optname_list[0],
@@ -2078,8 +2146,9 @@ typedef struct args_s
 
 	char *bored;
 
-	char *crazy[10];
+	//char **crazy;//[10];
 	size_t crazy_count;
+	char crazy[5][10];
 } args_t;
 
 int main(int argc, char **argv)
@@ -2135,7 +2204,7 @@ int main(int argc, char **argv)
 	args.blurp_count = 5;
 	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
 							CARGO_NARGS_ONE_OR_MORE, CARGO_STRING, "Blurp");
-
+/*
 	ret |= cargo_add_option(cargo, "--party -p",
 							"Party string", 
 							"s#",
@@ -2146,13 +2215,20 @@ int main(int argc, char **argv)
 							"Bored string", 
 							"s",
 							&args.bored);
-
+*/
+	/*ret |= cargo_add_option(cargo, "--crazy -c",
+							"Crazy strings", 
+							"[s]+",
+							&args.crazy,
+							//3,
+							&args.crazy_count);*/
 	ret |= cargo_add_option(cargo, "--crazy -c",
 							"Crazy strings", 
-							"[s#]",
+							".[s#]#",
 							&args.crazy,
+							10,
 							&args.crazy_count,
-							10);
+							5);
 
 	if (ret != 0)
 	{
@@ -2198,10 +2274,11 @@ int main(int argc, char **argv)
 			args.ducks[0], args.ducks[1], args.ducks[0] + args.ducks[1],
 			args.duck_count);
 	}
-
+/*
 	printf("Tjo: %s\n", args.tjo);
 	printf("Bored: \"%s\"\n", args.bored);
-
+*/
+	printf("Crazy count: %lu\n", args.crazy_count);
 	for (i = 0; i < args.crazy_count; i++)
 	{
 		printf("Crazy %d: %s\n", i, args.crazy[i]);
