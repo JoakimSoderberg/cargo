@@ -395,7 +395,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	CARGODBG(2, "  alloc: %d\n", opt->alloc);
 	CARGODBG(2, "  alloc_item: %d\n", opt->alloc_item);
 
-	if (opt->alloc)
+	// If number of arguments is just 1 don't allocate an array.
+	if (opt->alloc && (opt->nargs != 1))
 	{
 		// Allocate the memory needed.
 		if (!*(opt->target))
@@ -472,11 +473,14 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				CARGODBG(2, "       ALLOCATED STRING\n");
 				if (opt->lenstr == 0)
 				{
+					char **t = (char **)(target + opt->target_idx * sizeof(char *));
 					CARGODBG(2, "          COPY FULL STRING\n");
-					if (!(((char **)target)[opt->target_idx] = strdup(val)))
+					//if (!(((char **)target)[opt->target_idx] = strdup(val)))
+					if (!(*t = strdup(val)))
 					{
 						return -1;
 					}
+					CARGODBG(2, "          \"%s\"\n", *t);
 				}
 				else
 				{
@@ -1673,7 +1677,7 @@ static void *_read_str(cargo_fmt_scanner_t *s,
 	CARGODBG(4, "Read string\n");
 	_next_token(s);
 
-	if (s->array)
+	//if (s->array)
 	{
 		if (_token(s) == '#')
 		{
@@ -1815,6 +1819,10 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 		}
 
 		*target_count = nargs;
+	}
+	else
+	{
+		nargs = 1;
 	}
 
 	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
@@ -2145,10 +2153,13 @@ typedef struct args_s
 
 	char *bored;
 
-	//char **crazy;//[10];
+	char **crazy;//[10];
 	size_t crazy_count;
-	char crazy[5][10];
+	//char crazy[5][10];
 } args_t;
+
+#define CARGO_LIST_LEN(l) (sizeof(l) / sizeof(l[0]))
+#define CARGO_LIST_STR_LEN(l) (sizeof(l[0]) / sizeof(l[0][0]))
 
 int main(int argc, char **argv)
 {
@@ -2209,11 +2220,12 @@ int main(int argc, char **argv)
 							"s#",
 							&args.party,
 							sizeof(args.party) / sizeof(args.party[0]));
-
+*/
 	ret |= cargo_add_option(cargo, "--bored -b",
 							"Bored string", 
 							"s",
 							&args.bored);
+/*
 */
 	/*ret |= cargo_add_option(cargo, "--crazy -c",
 							"Crazy strings", 
@@ -2223,7 +2235,7 @@ int main(int argc, char **argv)
 							&args.crazy_count);*/
 	ret |= cargo_add_option(cargo, "--crazy -c",
 							"Crazy strings", 
-							".[s#]#",
+							"[s#]#",
 							&args.crazy,
 							10,
 							&args.crazy_count,
@@ -2274,9 +2286,9 @@ int main(int argc, char **argv)
 			args.duck_count);
 	}
 /*
-	printf("Tjo: %s\n", args.tjo);
+	printf("Tjo: %s\n", args.tjo);*/
 	printf("Bored: \"%s\"\n", args.bored);
-*/
+
 	printf("Crazy count: %lu\n", args.crazy_count);
 	for (i = 0; i < args.crazy_count; i++)
 	{
@@ -2297,8 +2309,10 @@ int main(int argc, char **argv)
 	{
 		printf("  [None]\n");
 	}
-
 	cargo_print_usage(cargo);
+
+	printf("BAJS: %lu, %lu\n", CARGO_LIST_LEN(args.crazy), CARGO_LIST_STR_LEN(args.crazy));
+
 done:
 fail:
 	cargo_destroy(&cargo);
