@@ -490,8 +490,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			}
 			else
 			{
-				char **tt = (char **)target;
-				char *t = (char *)&tt[opt->target_idx];
+				char *t = (char *)(target + opt->target_idx * opt->lenstr);
 				CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
 				strncpy(t, val, opt->lenstr);
 				CARGODBG(2, "       \"%s\"\n", t);
