@@ -462,7 +462,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				CARGODBG(2, "       ALLOCATED STRING\n");
 				if (opt->lenstr == 0)
 				{
-					char **t = (char **)(target + opt->target_idx * sizeof(char *));
+					char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
 					CARGODBG(2, "          COPY FULL STRING\n");
 					//if (!(((char **)target)[opt->target_idx] = strdup(val)))
 					if (!(*t = strdup(val)))
@@ -483,7 +483,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			}
 			else
 			{
-				char *t = (char *)(target + opt->target_idx * opt->lenstr);
+				char *t = (char *)((char *)target + opt->target_idx * opt->lenstr);
 				CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
 				strncpy(t, val, opt->lenstr);
 				CARGODBG(2, "       \"%s\"\n", t);
@@ -761,7 +761,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		{
 			if (cargo_appendf(&str, " [%s", metavar) < 0) goto fail;
 
-			for (i = 1; i < opt->nargs; i++)
+			for (i = 1; (int)i < opt->nargs; i++)
 			{
 				if (cargo_appendf(&str, " %s", metavar) < 0) goto fail;
 			}
@@ -789,9 +789,17 @@ static char **_cargo_split(cargo_t ctx, char *s,
 							const char *splitchars, size_t *count)
 {
 	char **ss;
-	int i = 0;
+	size_t i = 0;
 	char *p = s;
 	size_t splitlen = strlen(splitchars);
+	assert(ctx);
+	assert(count);
+
+	if (!s)
+		return NULL;
+
+	if (!*s)
+		return NULL;
 
 	*count = 1;
 
@@ -799,7 +807,7 @@ static char **_cargo_split(cargo_t ctx, char *s,
 
 	while (*p)
 	{
-		for (i = 0; i < splitlen; i++)
+		for (i = 0; i < (int)splitlen; i++)
 		{
 			if (*p == splitchars[i])
 			{
@@ -817,7 +825,10 @@ static char **_cargo_split(cargo_t ctx, char *s,
 	i = 0;
 	while (p)
 	{
-		ss[i] = p;
+		if (!(ss[i] = strdup(p)))
+		{
+			goto fail;
+		}
 		CARGODBG(3, "%d: %s\n", i, ss[i]);
 
 		p = strtok(NULL, splitchars);
@@ -825,11 +836,32 @@ static char **_cargo_split(cargo_t ctx, char *s,
 	}
 
 	return ss;
+fail:
+	for (i = 0; i < *count; i++)
+	{
+		free(ss[i]);
+		ss[i] = NULL;
+	}
+	free(ss);
+	ss = NULL;
+	return ss;
 }
 
-static char **_cargo_linebreak_to_list(cargo_t ctx, char *s, size_t *count)
+static void _cargo_free_str_list(char ***s, size_t count)
 {
-	return _cargo_split(ctx, s, "\n", count);
+	size_t i;
+
+	if (!s)
+		return;
+
+	for (i = 0; i < count; i++)
+	{
+		free((*s)[i]);
+		(*s)[i] = NULL;
+	}
+
+	free(*s);
+	*s = NULL;
 }
 
 static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
@@ -909,7 +941,6 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 	int i;
 	int j;
 	int cost;
-	int k;
 	int i1;
 	int j1;
 	int DB;
@@ -1434,7 +1465,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	// Make sure we where given a buffer that is large enough.
 	if (buf_size)
 	{
-		if (*buf_size < usagelen)
+		if ((int)*buf_size < usagelen)
 		{
 			ret = -1; goto fail;
 		}
@@ -1473,7 +1504,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		// Is the option name so long we need a new line before the description?
-		int option_causes_newline = strlen(namebufs[i]) > max_name_len;
+		int option_causes_newline = (int)strlen(namebufs[i]) > max_name_len;
 
 		// Print the option names.
 		// "  --ducks [DUCKS ...]  "
@@ -1519,8 +1550,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 				ret = -1; goto fail;
 			}
 
-			if (!(desc_lines = _cargo_linebreak_to_list(ctx,
-									opt_description, &line_count)))
+			if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
 			{
 				ret = -1; goto fail;
 			}
@@ -1546,12 +1576,14 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 				if (cargo_appendf(&str, "  %*s%s\n",
 					padding, "", desc_lines[j]) < 0)
 				{
+					free(opt_description);
+					_cargo_free_str_list(&desc_lines, line_count);
 					ret = -1; goto fail;
 				}
 			}
 
 			free(opt_description);
-			free(desc_lines);
+			_cargo_free_str_list(&desc_lines, line_count);
 		}
 	}
 
@@ -1805,11 +1837,10 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	size_t *target_count = NULL;
 	int ret;
 	char *tmp;
-	size_t lenstr;
+	size_t lenstr = 0;
 	int nargs;
 	size_t i;
 	cargo_fmt_scanner_t s;
-	char c;
 	int array = 0;
 	assert(ctx);
 
@@ -1950,7 +1981,10 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	}
 
 fail:
-	free(optname_list);
+	if (optname_list)
+	{
+		_cargo_free_str_list(&optname_list, optcount);
+	}
 	
 	return ret;
 }
@@ -2016,7 +2050,7 @@ typedef struct args_s
 
 int main(int argc, char **argv)
 {
-	int i;
+	size_t i;
 	int ret = 0;
 	cargo_t cargo;
 	args_t args;
