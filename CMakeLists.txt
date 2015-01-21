@@ -3,6 +3,10 @@ project(cargo C)
 
 option(CARGO_DEBUG "Set cargo debug level" 0)
 
+if (NOT CARGO_DEBUG)
+	set(CARGO_DEBUG 0)
+endif()
+
 source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
 

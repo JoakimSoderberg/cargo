@@ -829,7 +829,7 @@ static char **_cargo_split(cargo_t ctx, char *s,
 		{
 			goto fail;
 		}
-		CARGODBG(3, "%d: %s\n", i, ss[i]);
+		CARGODBG(3, "%lu: %s\n", i, ss[i]);
 
 		p = strtok(NULL, splitchars);
 		i++;
@@ -2192,7 +2192,7 @@ int main(int argc, char **argv)
 	printf("Crazy count: %lu\n", args.crazy_count);
 	for (i = 0; i < args.crazy_count; i++)
 	{
-		printf("Crazy %d: %s\n", i, args.crazy[i]);
+		printf("Crazy %lu: %s\n", i, args.crazy[i]);
 	}
 
 	extra_args = cargo_get_args(cargo, &extra_count);
