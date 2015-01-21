@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include "cargo.h"
 #include <stdarg.h>
+#include <limits.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -896,6 +897,109 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 	}
 }
 
+static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
+{
+	#define d(i, j) dd[(i) * (m + 2) + (j) ]
+	#define min(x, y) ((x) < (y) ? (x) : (y))
+	#define min3(a, b, c) ((a) < (b) ? min((a), (c)) : min((b), (c)))
+	#define min4(a, b, c, d) ((a) < (b) ? min3((a), (c), (d)) : min3((b), (c),(d)))
+
+	int *dd;
+	int DA[256 * sizeof(int)];
+	int i;
+	int j;
+	int cost;
+	int k;
+	int i1;
+	int j1;
+	int DB;
+	int n = (int)strlen(s);
+	int m = (int)strlen(t);
+	int max_dist = n + m;
+
+	if (!(dd = (int *)malloc((n + 2) * (m + 2) * sizeof(int))))
+	{
+		return -1;
+	}
+
+	memset(DA, 0, sizeof(DA));
+
+	d(0, 0) = max_dist;
+
+	for (i = 0; i < (n + 1); i++)
+	{
+		d(i + 1, 1) = i;
+		d(i + 1, 0) = max_dist;
+	}
+
+	for (j = 0; j < (m + 1); j++)
+	{
+		d(1, j + 1) = j;
+		d(0, j + 1) = max_dist;
+	}
+
+	for (i = 1; i < (n + 1); i++)
+	{
+		DB = 0;
+
+		for(j = 1; j < (m + 1); j++)
+		{
+			i1 = DA[t[j - 1]];
+			j1 = DB;
+			cost = ((s[ i - 1] == t[j - 1]) ? 0 : 1);
+
+			if (cost == 0) 
+				DB = j;
+
+			d(i + 1, j + 1) = min4(d(i, j) + cost, 
+							  d(i + 1, j) + 1,
+							  d(i, j + 1) + 1, 
+							  d(i1, j1) + (i - i1 - 1) + 1 + (j-j1-1));
+		}
+
+		DA[s[i - 1]] = i;
+	}
+
+	cost = d(n + 1, m + 1);
+	free(dd);
+	return cost;
+
+	#undef d
+}
+
+const char *_cargo_find_closest_opt(cargo_t ctx, const char *unknown)
+{
+	size_t i;
+	size_t j;
+	size_t maxi = 0;
+	size_t maxj = 0;
+	int min_dist = INT_MAX;
+	int dist = 0;
+	char *name = NULL;
+
+	unknown += strspn(unknown, ctx->prefix);
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		for (j = 0; j < ctx->options[i].name_count; j++)
+		{
+			name = ctx->options[i].name[j];
+			name += strspn(name, ctx->prefix);
+
+			dist = _cargo_damerau_levensthein_dist(unknown, name);
+
+			if (dist < min_dist)
+			{
+				min_dist = dist;
+				maxi = i;
+				maxj = j;
+			}
+		}
+	}
+
+	return (min_dist <= 1) ? ctx->options[maxi].name[maxj] : NULL;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -1173,13 +1277,17 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	if (ctx->unknown_opts_count > 0)
 	{
 		size_t i;
+		const char *suggestion;
 		// TODO: Don't print to stderr here, instead enable getting as a string.
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		fprintf(stderr, "Unknown options:\n");
 
 		for (i = 0; i < ctx->unknown_opts_count; i++)
 		{
-			fprintf(stderr, "%s\n", ctx->unknown_opts[i]);
+			suggestion = _cargo_find_closest_opt(ctx, ctx->unknown_opts[i]);
+			fprintf(stderr, "%s ", ctx->unknown_opts[i]);
+			if (suggestion) fprintf(stderr, " (Did you mean %s)?", suggestion);
+			fprintf(stderr, "\n");
 		}
 
 		return -1;
@@ -1832,6 +1940,14 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 					target, target_count, lenstr,
 					nargs, type, description,
 					s.alloc);
+
+	for (i = 1; i < optcount; i++)
+	{
+		if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
+		{
+			ret = -1; goto fail;
+		}
+	}
 
 fail:
 	free(optname_list);
