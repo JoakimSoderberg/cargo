@@ -1,2 +1,2 @@
 sudo: false
-script: gcc -DCARGO_TEST -DCARGO_DEBUG=4 -o cargo_test *.c && ./cargo_test
+script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ./cargo_test
