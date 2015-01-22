@@ -937,7 +937,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 	#define min4(a, b, c, d) ((a) < (b) ? min3((a), (c), (d)) : min3((b), (c),(d)))
 
 	int *dd;
-	int DA[256 * sizeof(int)];
+	int DA[256];
 	int i;
 	int j;
 	int cost;
@@ -985,7 +985,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 			d(i + 1, j + 1) = min4(d(i, j) + cost, 
 							  d(i + 1, j) + 1,
 							  d(i, j + 1) + 1, 
-							  d(i1, j1) + (i - i1 - 1) + 1 + (j-j1-1));
+							  d(i1, j1) + (i - i1 - 1) + 1 + (j - j1 - 1));
 		}
 
 		DA[s[i - 1]] = i;
