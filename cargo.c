@@ -679,7 +679,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 
 static int _cargo_compare_strlen(const void *a, const void *b)
 {
-	return strlen(*((const char **)a)) - strlen(*((const char **)b));
+	return strlen(((const char *)a)) - strlen(((const char *)b));
 }
 
 static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
