@@ -1,2 +1,3 @@
-sudo: false
-script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ./cargo
+#sudo: false
+install: sudo apt-get -qq -y update && sudo apt-get install valgrind
+script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && valgrind --leak-check=full ./cargo
