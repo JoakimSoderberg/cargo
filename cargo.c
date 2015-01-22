@@ -851,7 +851,7 @@ static void _cargo_free_str_list(char ***s, size_t count)
 {
 	size_t i;
 
-	if (!s)
+	if (!s || !*s)
 		return;
 
 	for (i = 0; i < count; i++)
@@ -1593,18 +1593,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	}
 
 fail:
-	if (namebufs)
-	{
-		for (i = 0; i < ctx->opt_count; i++)
-		{
-			if (namebufs[i])
-			{
-				free(namebufs[i]);
-			}
-		}
-
-		free(namebufs);
-	}
+	_cargo_free_str_list(&namebufs, ctx->opt_count);
 
 	return ret;
 }
