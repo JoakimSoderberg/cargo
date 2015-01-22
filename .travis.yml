@@ -1,2 +1,2 @@
 sudo: false
-script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ./cargo_test
+script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ./cargo
