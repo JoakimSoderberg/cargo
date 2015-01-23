@@ -1,6 +1,6 @@
 build_script:
   - md build
   - cd build
-  - cmake -DCARGO_DEBUG=4 ..
+  - cmake -DCMAKE_BUILD_TYPE=Debug -DCARGO_DEBUG=4 ..
   - cmake --build .
-  - Debug\cargo.exe
+  - ctest --output-on-failure
