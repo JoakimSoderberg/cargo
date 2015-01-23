@@ -3,4 +3,4 @@ build_script:
   - cd build
   - cmake -DCARGO_DEBUG=4 ..
   - cmake --build .
-  - cargo.exe
+  - Debug\cargo.exe
