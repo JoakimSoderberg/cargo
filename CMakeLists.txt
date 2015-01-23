@@ -3,6 +3,7 @@ project(cargo C)
 
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
+option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
 
 if (UNIX)
 	option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind" ON)
@@ -10,6 +11,14 @@ endif()
 
 if (NOT CARGO_DEBUG)
 	set(CARGO_DEBUG 0)
+endif()
+
+# Add project cmake modules to path.
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
+
+if (CARGO_TEST AND CARGO_COVERALLS)
+    include(Coveralls)
+    coveralls_turn_on_coverage()
 endif()
 
 # Set some nicer output dirs.
@@ -33,7 +42,6 @@ set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=ON")
 
 if (CARGO_TEST)
 	ENABLE_TESTING()
-	message("'${CMAKE_RUNTIME_OUTPUT_DIRECTORY}'")
 
 	if (CARGO_WITH_MEMCHECK)
 		find_program(VALGRIND_PROGRAM NAMES valgrind)
@@ -44,6 +52,14 @@ if (CARGO_TEST)
 		else()
 			message("Found valgrind: ${VALGRIND_PROGRAM}")
 		endif()
+	endif()
+
+	if (CARGO_COVERALLS)
+		# Create the coveralls target.
+		coveralls_setup(
+			${PROJECT_SOURCE_DIR}/cargo.c	# The source files.
+			ON								# If we should upload.
+			"${PROJECT_SOURCE_DIR}/cmake/") # (Optional) Alternate project cmake module path.
 	endif()
 
 	add_executable(cargo_tests cargo.c cargo.h)

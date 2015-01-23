@@ -1,3 +1,8 @@
-#sudo: false
+env:
+  matrix:
+   - CARGO_METHOD=memcheck
+   - CARGO_METHOD=coveralls
+     CMAKE_ARGS="-DCARGO_COVERALLS=ON -DCARGO_TEST=ON -DCMAKE_BUILD_TYPE=Debug"
+language: c
 install: sudo apt-get -qq -y update && sudo apt-get install valgrind
-script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ctest --output-on-failure
+script: mkdir build && cd build && cmake -DCARGO_DEBUG=4 ${CMAKE_ARGS} .. && make && ctest --output-on-failure
