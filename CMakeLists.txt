@@ -4,13 +4,23 @@ project(cargo C)
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
 
+if (UNIX)
+	option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind" ON)
+endif()
+
 if (NOT CARGO_DEBUG)
 	set(CARGO_DEBUG 0)
 endif()
 
+# Set some nicer output dirs.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+
 source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
 
+message("Setting debug level to: ${CARGO_DEBUG}")
 add_definitions(-DCARGO_DEBUG=${CARGO_DEBUG})
 
 if (MSVC)
@@ -23,6 +33,18 @@ set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=ON")
 
 if (CARGO_TEST)
 	ENABLE_TESTING()
+	message("'${CMAKE_RUNTIME_OUTPUT_DIRECTORY}'")
+
+	if (CARGO_WITH_MEMCHECK)
+		find_program(VALGRIND_PROGRAM NAMES valgrind)
+
+		if (NOT EXISTS ${VALGRIND_PROGRAM})
+			message(WARNING "Valgrind not found! Tests will be run without memory check. Turn this warning off by installing valgrind or settings -DCARGO_WITH_MEMCHECK=OFF")
+			set(CARGO_WITH_MEMCHECK OFF)
+		else()
+			message("Found valgrind: ${VALGRIND_PROGRAM}")
+		endif()
+	endif()
 
 	add_executable(cargo_tests cargo.c cargo.h)
 	set_target_properties(cargo_tests PROPERTIES COMPILE_DEFINITIONS "CARGO_TEST=ON")
@@ -42,8 +64,13 @@ if (CARGO_TEST)
 				"${CARGO_LINE}")
 
 		if (TEST_NAME)
-			message("test: '${TEST_NAME}'")
-			add_test("${TEST_NAME}" cargo_tests 1)
+			message("Adding test: '${TEST_NAME}'")
+
+			if (CARGO_WITH_MEMCHECK)
+				add_test("${TEST_NAME}_memchk" ${VALGRIND_PROGRAM} --error-exitcode=5 --leak-check=full ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests ${TEST_NAME})
+			else()
+				add_test("${TEST_NAME}" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests ${TEST_NAME})
+			endif()
 		endif()
 	endforeach()
 endif()

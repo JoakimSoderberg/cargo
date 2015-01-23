@@ -1824,8 +1824,6 @@ static void *_read_str(cargo_fmt_scanner_t *s,
 	return target;
 }
 
-#define CARGO_FLAG_VALIDATE_ONLY (1 << 0)
-
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap)
 {
@@ -1966,16 +1964,22 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		ret = -1; goto fail;
 	}
 
-	ret = _cargo_add(ctx, optname_list[0],
-					target, target_count, lenstr,
-					nargs, type, description,
-					s.alloc);
-
-	for (i = 1; i < optcount; i++)
+	if (!(flags & CARGO_FLAG_VALIDATE_ONLY))
 	{
-		if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
+		if ((ret = _cargo_add(ctx, optname_list[0],
+						target, target_count, lenstr,
+						nargs, type, description,
+						s.alloc)))
 		{
-			ret = -1; goto fail;
+			goto fail;
+		}
+
+		for (i = 1; i < optcount; i++)
+		{
+			if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
+			{
+				ret = -1; goto fail;
+			}
 		}
 	}
 
@@ -2131,6 +2135,31 @@ cargo_test_t tests[] =
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
 
+static void _test_print_names()
+{
+	int i;
+
+	for (i = 0; i < (int)CARGO_NUM_TESTS; i++)
+	{
+		printf("%d: %s\n", (i + 1), tests[i].name);
+	}
+}
+
+static int _test_find_test_index(const char *name)
+{
+	int i;
+
+	for (i = 0; i < (int)CARGO_NUM_TESTS; i++)
+	{
+		if (!strcmp(name, tests[i].name))
+		{
+			return i + 1;
+		}
+	}
+
+	return -1;
+}
+
 int main(int argc, char **argv)
 {
 	size_t i;
@@ -2141,7 +2170,7 @@ int main(int argc, char **argv)
 	size_t num_tests = 0;
 	size_t success_count = 0;
 	int all = 0;
-	size_t test_index = 0;
+	int test_index = 0;
 	cargo_test_t *t;
 
 	memset(tests_to_run, 0, sizeof(tests_to_run));
@@ -2149,30 +2178,56 @@ int main(int argc, char **argv)
 	// Get test numbers to run from command line.
 	if (argc >= 2)
 	{
+		if (!strcmp("--list", argv[1]))
+		{
+			_test_print_names();
+			return 0;
+		}
+
 		for (i = 1; i < argc; i++)
 		{
-			tests_to_run[num_tests] = atoi(argv[i]);
-
-			if (tests_to_run[num_tests] == 0)
+			// First check if we were given a function name.
+			if (!strncmp(argv[i], "TEST_", 5))
 			{
-				fprintf(stderr, "Invalid test number %s\n", argv[i]);
-				return -1;
+				test_index = _test_find_test_index(argv[i]);
+
+				if (test_index <= 0)
+				{
+					fprintf(stderr, "Unknown test specified: \"%s\"\n", argv[i]);
+					return -1;
+				}
 			}
-			else if (tests_to_run[num_tests] < 0)
+			else
 			{
-				printf("Run ALL tests!\n");
-				all = 1;
-				break;
+				test_index = atoi(argv[i]);
+
+				if (test_index == 0)
+				{
+					fprintf(stderr, "Invalid test number %s\n", argv[i]);
+					return -1;
+				}
+				else if (test_index < 0)
+				{
+					printf("Run ALL tests!\n");
+					all = 1;
+					break;
+				}
 			}
 
+			tests_to_run[num_tests] = test_index;
 			num_tests++;
 		}
 	}
 	else
 	{
+		fprintf(stderr, "%s:\n\n", argv[0]);
+		fprintf(stderr, "Usage: %s [test_num ...] [test_name ...]\n\n", argv[0]);
+		fprintf(stderr, "  --list to get all available tests.\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "  Use test_num = -1 or all tests\n");
+		fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
+		fprintf(stderr, "  Return code for this usage message equals the number of available tests.\n");
 		printf("Test count: %d\n", (int)CARGO_NUM_TESTS);
-		fprintf(stderr, "Use test_num = -1 or all tests\n");
-		fprintf(stderr, "Usage: %s [test_num ...]\n", argv[0]);
 		return CARGO_NUM_TESTS;
 	}
 
@@ -2194,8 +2249,8 @@ int main(int argc, char **argv)
 		t = &tests[test_index];
 		t->ran = 1;
 
-		fprintf(stderr, "%sTest %02lu:%s\n",
-			ANSI_COLOR_CYAN, test_index, ANSI_COLOR_RESET);
+		fprintf(stderr, "%sTest %2d:%s\n",
+			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET);
 
 		fprintf(stderr, "%s\n", ANSI_COLOR_DARK_GRAY);
 		t->error = t->f();
