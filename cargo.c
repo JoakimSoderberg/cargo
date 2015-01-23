@@ -2045,55 +2045,51 @@ typedef struct args_s
 	char *s;
 } args_t;
 
-static char *TEST_add_integer_option()
-{
-	int ret = 0;
-	args_t args;
-	cargo_t cargo;
-	int a;
-	char *argv[] = { "program", "-a", "b" };
+//
+// Some helper macros for creating test functions.
+//
+#define _MAKE_TEST_FUNC_NAME(f) TEST_##f()
 
-	if (cargo_init(&cargo, 32, argv[0], "The parser"))
-	{
-		return "Failed to init cargo";
+#define _TEST_START(testname) 							\
+static char *_MAKE_TEST_FUNC_NAME(testname)				\
+{														\
+	int ret = 0;										\
+	cargo_t cargo;										\
+														\
+	if (cargo_init(&cargo, 32, "program", "The parser"))\
+	{													\
+		return "Failed to init cargo";					\
 	}
 
+#define _TEST_END()			\
+	cargo_destroy(&cargo); 	\
+	return NULL;			\
+}
+
+//
+// Test functions.
+//
+_TEST_START(add_integer_option)
+{
+	int a;
 	ret = cargo_add_option(cargo, "--alpha -a",
 							"Alpha integer will be parsed", 
 							"i",
 							&a);
-
 	cargo_assert(ret == 0, "Failed to add valid integer option");
-
-	cargo_destroy(&cargo);
-
-	return NULL;
 }
+_TEST_END()
 
-static char *TEST_add_float_option()
+_TEST_START(add_float_option)
 {
-	int ret = 0;
-	args_t args;
-	cargo_t cargo;
 	float b;
-	char *argv[] = { "program", "-a", "b" };
-
-	if (cargo_init(&cargo, 32, argv[0], "The parser"))
-	{
-		return "Failed to init cargo";
-	}
-
 	ret = cargo_add_option(cargo, "--beta -b",
-							"Alpha integer will be parsed", 
-							"f",
+							"Beta integer will be parsed", 
+							"b",
 							&b);
-
-	cargo_assert(ret == 0, "Failed to add valid integer option");
-
-	cargo_destroy(&cargo);
-
-	return NULL;
+	cargo_assert(ret == 0, "Failed to add valid float option");
 }
+_TEST_END()
 
 //
 // List of all test functions to run:
