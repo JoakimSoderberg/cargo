@@ -7,4 +7,4 @@ language: c
 install: sudo apt-get -qq -y update && sudo apt-get install valgrind
 script:
   - mkdir build && cd build && cmake -DCARGO_DEBUG=4 $CMAKE_ARGS .. && make && ctest --output-on-failure
-  - if [ "$CARGO_METHOD" == "coveralls" ]; then cd build && make coveralls; fi
+  - if [ "$CARGO_METHOD" == "coveralls" ]; then make coveralls; fi
