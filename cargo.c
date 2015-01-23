@@ -2045,22 +2045,13 @@ typedef struct args_s
 	char *s;
 } args_t;
 
-typedef char *(* cargo_test_f)();
-
-typedef struct cargo_test_s
-{
-	const char *name;
-	cargo_test_f f;
-} cargo_test_t;
-
-#define CARGO_ADD_TEST(test) { #test, test }
-
-static char *test01()
+static char *TEST_add_integer_option()
 {
 	int ret = 0;
 	args_t args;
 	cargo_t cargo;
-	char *argv[] = { "test01", "-a", "b" };
+	int a;
+	char *argv[] = { "program", "-a", "b" };
 
 	if (cargo_init(&cargo, 32, argv[0], "The parser"))
 	{
@@ -2070,7 +2061,7 @@ static char *test01()
 	ret = cargo_add_option(cargo, "--alpha -a",
 							"Alpha integer will be parsed", 
 							"i",
-							&args.a);
+							&a);
 
 	cargo_assert(ret == 0, "Failed to add valid integer option");
 
@@ -2079,11 +2070,53 @@ static char *test01()
 	return NULL;
 }
 
+static char *TEST_add_float_option()
+{
+	int ret = 0;
+	args_t args;
+	cargo_t cargo;
+	float b;
+	char *argv[] = { "program", "-a", "b" };
+
+	if (cargo_init(&cargo, 32, argv[0], "The parser"))
+	{
+		return "Failed to init cargo";
+	}
+
+	ret = cargo_add_option(cargo, "--beta -b",
+							"Alpha integer will be parsed", 
+							"f",
+							&b);
+
+	cargo_assert(ret == 0, "Failed to add valid integer option");
+
+	cargo_destroy(&cargo);
+
+	return NULL;
+}
+
+//
+// List of all test functions to run:
+//
+typedef char *(* cargo_test_f)();
+
+typedef struct cargo_test_s
+{
+	const char *name;
+	cargo_test_f f;
+	int success;
+	int ran;
+	char *error;
+} cargo_test_t;
+
+#define CARGO_ADD_TEST(test) { #test, test, 0, 0,  }
+
 cargo_test_t tests[] =
 {
-	//CARGO_ADD_TEST(test01)
-	{ "Test 1", test01 }
+	CARGO_ADD_TEST(TEST_add_integer_option),
+	CARGO_ADD_TEST(TEST_add_float_option)
 };
+
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
 
 int main(int argc, char **argv)
@@ -2094,10 +2127,14 @@ int main(int argc, char **argv)
 	char *res = NULL;
 	int tests_to_run[CARGO_NUM_TESTS];
 	size_t num_tests = 0;
+	size_t success_count = 0;
 	int all = 0;
 	size_t test_index = 0;
 	cargo_test_t *t;
 
+	memset(tests_to_run, 0, sizeof(tests_to_run));
+
+	// Get test numbers to run from command line.
 	if (argc >= 2)
 	{
 		for (i = 1; i < argc; i++)
@@ -2121,10 +2158,13 @@ int main(int argc, char **argv)
 	}
 	else
 	{
+		printf("Test count: %d\n", (int)CARGO_NUM_TESTS);
+		fprintf(stderr, "Use test_num = -1 or all tests\n");
 		fprintf(stderr, "Usage: %s [test_num ...]\n", argv[0]);
-		return -1;
+		return CARGO_NUM_TESTS;
 	}
 
+	// Run all tests.
 	if (all)
 	{
 		num_tests = CARGO_NUM_TESTS;
@@ -2135,32 +2175,76 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Run the tests.
 	for (i = 0; i < num_tests; i++)
 	{
 		test_index = tests_to_run[i] - 1;
 		t = &tests[test_index];
+		t->ran = 1;
 
 		fprintf(stderr, "%sTest %02lu:%s\n",
 			ANSI_COLOR_CYAN, test_index, ANSI_COLOR_RESET);
 
 		fprintf(stderr, "%s\n", ANSI_COLOR_DARK_GRAY);
-		res = t->f();
+		t->error = t->f();
 		fprintf(stderr, "%s\n", ANSI_COLOR_RESET);
 
-		if (res)
+		if (t->error)
 		{
 			fprintf(stderr, "[%sFAIL%s] %s\n",
-				ANSI_COLOR_RED, ANSI_COLOR_RESET, res);
+				ANSI_COLOR_RED, ANSI_COLOR_RESET, t->error);
 			ret = -1;
 		}
 		else
 		{
 			printf("[%sSUCCESS%s]\n",
 				ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+
+			success_count++;
+		}
+
+		tests[test_index].success = (t->error == NULL);
+	}
+
+	printf("---------------------------------------------------------------\n");
+	printf("Test report:\n");
+	printf("---------------------------------------------------------------\n");
+
+	for (i = 0; i < CARGO_NUM_TESTS; i++)
+	{
+		if (!tests[i].ran)
+		{
+			printf(" [%sNOT RUN%s] %2lu: %s\n",
+				ANSI_COLOR_GRAY, ANSI_COLOR_RESET, i, tests[i].name);
+			continue;
+		}
+
+		if (tests[i].success)
+		{
+			printf(" [%sSUCCESS%s] %2lu: %s\n",
+				ANSI_COLOR_GREEN, ANSI_COLOR_RESET, i, tests[i].name);
+		}
+		else
+		{
+			fprintf(stderr, " [%sFAILED%s]  %2lu: %s - %s\n",
+				ANSI_COLOR_RED, ANSI_COLOR_RESET,
+				i, tests[i].name, tests[i].error);
 		}
 	}
 
-	return (res != NULL);
+	if (res)
+	{
+		fprintf(stderr, "\n[[%sFAIL%s]] ", ANSI_COLOR_RED, ANSI_COLOR_RESET);
+	}
+	else
+	{
+		printf("\n[[%sSUCCESS%s]] ", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+	}
+
+	printf("%lu of %lu tests run were successful (%lu of %lu tests ran)\n",
+			success_count, num_tests, num_tests, CARGO_NUM_TESTS);
+
+	return (num_tests - success_count);
 }
 
 #elif defined(CARGO_EXAMPLE)
