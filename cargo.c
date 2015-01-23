@@ -1997,6 +1997,174 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 // -----------------------------------------------------------------------------
 #ifdef CARGO_TEST
 
+#ifdef _WIN32
+#define ANSI_COLOR_BLACK			""
+#define ANSI_COLOR_RED				""
+#define ANSI_COLOR_GREEN			""
+#define ANSI_COLOR_YELLOW			""
+#define ANSI_COLOR_BLUE				""
+#define ANSI_COLOR_MAGENTA			""
+#define ANSI_COLOR_CYAN				""
+#define ANSI_COLOR_GRAY				""
+#define ANSI_COLOR_DARK_GRAY		""
+#define ANSI_COLOR_LIGHT_RED		""
+#define ANSI_COLOR_LIGHT_GREEN		""
+#define ANSI_COLOR_LIGHT_BLUE		""
+#define ANSI_COLOR_LIGHT_MAGNETA	""
+#define ANSI_COLOR_LIGHT_CYAN		""
+#define ANSI_COLOR_WHITE			""
+#define ANSI_COLOR_RESET			""
+#else
+#define ANSI_COLOR_BLACK			"\x1b[22;30m"
+#define ANSI_COLOR_RED				"\x1b[22;31m"
+#define ANSI_COLOR_GREEN			"\x1b[22;32m"
+#define ANSI_COLOR_YELLOW			"\x1b[22;33m"
+#define ANSI_COLOR_BLUE				"\x1b[22;34m"
+#define ANSI_COLOR_MAGENTA			"\x1b[22;35m"
+#define ANSI_COLOR_CYAN				"\x1b[22;36m"
+#define ANSI_COLOR_GRAY				"\x1b[22;37m"
+#define ANSI_COLOR_DARK_GRAY		"\x1b[01;30m"
+#define ANSI_COLOR_LIGHT_RED		"\x1b[01;31m"
+#define ANSI_COLOR_LIGHT_GREEN		"\x1b[01;32m"
+#define ANSI_COLOR_LIGHT_BLUE		"\x1b[01;34m"
+#define ANSI_COLOR_LIGHT_MAGNETA	"\x1b[01;35m"
+#define ANSI_COLOR_LIGHT_CYAN		"\x1b[01;36m"
+#define ANSI_COLOR_WHITE			"\x1b[01;37m"
+#define ANSI_COLOR_RESET			"\x1b[0m"
+#endif
+
+#define cargo_assert(test, message) do { if (!(test)) return message; } while (0)
+#define cargo_run_test(test) do { char *message = test(); tests_run++; \
+                                if (message) return message; } while (0)
+int tests_run;
+
+typedef struct args_s
+{
+	int a;
+	float b;
+	char *s;
+} args_t;
+
+typedef char *(* cargo_test_f)();
+
+typedef struct cargo_test_s
+{
+	const char *name;
+	cargo_test_f f;
+} cargo_test_t;
+
+#define CARGO_ADD_TEST(test) { #test, test }
+
+static char *test01()
+{
+	int ret = 0;
+	args_t args;
+	cargo_t cargo;
+	char *argv[] = { "test01", "-a", "b" };
+
+	if (cargo_init(&cargo, 32, argv[0], "The parser"))
+	{
+		return "Failed to init cargo";
+	}
+
+	ret = cargo_add_option(cargo, "--alpha -a",
+							"Alpha integer will be parsed", 
+							"i",
+							&args.a);
+
+	cargo_assert(ret == 0, "Failed to add valid integer option");
+
+	cargo_destroy(&cargo);
+
+	return NULL;
+}
+
+cargo_test_t tests[] =
+{
+	//CARGO_ADD_TEST(test01)
+	{ "Test 1", test01 }
+};
+#define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
+
+int main(int argc, char **argv)
+{
+	size_t i;
+	int ret = 0;
+	int testnum = 0;
+	char *res = NULL;
+	int tests_to_run[CARGO_NUM_TESTS];
+	size_t num_tests = 0;
+	int all = 0;
+	size_t test_index = 0;
+	cargo_test_t *t;
+
+	if (argc >= 2)
+	{
+		for (i = 1; i < argc; i++)
+		{
+			tests_to_run[num_tests] = atoi(argv[i]);
+
+			if (tests_to_run[num_tests] == 0)
+			{
+				fprintf(stderr, "Invalid test number %s\n", argv[i]);
+				return -1;
+			}
+			else if (tests_to_run[num_tests] < 0)
+			{
+				printf("Run ALL tests!\n");
+				all = 1;
+				break;
+			}
+
+			num_tests++;
+		}
+	}
+	else
+	{
+		fprintf(stderr, "Usage: %s [test_num ...]\n", argv[0]);
+		return -1;
+	}
+
+	if (all)
+	{
+		num_tests = CARGO_NUM_TESTS;
+
+		for (i = 0; i < num_tests; i++)
+		{
+			tests_to_run[i] = i + 1;
+		}
+	}
+
+	for (i = 0; i < num_tests; i++)
+	{
+		test_index = tests_to_run[i] - 1;
+		t = &tests[test_index];
+
+		fprintf(stderr, "%sTest %02lu:%s\n",
+			ANSI_COLOR_CYAN, test_index, ANSI_COLOR_RESET);
+
+		fprintf(stderr, "%s\n", ANSI_COLOR_DARK_GRAY);
+		res = t->f();
+		fprintf(stderr, "%s\n", ANSI_COLOR_RESET);
+
+		if (res)
+		{
+			fprintf(stderr, "[%sFAIL%s] %s\n",
+				ANSI_COLOR_RED, ANSI_COLOR_RESET, res);
+			ret = -1;
+		}
+		else
+		{
+			printf("[%sSUCCESS%s]\n",
+				ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+		}
+	}
+
+	return (res != NULL);
+}
+
+#elif defined(CARGO_EXAMPLE)
+
 typedef struct args_s
 {
 	int hello;
@@ -2033,9 +2201,6 @@ typedef struct args_s
 	size_t crazy_count;
 	//char crazy[5][10];
 } args_t;
-
-#define CARGO_LIST_LEN(l) (sizeof(l) / sizeof(l[0]))
-#define CARGO_LIST_STR_LEN(l) (sizeof(l[0]) / sizeof(l[0][0]))
 
 int main(int argc, char **argv)
 {
