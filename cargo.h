@@ -94,6 +94,17 @@ int cargo_addv_alloc(cargo_t ctx,
 				cargo_type_t type,
 				const char *description);
 
+#define CARGO_FLAG_VALIDATE_ONLY (1 << 0)
+
+int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
+					  const char *description, const char *fmt, va_list ap);
+
+int cargo_add_optionv(cargo_t ctx, const char *optnames, 
+					  const char *description, const char *fmt, va_list ap);
+
+int cargo_add_option(cargo_t ctx, const char *optnames,
+					 const char *description, const char *fmt, ...);
+
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
 typedef enum cargo_format_e

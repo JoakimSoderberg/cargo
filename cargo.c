@@ -14,6 +14,14 @@
 #include <unistd.h>
 #endif // _WIN32
 
+#ifndef va_copy
+  #ifdef __va_copy
+    #define va_copy __va_copy
+  #else
+    #define va_copy(a, b) memcpy(&(a), &(b), sizeof(va_list))
+  #endif
+#endif
+
 int cargo_get_console_width()
 {
 	#ifdef _WIN32
@@ -1816,7 +1824,9 @@ static void *_read_str(cargo_fmt_scanner_t *s,
 	return target;
 }
 
-int cargo_add_optionv(cargo_t ctx, const char *optnames, 
+#define CARGO_FLAG_VALIDATE_ONLY (1 << 0)
+
+int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap)
 {
 	size_t optcount = 0;
@@ -1942,8 +1952,8 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	}
 
 	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
- 	// X[s#]+     char *s[10];   size_t c;    &s, 10, &c     // Alloc 1 or more strings of len 10
- 	// X[s#]#     char *s[10];   size_t c;    &s, 10, &c, 5  // Alloc 5 str of len 10 
+ 	// X[s#]+    char *s[10];   size_t c;    &s, 10, &c     // Alloc 1 or more strings of len 10
+ 	// X[s#]#    char *s[10];   size_t c;    &s, 10, &c, 5  // Alloc 5 str of len 10 
 	// [s]+      char **s;      size_t c;    &s, &c         // Alloc 1 or more strings.
 	// [s]#      char **s       size_t c;    &s, &c, 10     // Alloc 10 strings of any size.
 	// [s]#      char **s;      size_t c;    &s, &c, 5      // Alloc 5 strings
@@ -1976,6 +1986,12 @@ fail:
 	}
 	
 	return ret;
+}
+
+int cargo_add_optionv(cargo_t ctx, const char *optnames, 
+					  const char *description, const char *fmt, va_list ap)
+{
+	return cargo_add_optionv_ex(ctx, 0, optnames, description, fmt, ap);
 }
 
 int cargo_add_option(cargo_t ctx, const char *optnames,
@@ -2085,7 +2101,7 @@ _TEST_START(add_float_option)
 	float b;
 	ret = cargo_add_option(cargo, "--beta -b",
 							"Beta integer will be parsed", 
-							"b",
+							"f",
 							&b);
 	cargo_assert(ret == 0, "Failed to add valid float option");
 }
