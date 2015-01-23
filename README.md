@@ -1,5 +1,6 @@
 [![Travis CI build status (Linux)](https://travis-ci.org/JoakimSoderberg/cargo.svg)](https://travis-ci.org/JoakimSoderberg/cargo)
 [![Appveyor Build status (Windows)](https://ci.appveyor.com/api/projects/status/hia4q08852puktpf?svg=true)](https://ci.appveyor.com/project/JoakimSoderberg/cargo)
+[![Coverage Status](https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg)](https://coveralls.io/r/JoakimSoderberg/cargo)
 
 
 cargo
@@ -24,4 +25,21 @@ Or on Windows using the visual studio command line:
 
 ```bash
 > cl.exe /DCARGO_TEST cargo.c
+```
+
+More advanced compiling
+-----------------------
+
+To enable running the tests easily on any platform there's also a CMake
+project that can be used to generate `Make` files or a `Visual Studio`
+project for instance.
+
+Both for Windows and Linux
+###########################
+
+```bash
+$ mkdir build && cd build
+$ cmake ..        # Add -DCARGO_DEBUG=<level> for debugging output.
+$ cmake --build . # You can use 'make' also, but not with Visual Studio.
+$ ctest           # Run the tests.
 ```

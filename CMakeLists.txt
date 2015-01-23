@@ -3,6 +3,7 @@ project(cargo C)
 
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
+option(CARGO_EXAMPLE "Build example application" ON)
 option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
 
 if (UNIX)
@@ -37,8 +38,10 @@ if (MSVC)
    add_definitions("/W3 /D_CRT_SECURE_NO_WARNINGS /wd4005 /wd4996 /nologo")
 endif()
 
-add_executable(cargo cargo.c cargo.h)
-set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=ON")
+if (CARGO_EXAMPLE)
+	add_executable(cargo cargo.c cargo.h)
+	set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=ON")
+endif()
 
 if (CARGO_TEST)
 	ENABLE_TESTING()
