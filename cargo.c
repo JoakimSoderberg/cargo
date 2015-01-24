@@ -2112,6 +2112,28 @@ _TEST_START(add_float_option)
 }
 _TEST_END()
 
+_TEST_START(add_bool_option)
+{
+	int c;
+	ret = cargo_add_option(cargo, "--ceasar -c",
+							"Ceasar bool will be parsed", 
+							"b",
+							&c);
+	cargo_assert(ret == 0, "Failed to add valid bool option");
+}
+_TEST_END()
+
+_TEST_START(add_static_string_option)
+{
+	char b[10];
+ 	ret = cargo_add_option(cargo, "--beta -b",
+							"Beta integer will be parsed", 
+							"s#",
+							&b, sizeof(b));
+	cargo_assert(ret == 0, "Failed to add valid static string option");
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2131,7 +2153,9 @@ typedef struct cargo_test_s
 cargo_test_t tests[] =
 {
 	CARGO_ADD_TEST(TEST_add_integer_option),
-	CARGO_ADD_TEST(TEST_add_float_option)
+	CARGO_ADD_TEST(TEST_add_float_option),
+	CARGO_ADD_TEST(TEST_add_bool_option),
+	CARGO_ADD_TEST(TEST_add_static_string_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
