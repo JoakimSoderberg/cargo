@@ -2087,41 +2087,30 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 	return NULL;			\
 }
 
-//
+// =================================================================
 // Test functions.
+// =================================================================
+
+
 //
-_TEST_START(add_integer_option)
-{
-	int a;
-	ret = cargo_add_option(cargo, "--alpha -a",
-							"Alpha integer will be parsed", 
-							"i",
-							&a);
-	cargo_assert(ret == 0, "Failed to add valid integer option");
-}
-_TEST_END()
+// Simple add option tests.
+//
+#define _TEST_ADD_SIMPLE_OPTION(name, type, fmt, ...) 					\
+	_TEST_START(name)													\
+	{																	\
+		type a;															\
+		ret = cargo_add_option(cargo, "--alpha -a",						\
+								"Description", 							\
+								fmt,									\
+								&a, ##__VA_ARGS__);						\
+		cargo_assert(ret == 0, "Failed to add valid integer option");	\
+	}																	\
+	_TEST_END()
 
-_TEST_START(add_float_option)
-{
-	float b;
-	ret = cargo_add_option(cargo, "--beta -b",
-							"Beta integer will be parsed", 
-							"f",
-							&b);
-	cargo_assert(ret == 0, "Failed to add valid float option");
-}
-_TEST_END()
-
-_TEST_START(add_bool_option)
-{
-	int c;
-	ret = cargo_add_option(cargo, "--ceasar -c",
-							"Ceasar bool will be parsed", 
-							"b",
-							&c);
-	cargo_assert(ret == 0, "Failed to add valid bool option");
-}
-_TEST_END()
+_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, "i")
+_TEST_ADD_SIMPLE_OPTION(add_float_option, float, "f")
+_TEST_ADD_SIMPLE_OPTION(add_bool_option, int, "b")
+_TEST_ADD_SIMPLE_OPTION(add_double_option, double, "d")
 
 _TEST_START(add_static_string_option)
 {
@@ -2133,6 +2122,33 @@ _TEST_START(add_static_string_option)
 	cargo_assert(ret == 0, "Failed to add valid static string option");
 }
 _TEST_END()
+
+_TEST_START(add_alloc_string_option)
+{
+	char *b = NULL;
+ 	ret = cargo_add_option(cargo, "--beta -b",
+							"Description", 
+							"s",
+							&b, sizeof(b));
+	cargo_assert(ret == 0, "Failed to add valid alloc string option");		
+}
+_TEST_END()
+
+///
+/// Simple add array tests.
+///
+/*
+_TEST_START(add_static_int_array_option)
+{
+	int a[3][5];
+ 	ret = cargo_add_option(cargo, "--beta -b",
+							"Description", 
+							"s",
+							&a, sizeof(b));
+	cargo_assert(ret == 0, "Failed to add valid alloc string option");		
+}
+_TEST_END()
+*/
 
 //
 // List of all test functions to run:
@@ -2155,7 +2171,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_integer_option),
 	CARGO_ADD_TEST(TEST_add_float_option),
 	CARGO_ADD_TEST(TEST_add_bool_option),
-	CARGO_ADD_TEST(TEST_add_static_string_option)
+	CARGO_ADD_TEST(TEST_add_double_option),
+	CARGO_ADD_TEST(TEST_add_static_string_option),
+	CARGO_ADD_TEST(TEST_add_alloc_string_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

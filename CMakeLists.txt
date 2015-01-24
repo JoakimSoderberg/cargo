@@ -72,7 +72,7 @@ if (CARGO_TEST)
 	# (We need to do this in two steps because CMake regexp sucks)
 	file(STRINGS cargo.c CARGO_LINES)
 	string(REGEX MATCHALL
-				"CARGO_ADD_TEST\\(TEST_[a-z_]+"
+				"CARGO_ADD_TEST\\(TEST_[a-zA-Z0-9_]+"
 				TEST_LINES
 				"${CARGO_LINES}")
 
