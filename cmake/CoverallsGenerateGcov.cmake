@@ -305,8 +305,16 @@ foreach (GCOV_FILE ${GCOV_FILES})
 			RES
 			"${GCOV_LINE}")
 
+		# Check if we should exclude lines using the Lcov syntax.
 		string(REGEX MATCH "LCOV_EXCL_START" START_SKIP "${GCOV_LINE}")
 		string(REGEX MATCH "LCOV_EXCL_END" END_SKIP "${GCOV_LINE}")
+		string(REGEX MATCH "LCOV_EXCL_LINE" LINE_SKIP "${GCOV_LINE}")
+
+		set(RESET_SKIP 0)
+		if (LINE_SKIP AND NOT DO_SKIP)
+			set(DO_SKIP 1)
+			set(RESET_SKIP 1)
+		endif()
 
 		if (START_SKIP)
 			set(DO_SKIP 1)
@@ -347,6 +355,9 @@ foreach (GCOV_FILE ${GCOV_FILES})
 			message(WARNING "Failed to properly parse line (RES_COUNT = ${RES_COUNT}) ${GCOV_FILE}:${GCOV_LINE_COUNT}\n-->${GCOV_LINE}")
 		endif()
 
+		if (RESET_SKIP)
+			set(DO_SKIP 0)
+		endif()
 		math(EXPR GCOV_LINE_COUNT "${GCOV_LINE_COUNT}+1")
 	endforeach()
 
