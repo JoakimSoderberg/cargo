@@ -2015,6 +2015,7 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 // -----------------------------------------------------------------------------
 // Tests.
 // -----------------------------------------------------------------------------
+// LCOV_EXCL_START
 #ifdef CARGO_TEST
 
 #ifdef _WIN32
@@ -2524,5 +2525,5 @@ fail:
 	return ret;
 }
 
-#endif
-
+#endif // CARGO_EXAMPLE
+// LCOV_EXCL_END
