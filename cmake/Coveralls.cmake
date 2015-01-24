@@ -19,7 +19,7 @@
 #
 # Copyright (C) 2014 Joakim Söderberg <joakim.soderberg@gmail.com>
 #
-
+include(CheckCCompilerFlag)
 
 #
 # Param _COVERAGE_SRCS	A list of source files that coverage should be collected for.
@@ -109,19 +109,32 @@ function(coveralls_setup _COVERAGE_SRCS _COVERALLS_UPLOAD)
 
 endfunction()
 
-macro(coveralls_turn_on_coverage)
-	if(NOT (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
-		AND (NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "Clang"))
-		message(FATAL_ERROR "Coveralls: Compiler ${CMAKE_C_COMPILER_ID} is not GNU gcc! Aborting... You can set this on the command line using CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake <options> ..")
+#
+# Verifies that the compiler supports compiling coverage data.
+#
+macro(coveralls_test_support)
+	check_c_compiler_flag(-ftest-coverage COMPILER_HAS_TEST_COVERAGE)
+	check_c_compiler_flag(-fprofile-arcs COMPILER_HAS_PROFILE_ARCS)
+
+	if (NOT (COMPILER_HAS_PROFILE_ARCS OR COMPILER_HAS_TEST_COVERAGE))
+		message(FATAL_ERROR "\n\nCoveralls: Compiler does not support the necessary compile flags! Aborting... You can set compiler explicitly like this: CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake <options> ..\n\n")
 	endif()
 
 	if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-		message(FATAL_ERROR "Coveralls: Code coverage results with an optimised (non-Debug) build may be misleading! Add -DCMAKE_BUILD_TYPE=Debug")
+		message(FATAL_ERROR "\n\nCoveralls: Code coverage results with an optimised (non-Debug) build may be misleading! Add -DCMAKE_BUILD_TYPE=Debug\n\n")
 	endif()
+endmacro()
 
+#
+# This turns on Coverage support for all targets globally.
+#
+macro(coveralls_turn_on_coverage)
+	coveralls_test_support()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -fprofile-arcs -ftest-coverage")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0 -fprofile-arcs -ftest-coverage")
 endmacro()
 
-
-
+macro(coveralls_turn_on_coverage_for_target _TARGET)
+	coveralls_test_support()
+	set_target_properties(${_TARGET} PROPERTIES COMPILE_FLAGS "-g -O0 -fprofile-arcs -ftest-coverage")
+endmacro()
