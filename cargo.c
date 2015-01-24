@@ -307,12 +307,13 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
-	CARGODBG(2, "%s, lenstr = %lu, nargs = %d\n", opt, lenstr, nargs);
+	CARGODBG(2, "%s: lenstr = %lu, nargs = %d\n", opt, lenstr, nargs);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
 	if (nargs >= 0)
 	{
+		CARGODBG(2, "%s: max_target_count = nargs = %d\n", opt, nargs);
 		o->max_target_count = nargs;
 	}
 	else if (target_count)
@@ -322,9 +323,17 @@ static int _cargo_add(cargo_t ctx,
 		// value is specified by the value in "target_count", or if that 
 		// is 0 the size_t max value is used.
 		if (*target_count == 0)
+		{
 			o->max_target_count = (size_t)-1;
+			CARGODBG(2, "%s: max_target_count = %lu\n",
+					opt, o->max_target_count);
+		}
 		else
+		{
 			o->max_target_count = (*target_count);
+			CARGODBG(2, "%s: max_target_count = target_count = %lu\n",
+					opt, o->max_target_count);
+		}
 	}
 	else
 	{
@@ -1940,6 +1949,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			}
 		}
 
+		CARGODBG(2, "  %s: nargs = %d\n", optname_list[0], nargs);
+
+		// TODO: Change this?
 		*target_count = nargs;
 	}
 	else
@@ -2095,28 +2107,35 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 //
 // Simple add option tests.
 //
-#define _TEST_ADD_SIMPLE_OPTION(name, type, fmt, ...) 					\
-	_TEST_START(name)													\
-	{																	\
-		type a;															\
-		ret = cargo_add_option(cargo, "--alpha -a",						\
-								"Description", 							\
-								fmt,									\
-								&a, ##__VA_ARGS__);						\
-		cargo_assert(ret == 0, "Failed to add valid integer option");	\
-	}																	\
+#define _TEST_ADD_SIMPLE_OPTION(name, type, value, fmt, ...) 				\
+	_TEST_START(name)														\
+	{																		\
+		char *args[] = { "program", "--alpha", #value };					\
+		type a;																\
+		ret = cargo_add_option(cargo, "--alpha -a",							\
+								"Description", 								\
+								fmt,										\
+								&a, ##__VA_ARGS__);							\
+		cargo_assert(ret == 0, "Failed to add valid "#type" option");		\
+		if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))	\
+		{																	\
+			return "Failed to parse "#type" with value \""#value"\"";		\
+		}																	\
+		printf("Attempt to parse value: "#value"\n");						\
+		cargo_assert(a == value, "Failed to parse correct value "#value);	\
+	}																		\
 	_TEST_END()
 
-_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, "i")
-_TEST_ADD_SIMPLE_OPTION(add_float_option, float, "f")
-_TEST_ADD_SIMPLE_OPTION(add_bool_option, int, "b")
-_TEST_ADD_SIMPLE_OPTION(add_double_option, double, "d")
+_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, 3, "i")
+_TEST_ADD_SIMPLE_OPTION(add_float_option, float, 0.3f, "f")
+_TEST_ADD_SIMPLE_OPTION(add_bool_option, int, 1, "b")
+_TEST_ADD_SIMPLE_OPTION(add_double_option, double, 0.4, "d")
 
 _TEST_START(add_static_string_option)
 {
 	char b[10];
  	ret = cargo_add_option(cargo, "--beta -b",
-							"Beta integer will be parsed", 
+							"Description", 
 							"s#",
 							&b, sizeof(b));
 	cargo_assert(ret == 0, "Failed to add valid static string option");
@@ -2137,18 +2156,29 @@ _TEST_END()
 ///
 /// Simple add array tests.
 ///
-/*
 _TEST_START(add_static_int_array_option)
 {
-	int a[3][5];
+	int a[3];
+	#define INT_ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	size_t count;
+	char *args[] = { "program", "--beta", "1", "2", "3" };
+
  	ret = cargo_add_option(cargo, "--beta -b",
 							"Description", 
-							"s",
-							&a, sizeof(b));
-	cargo_assert(ret == 0, "Failed to add valid alloc string option");		
+							".[i]#",
+							&a, &count, INT_ARRAY_SIZE);
+	cargo_assert(ret == 0, "Failed to add valid static int array option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse static int array");
+
+	printf("Read %lu values from int array: %d, %d, %d\n", count, a[0], a[1], a[2]);
+	cargo_assert(count == INT_ARRAY_SIZE, "Array count is not 3 as expected");
+	cargo_assert(a[0] == 1, "Array value at index 0 is not 1 as expected");
+	cargo_assert(a[1] == 2, "Array value at index 1 is not 2 as expected");
+	cargo_assert(a[2] == 3, "Array value at index 2 is not 3 as expected");
 }
 _TEST_END()
-*/
 
 //
 // List of all test functions to run:
@@ -2173,7 +2203,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_bool_option),
 	CARGO_ADD_TEST(TEST_add_double_option),
 	CARGO_ADD_TEST(TEST_add_static_string_option),
-	CARGO_ADD_TEST(TEST_add_alloc_string_option)
+	CARGO_ADD_TEST(TEST_add_alloc_string_option),
+	CARGO_ADD_TEST(TEST_add_static_int_array_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -2263,6 +2294,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
+		_test_print_names();
 		fprintf(stderr, "%s:\n\n", argv[0]);
 		fprintf(stderr, "Usage: %s [test_num ...] [test_name ...]\n\n", argv[0]);
 		fprintf(stderr, "  --list to get all available tests.\n");
@@ -2325,20 +2357,20 @@ int main(int argc, char **argv)
 		if (!tests[i].ran)
 		{
 			printf(" [%sNOT RUN%s] %2lu: %s\n",
-				ANSI_COLOR_GRAY, ANSI_COLOR_RESET, i, tests[i].name);
+				ANSI_COLOR_GRAY, ANSI_COLOR_RESET, (i + 1), tests[i].name);
 			continue;
 		}
 
 		if (tests[i].success)
 		{
 			printf(" [%sSUCCESS%s] %2lu: %s\n",
-				ANSI_COLOR_GREEN, ANSI_COLOR_RESET, i, tests[i].name);
+				ANSI_COLOR_GREEN, ANSI_COLOR_RESET, (i + 1), tests[i].name);
 		}
 		else
 		{
 			fprintf(stderr, " [%sFAILED%s]  %2lu: %s - %s\n",
 				ANSI_COLOR_RED, ANSI_COLOR_RESET,
-				i, tests[i].name, tests[i].error);
+				(i + 1), tests[i].name, tests[i].error);
 		}
 	}
 
