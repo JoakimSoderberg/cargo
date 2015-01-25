@@ -2426,7 +2426,7 @@ int main(int argc, char **argv)
 		if (!tests[i].ran)
 		{
 			printf(" [%sNOT RUN%s] %2lu: %s\n",
-				ANSI_COLOR_GRAY, ANSI_COLOR_RESET, (i + 1), tests[i].name);
+				ANSI_COLOR_DARK_GRAY, ANSI_COLOR_RESET, (i + 1), tests[i].name);
 			continue;
 		}
 
