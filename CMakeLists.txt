@@ -96,8 +96,9 @@ if (CARGO_TEST)
 
 			if (CARGO_WITH_MEMCHECK)
 				if (WIN32)
-                    # TODO: Don't have Debug in the path here hard coded. However CMAKE_CFG_INTDIR does not work here...
-					add_test("${TEST_NAME}_memchk" ${DRMEMORY_PROGRAM} -batch -- ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/cargo_tests.exe ${TEST_NAME})
+					# TODO: This is hard coded to bin/Debug for now... Possible fix:
+					# http://stackoverflow.com/questions/9467510/how-to-pass-ctest-configuration-type-using-add-test-in-cmake
+					add_test("${TEST_NAME}_memchk" ${DRMEMORY_PROGRAM} -batch -show_reachable -exit_code_if_errors 5 -- ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/cargo_tests.exe ${TEST_NAME})
 				else()
 					add_test("${TEST_NAME}_memchk" ${VALGRIND_PROGRAM} --error-exitcode=5 --leak-check=full ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests ${TEST_NAME})
 				endif()
