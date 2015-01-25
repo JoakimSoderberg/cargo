@@ -96,7 +96,8 @@ if (CARGO_TEST)
 
 			if (CARGO_WITH_MEMCHECK)
 				if (WIN32)
-					add_test("${TEST_NAME}_memchk" ${DRMEMORY_PROGRAM} -batch -- ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests.exe ${TEST_NAME})
+                    # TODO: Don't have Debug in the path here hard coded. However CMAKE_CFG_INTDIR does not work here...
+					add_test("${TEST_NAME}_memchk" ${DRMEMORY_PROGRAM} -batch -- ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/cargo_tests.exe ${TEST_NAME})
 				else()
 					add_test("${TEST_NAME}_memchk" ${VALGRIND_PROGRAM} --error-exitcode=5 --leak-check=full ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests ${TEST_NAME})
 				endif()
