@@ -3,7 +3,7 @@ branches:
     - gh-pages
 
 install:
-  - cinst drmemory
+  - cinst drmemory.install -Version 1.8.0.8
 
 build_script:
   - md build
