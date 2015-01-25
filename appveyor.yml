@@ -1,3 +1,10 @@
+branches:
+  except:
+    - gh-pages
+
+install:
+  - cinst drmemory
+
 build_script:
   - md build
   - cd build
