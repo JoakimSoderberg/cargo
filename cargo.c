@@ -2156,27 +2156,53 @@ _TEST_END()
 ///
 /// Simple add array tests.
 ///
+#define _TEST_STATIC_ARRAY_OPTION(array, array_size, args, argc, fmt, ...) 	 \
+{																			 \
+ 	ret = cargo_add_option(cargo, "--beta -b", "Description",				 \
+ 							fmt, ##__VA_ARGS__);							 \
+	cargo_assert(ret == 0,													 \
+		"Failed to add "#array"["#array_size"] array option");				 \
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);		 \
+	cargo_assert(ret == 0, "Failed to parse array: "#array"["#array_size"]");\
+}
+
 _TEST_START(add_static_int_array_option)
 {
 	int a[3];
-	#define INT_ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
 	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
- 	ret = cargo_add_option(cargo, "--beta -b",
-							"Description", 
-							".[i]#",
-							&a, &count, INT_ARRAY_SIZE);
-	cargo_assert(ret == 0, "Failed to add valid static int array option");
+	_TEST_STATIC_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[i]#", &a, &count, ARRAY_SIZE);
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret == 0, "Failed to parse static int array");
-
-	printf("Read %lu values from int array: %d, %d, %d\n", count, a[0], a[1], a[2]);
-	cargo_assert(count == INT_ARRAY_SIZE, "Array count is not 3 as expected");
+	printf("Read %lu values from int array: %d, %d, %d\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == ARRAY_SIZE, "Array count is not 3 as expected");
 	cargo_assert(a[0] == 1, "Array value at index 0 is not 1 as expected");
 	cargo_assert(a[1] == 2, "Array value at index 1 is not 2 as expected");
 	cargo_assert(a[2] == 3, "Array value at index 2 is not 3 as expected");
+}
+_TEST_END()
+
+_TEST_START(add_static_float_array_option)
+{
+	float a[3];
+	size_t count;
+	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_STATIC_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[f]#", &a, &count, ARRAY_SIZE);
+
+	printf("Read %lu values from int array: %f, %f, %f\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == ARRAY_SIZE, "Array count is not 3 as expected");
+	cargo_assert(a[0] == 0.1f, "Array value at index 0 is not 0.1f as expected");
+	cargo_assert(a[1] == 0.2f, "Array value at index 1 is not 0.2f as expected");
+	cargo_assert(a[2] == 0.3f, "Array value at index 2 is not 0.3f as expected");
 }
 _TEST_END()
 
@@ -2194,7 +2220,7 @@ typedef struct cargo_test_s
 	char *error;
 } cargo_test_t;
 
-#define CARGO_ADD_TEST(test) { #test, test, 0, 0,  }
+#define CARGO_ADD_TEST(test) { #test, test, 0, 0, NULL }
 
 cargo_test_t tests[] =
 {
@@ -2204,7 +2230,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_double_option),
 	CARGO_ADD_TEST(TEST_add_static_string_option),
 	CARGO_ADD_TEST(TEST_add_alloc_string_option),
-	CARGO_ADD_TEST(TEST_add_static_int_array_option)
+	CARGO_ADD_TEST(TEST_add_static_int_array_option),
+	CARGO_ADD_TEST(TEST_add_static_float_array_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -2258,7 +2285,7 @@ int main(int argc, char **argv)
 			return 0;
 		}
 
-		for (i = 1; i < argc; i++)
+		for (i = 1; i < (size_t)argc; i++)
 		{
 			// First check if we were given a function name.
 			if (!strncmp(argv[i], "TEST_", 5))
