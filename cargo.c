@@ -2206,6 +2206,46 @@ _TEST_START(add_static_float_array_option)
 }
 _TEST_END()
 
+_TEST_START(add_static_double_array_option)
+{
+	double a[3];
+	size_t count;
+	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_STATIC_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[d]#", &a, &count, ARRAY_SIZE);
+
+	printf("Read %lu values from int array: %f, %f, %f\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == ARRAY_SIZE, "Array count is not 3 as expected");
+	cargo_assert(a[0] == 0.1, "Array value at index 0 is not 0.1 as expected");
+	cargo_assert(a[1] == 0.2, "Array value at index 1 is not 0.2 as expected");
+	cargo_assert(a[2] == 0.3, "Array value at index 2 is not 0.3 as expected");
+}
+_TEST_END()
+
+_TEST_START(add_static_string_array_option)
+{
+	char a[3][5];
+	size_t count;
+	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_STATIC_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[s#]#", &a, 5, &count, ARRAY_SIZE);
+
+	printf("Read %lu values from int array: %s, %s, %s\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == ARRAY_SIZE, "Array count is not 3 as expected");
+	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
+	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
+	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2231,7 +2271,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_static_string_option),
 	CARGO_ADD_TEST(TEST_add_alloc_string_option),
 	CARGO_ADD_TEST(TEST_add_static_int_array_option),
-	CARGO_ADD_TEST(TEST_add_static_float_array_option)
+	CARGO_ADD_TEST(TEST_add_static_float_array_option),
+	CARGO_ADD_TEST(TEST_add_static_double_array_option),
+	CARGO_ADD_TEST(TEST_add_static_string_array_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
