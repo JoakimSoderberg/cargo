@@ -1801,38 +1801,6 @@ static void _prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
-static void *_read_str(cargo_fmt_scanner_t *s, 
-						size_t **target_count, size_t *lenstr, va_list ap)
-{
-	void *target = (void *)va_arg(ap, char *);
-
-	CARGODBG(4, "Read string\n");
-	_next_token(s);
-
-	if (_token(s) == '#')
-	{
-		*lenstr = (size_t)va_arg(ap, int);
-		CARGODBG(4, "String length: %lu\n", *lenstr);
-
-		if (s->alloc)
-		{
-			CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
-						"string using # is only done on static strings.\n"
-						"    Are you sure you want this?\n", 
-						s->opt);
-			CARGODBG(1, "      \"%s\"\n", s->start);
-			CARGODBG(1, "       %*s\n", s->column, "^");
-		}
-	}
-	else
-	{
-		*lenstr = 0;
-		_prev_token(s);
-	}
-
-	return target;
-}
-
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap)
 {
@@ -1899,7 +1867,36 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	switch (_token(&s))
 	{
-		case 's': type = CARGO_STRING; target = _read_str(&s, &target_count, &lenstr, ap); break;
+		case 's':
+		{
+			type = CARGO_STRING;
+			target = (void *)va_arg(ap, char *);
+
+			CARGODBG(4, "Read string\n");
+			_next_token(&s);
+
+			if (_token(&s) == '#')
+			{
+				lenstr = (size_t)va_arg(ap, int);
+				CARGODBG(4, "String length: %lu\n", lenstr);
+
+				if (s.alloc)
+				{
+					CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
+						"string using # is only done on static strings.\n"
+						"    Are you sure you want this?\n",
+						s.opt);
+					CARGODBG(1, "      \"%s\"\n", s.start);
+					CARGODBG(1, "       %*s\n", s.column, "^");
+				}
+			}
+			else
+			{
+				lenstr = 0;
+				_prev_token(&s);
+			}
+			break;
+		}
 		case 'i': type = CARGO_INT;    target = (void *)va_arg(ap, void *); break;
 		case 'd': type = CARGO_DOUBLE; target = (void *)va_arg(ap, void *); break;
 		case 'b': type = CARGO_BOOL;   target = (void *)va_arg(ap, void *); break;
