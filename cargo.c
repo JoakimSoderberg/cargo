@@ -696,7 +696,11 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 
 static int _cargo_compare_strlen(const void *a, const void *b)
 {
-	return strlen(((const char *)a)) - strlen(((const char *)b));
+	const char *a = (const char *)a;
+	const char *b = (const char *)b;
+	size_t alen = strlen(a);
+	size_t blen = strlen(b);
+	return alen - blen;
 }
 
 static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
@@ -1131,6 +1135,7 @@ void cargo_destroy(cargo_t *ctx)
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 {
 	assert(ctx);
+	// TODO: Hmmm, copy this instead?
 	ctx->prefix = prefix_chars;
 }
 
@@ -1425,6 +1430,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	assert(buf);
 	#define MAX_OPT_NAME_LEN 40
 	#define NAME_PADDING 2
+	// TODO: If this is called before cargo_parse, --help won't exist yet!
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -2371,6 +2377,8 @@ _TEST_START(print_usage)
 			"s",
 			&s);
 	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_set_epilog(cargo, "That's it!");
 
 	cargo_print_usage(cargo);
 }
