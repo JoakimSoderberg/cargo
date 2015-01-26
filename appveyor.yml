@@ -8,6 +8,6 @@ install:
 build_script:
   - md build
   - cd build
-  - cmake -DCMAKE_BUILD_TYPE=Debug -DCARGO_DEBUG=4 ..
-  - cmake --build .
+  - cmake -DCARGO_DEBUG=4 ..
+  - cmake --build . --config Debug
   - ctest --output-on-failure
