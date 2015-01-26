@@ -2131,7 +2131,8 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 	}																		\
 	_TEST_END()
 
-_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, 3, "i")
+_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, -3, "i")
+_TEST_ADD_SIMPLE_OPTION(add_uinteger_option, unsigned int, 3, "u")
 _TEST_ADD_SIMPLE_OPTION(add_float_option, float, 0.3f, "f")
 _TEST_ADD_SIMPLE_OPTION(add_bool_option, int, 1, "b")
 _TEST_ADD_SIMPLE_OPTION(add_double_option, double, 0.4, "d")
@@ -2174,14 +2175,50 @@ _TEST_END()
 _TEST_START(add_static_int_array_option)
 {
 	int a[3];
-	int a_expect[3] = { 1, 2, 3 };
+	int a_expect[3] = { 1, -2, 3 };
+	size_t count;
+	char *args[] = { "program", "--beta", "1", "-2", "3" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[i]#", &a, &count, ARRAY_SIZE);
+
+	printf("Read %lu values from int array: %d, %d, %d\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);
+}
+_TEST_END()
+
+_TEST_START(add_static_uint_array_option)
+{
+	unsigned int a[3];
+	unsigned int a_expect[3] = { 1, 2, 3 };
 	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[i]#", &a, &count, ARRAY_SIZE);
+							".[u]#", &a, &count, ARRAY_SIZE);
+
+	printf("Read %lu values from int array: %u, %u, %u\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);
+}
+_TEST_END()
+
+_TEST_START(add_static_bool_array_option)
+{
+	int a[3];
+	int a_expect[3] = { 1, 1, 1 };
+	size_t count;
+	char *args[] = { "program", "--beta", "1", "2", "3" };
+	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
+							".[b]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %d, %d, %d\n",
 			count, a[0], a[1], a[2]);
@@ -2358,12 +2395,15 @@ typedef struct cargo_test_s
 cargo_test_t tests[] =
 {
 	CARGO_ADD_TEST(TEST_add_integer_option),
+	CARGO_ADD_TEST(TEST_add_uinteger_option),
 	CARGO_ADD_TEST(TEST_add_float_option),
 	CARGO_ADD_TEST(TEST_add_bool_option),
 	CARGO_ADD_TEST(TEST_add_double_option),
 	CARGO_ADD_TEST(TEST_add_static_string_option),
 	CARGO_ADD_TEST(TEST_add_alloc_string_option),
 	CARGO_ADD_TEST(TEST_add_static_int_array_option),
+	CARGO_ADD_TEST(TEST_add_static_uint_array_option),
+	CARGO_ADD_TEST(TEST_add_static_bool_array_option),
 	CARGO_ADD_TEST(TEST_add_static_float_array_option),
 	CARGO_ADD_TEST(TEST_add_static_double_array_option),
 	CARGO_ADD_TEST(TEST_add_static_string_array_option),
