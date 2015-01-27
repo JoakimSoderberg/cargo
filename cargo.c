@@ -696,10 +696,10 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 
 static int _cargo_compare_strlen(const void *a, const void *b)
 {
-	const char *a = (const char *)a;
-	const char *b = (const char *)b;
-	size_t alen = strlen(a);
-	size_t blen = strlen(b);
+	const char *as = (const char *)a;
+	const char *bs = (const char *)b;
+	size_t alen = strlen(as);
+	size_t blen = strlen(bs);
 	return alen - blen;
 }
 
