@@ -2071,6 +2071,7 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 #endif
 
 #define cargo_assert(test, message) do { if (!(test)) return message; } while (0)
+
 #define cargo_assert_array(count, expected_count, array, array_expected)	\
 {																			\
 	size_t k;																\
@@ -2079,6 +2080,18 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 	for (k = 0; k < count; k++)												\
 	{																		\
 		cargo_assert(array[k] == array_expected[k],							\
+			"Array contains unexpected value");								\
+	}																		\
+}
+
+#define cargo_assert_str_array(count, expected_count, array, array_expected)\
+{																			\
+	size_t k;																\
+	cargo_assert(count == expected_count, 									\
+		#array" array count "#count" is not expected "#expected_count);		\
+	for (k = 0; k < count; k++)												\
+	{																		\
+		cargo_assert(!strcmp((char *)array[k], (char *)array_expected[k]),	\
 			"Array contains unexpected value");								\
 	}																		\
 }
@@ -2184,10 +2197,10 @@ _TEST_START(TEST_add_alloc_string_option)
 }
 _TEST_END()
 
-///
-/// Simple add array tests.
-///
-#define _TEST_ARRAY_OPTION(array, array_size, args, argc, fmt, ...) 	 \
+//
+// =========================== Array Tests ====================================
+//
+#define _TEST_ARRAY_OPTION(array, array_size, args, argc, fmt, ...) 		 \
 {																			 \
  	ret = cargo_add_option(cargo, "--beta -b", "Description",				 \
  							fmt, ##__VA_ARGS__);							 \
@@ -2197,21 +2210,31 @@ _TEST_END()
 	cargo_assert(ret == 0, "Failed to parse array: "#array"["#array_size"]");\
 }
 
+#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+#define ARRAY_SIZE (sizeof(a_expect) / sizeof(a_expect[0]))
+#define _ADD_TEST_FIXED_ARRAY(fmt, printfmt)		 					\
+do 																		\
+{																		\
+	size_t count;														\
+	size_t i;															\
+	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE,					\
+		fmt, &a, &count, ARRAY_SIZE);									\
+	cargo_assert(a != NULL, "Array is null");							\
+	cargo_assert(count == ARRAY_SIZE, "Array count is invalid");		\
+	printf("Read %lu values from int array:\n", count);					\
+	for (i = 0; i < ARRAY_SIZE; i++) printf("  "#printfmt"\n", a[i]);	\
+	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);					\
+} while (0)
+
+///
+/// Simple add array tests.
+///
 _TEST_START(TEST_add_static_int_array_option)
 {
 	int a[3];
 	int a_expect[3] = { 1, -2, 3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[i]#", &a, &count, ARRAY_SIZE);
-
-	printf("Read %lu values from int array: %d, %d, %d\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY(".[i]#", "%d");
 }
 _TEST_END()
 
@@ -2219,17 +2242,8 @@ _TEST_START(TEST_add_static_uint_array_option)
 {
 	unsigned int a[3];
 	unsigned int a_expect[3] = { 1, 2, 3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[u]#", &a, &count, ARRAY_SIZE);
-
-	printf("Read %lu values from int array: %u, %u, %u\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY(".[u]#", "%u");
 }
 _TEST_END()
 
@@ -2237,17 +2251,8 @@ _TEST_START(TEST_add_static_bool_array_option)
 {
 	int a[3];
 	int a_expect[3] = { 1, 1, 1 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[b]#", &a, &count, ARRAY_SIZE);
-
-	printf("Read %lu values from int array: %d, %d, %d\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY(".[b]#", "%d");
 }
 _TEST_END()
 
@@ -2255,17 +2260,8 @@ _TEST_START(TEST_add_static_float_array_option)
 {
 	float a[3];
 	float a_expect[3] = { 0.1f, 0.2f, 0.3f };
-	size_t count;
 	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[f]#", &a, &count, ARRAY_SIZE);
-
-	printf("Read %lu values from int array: %f, %f, %f\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, ARRAY_SIZE, a, a_expect)
+	_ADD_TEST_FIXED_ARRAY(".[f]#", "%f");
 }
 _TEST_END()
 
@@ -2273,17 +2269,8 @@ _TEST_START(TEST_add_static_double_array_option)
 {
 	double a[3];
 	double a_expect[3] = { 0.1, 0.2, 0.3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[d]#", &a, &count, ARRAY_SIZE);
-
-	printf("Read %lu values from int array: %f, %f, %f\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, ARRAY_SIZE, a, a_expect)
+	_ADD_TEST_FIXED_ARRAY(".[d]#", "%f");
 }
 _TEST_END()
 
@@ -2293,6 +2280,7 @@ _TEST_START(TEST_add_static_string_array_option)
 	char a[3][LENSTR];
 	size_t count;
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
+	#undef ARRAY_SIZE
 	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
@@ -2309,24 +2297,14 @@ _TEST_START(TEST_add_static_string_array_option)
 _TEST_END()
 
 ///
-/// Alloc array tests.
+/// Alloc fixed size array tests.
 ///
 _TEST_START(TEST_add_alloc_fixed_int_array_option)
 {
 	int *a = NULL;
 	int a_expect[3] = { 1, -2, 3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-						"[i]#", &a, &count, 3);
-
-	cargo_assert(a != NULL, "Array is null");
-	cargo_assert(count == 3, "Array count is not 3");
-	printf("Read %lu values from int array: %d, %d, %d\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, 3, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY("[i]#", "%d");
 	free(a);
 }
 _TEST_END()
@@ -2335,18 +2313,8 @@ _TEST_START(TEST_add_alloc_fixed_uint_array_option)
 {
 	unsigned int *a = NULL;
 	unsigned int a_expect[3] = { 1, 2, 3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-						"[u]#", &a, &count, 3);
-
-	cargo_assert(a != NULL, "Array is null");
-	cargo_assert(count == 3, "Array count is not 3");
-	printf("Read %lu values from int array: %u, %u, %u\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, 3, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY("[u]#", "%u");
 	free(a);
 }
 _TEST_END()
@@ -2355,18 +2323,8 @@ _TEST_START(TEST_add_alloc_fixed_float_array_option)
 {
 	float *a = NULL;
 	float a_expect[3] = { 1.1f, -2.2f, 3.3f };
-	size_t count;
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-						"[f]#", &a, &count, 3);
-
-	cargo_assert(a != NULL, "Array is null");
-	cargo_assert(count == 3, "Array count is not 3");
-	printf("Read %lu values from int array: %f, %f, %f\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, 3, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY("[f]#", "%f");
 	free(a);
 }
 _TEST_END()
@@ -2375,18 +2333,8 @@ _TEST_START(TEST_add_alloc_fixed_double_array_option)
 {
 	double *a = NULL;
 	double a_expect[3] = { 1.1, -2.2, 3.3 };
-	size_t count;
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
-	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
-
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-						"[d]#", &a, &count, 3);
-
-	cargo_assert(a != NULL, "Array is null");
-	cargo_assert(count == 3, "Array count is not 3");
-	printf("Read %lu values from int array: %f, %f, %f\n",
-			count, a[0], a[1], a[2]);
-	cargo_assert_array(count, 3, a, a_expect);
+	_ADD_TEST_FIXED_ARRAY("[d]#", "%f");
 	free(a);
 }
 _TEST_END()
@@ -2414,6 +2362,9 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option)
 }
 _TEST_END()
 
+//
+// Dynamic sized alloc array tests.
+//
 
 //
 // Misc output tests.
