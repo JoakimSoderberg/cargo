@@ -2145,22 +2145,40 @@ _TEST_ADD_SIMPLE_OPTION(add_double_option, double, 0.4, "d")
 _TEST_START(add_static_string_option)
 {
 	char b[10];
+	char *args[] = { "program", "--beta", "abc" };
  	ret = cargo_add_option(cargo, "--beta -b",
 							"Description", 
-							"s#",
+							".s#",
 							&b, sizeof(b));
 	cargo_assert(ret == 0, "Failed to add valid static string option");
+
+	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
+	{
+		return "Failed to parse static char * with value \"abc\"";
+	}
+	printf("Attempt to parse value: abc\n");
+	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
 }
 _TEST_END()
 
 _TEST_START(add_alloc_string_option)
 {
 	char *b = NULL;
+	char *args[] = { "program", "--beta", "abc" };
  	ret = cargo_add_option(cargo, "--beta -b",
 							"Description", 
 							"s",
-							&b, sizeof(b));
-	cargo_assert(ret == 0, "Failed to add valid alloc string option");		
+							&b);
+	cargo_assert(ret == 0, "Failed to add valid alloc string option");
+
+	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
+	{
+		return "Failed to parse alloc char * with value \"abc\"";
+	}
+	printf("Attempt to parse value: abc\n");
+	cargo_assert(b, "pointer is null");
+	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
+	free(b);
 }
 _TEST_END()
 
