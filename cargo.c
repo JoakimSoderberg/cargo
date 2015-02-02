@@ -73,6 +73,7 @@ int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 	return r;
 }
 
+#if 0
 int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 {
 	int r;
@@ -82,6 +83,7 @@ int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 	va_end(ap);
 	return r;
 }
+#endif
 
 char *cargo_strndup(const char *s, size_t n)
 {
@@ -194,7 +196,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 {
 	switch (t)
 	{
-		default:
+		default: assert(1 == 0);
 		case CARGO_BOOL: 
 		case CARGO_INT: return sizeof(int);
 		case CARGO_UINT: return sizeof(unsigned int);
@@ -2349,6 +2351,46 @@ _TEST_START(add_alloc_fixed_uint_array_option)
 }
 _TEST_END()
 
+_TEST_START(add_alloc_fixed_float_array_option)
+{
+	float *a = NULL;
+	float a_expect[3] = { 1.1f, -2.2f, 3.3f };
+	size_t count;
+	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+						"[f]#", &a, &count, 3);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from int array: %f, %f, %f\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert_array(count, 3, a, a_expect);
+	free(a);
+}
+_TEST_END()
+
+_TEST_START(add_alloc_fixed_double_array_option)
+{
+	double *a = NULL;
+	double a_expect[3] = { 1.1, -2.2, 3.3 };
+	size_t count;
+	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+						"[d]#", &a, &count, 3);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from int array: %f, %f, %f\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert_array(count, 3, a, a_expect);
+	free(a);
+}
+_TEST_END()
+
 _TEST_START(add_alloc_fixed_string_array_option)
 {
 	#define LENSTR 5
@@ -2457,6 +2499,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_static_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_int_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_uint_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_float_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_print_usage)
 };
