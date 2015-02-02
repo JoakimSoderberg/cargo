@@ -1835,7 +1835,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	if (!(optname_list = _cargo_split(ctx, tmp, " ", &optcount))
 		|| (optcount <= 0))
 	{
-		fprintf(stderr, "Failed to split option name list: \"%s\"\n", optnames);
+		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
 		return -1;
 	}
 
@@ -2093,7 +2093,7 @@ typedef struct args_s
 //
 // Some helper macros for creating test functions.
 //
-#define _MAKE_TEST_FUNC_NAME(f) TEST_##f()
+#define _MAKE_TEST_FUNC_NAME(f) f()
 
 #define _TEST_START(testname) 							\
 static char *_MAKE_TEST_FUNC_NAME(testname)				\
@@ -2138,13 +2138,13 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 	}																		\
 	_TEST_END()
 
-_TEST_ADD_SIMPLE_OPTION(add_integer_option, int, -3, "i")
-_TEST_ADD_SIMPLE_OPTION(add_uinteger_option, unsigned int, 3, "u")
-_TEST_ADD_SIMPLE_OPTION(add_float_option, float, 0.3f, "f")
-_TEST_ADD_SIMPLE_OPTION(add_bool_option, int, 1, "b")
-_TEST_ADD_SIMPLE_OPTION(add_double_option, double, 0.4, "d")
+_TEST_ADD_SIMPLE_OPTION(TEST_add_integer_option, int, -3, "i")
+_TEST_ADD_SIMPLE_OPTION(TEST_add_uinteger_option, unsigned int, 3, "u")
+_TEST_ADD_SIMPLE_OPTION(TEST_add_float_option, float, 0.3f, "f")
+_TEST_ADD_SIMPLE_OPTION(TEST_add_bool_option, int, 1, "b")
+_TEST_ADD_SIMPLE_OPTION(TEST_add_double_option, double, 0.4, "d")
 
-_TEST_START(add_static_string_option)
+_TEST_START(TEST_add_static_string_option)
 {
 	char b[10];
 	char *args[] = { "program", "--beta", "abc" };
@@ -2163,7 +2163,7 @@ _TEST_START(add_static_string_option)
 }
 _TEST_END()
 
-_TEST_START(add_alloc_string_option)
+_TEST_START(TEST_add_alloc_string_option)
 {
 	char *b = NULL;
 	char *args[] = { "program", "--beta", "abc" };
@@ -2197,7 +2197,7 @@ _TEST_END()
 	cargo_assert(ret == 0, "Failed to parse array: "#array"["#array_size"]");\
 }
 
-_TEST_START(add_static_int_array_option)
+_TEST_START(TEST_add_static_int_array_option)
 {
 	int a[3];
 	int a_expect[3] = { 1, -2, 3 };
@@ -2215,7 +2215,7 @@ _TEST_START(add_static_int_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_static_uint_array_option)
+_TEST_START(TEST_add_static_uint_array_option)
 {
 	unsigned int a[3];
 	unsigned int a_expect[3] = { 1, 2, 3 };
@@ -2233,7 +2233,7 @@ _TEST_START(add_static_uint_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_static_bool_array_option)
+_TEST_START(TEST_add_static_bool_array_option)
 {
 	int a[3];
 	int a_expect[3] = { 1, 1, 1 };
@@ -2251,7 +2251,7 @@ _TEST_START(add_static_bool_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_static_float_array_option)
+_TEST_START(TEST_add_static_float_array_option)
 {
 	float a[3];
 	float a_expect[3] = { 0.1f, 0.2f, 0.3f };
@@ -2269,7 +2269,7 @@ _TEST_START(add_static_float_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_static_double_array_option)
+_TEST_START(TEST_add_static_double_array_option)
 {
 	double a[3];
 	double a_expect[3] = { 0.1, 0.2, 0.3 };
@@ -2287,7 +2287,7 @@ _TEST_START(add_static_double_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_static_string_array_option)
+_TEST_START(TEST_add_static_string_array_option)
 {
 	#define LENSTR 5
 	char a[3][LENSTR];
@@ -2311,7 +2311,7 @@ _TEST_END()
 ///
 /// Alloc array tests.
 ///
-_TEST_START(add_alloc_fixed_int_array_option)
+_TEST_START(TEST_add_alloc_fixed_int_array_option)
 {
 	int *a = NULL;
 	int a_expect[3] = { 1, -2, 3 };
@@ -2331,7 +2331,7 @@ _TEST_START(add_alloc_fixed_int_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_alloc_fixed_uint_array_option)
+_TEST_START(TEST_add_alloc_fixed_uint_array_option)
 {
 	unsigned int *a = NULL;
 	unsigned int a_expect[3] = { 1, 2, 3 };
@@ -2351,7 +2351,7 @@ _TEST_START(add_alloc_fixed_uint_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_alloc_fixed_float_array_option)
+_TEST_START(TEST_add_alloc_fixed_float_array_option)
 {
 	float *a = NULL;
 	float a_expect[3] = { 1.1f, -2.2f, 3.3f };
@@ -2371,7 +2371,7 @@ _TEST_START(add_alloc_fixed_float_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_alloc_fixed_double_array_option)
+_TEST_START(TEST_add_alloc_fixed_double_array_option)
 {
 	double *a = NULL;
 	double a_expect[3] = { 1.1, -2.2, 3.3 };
@@ -2391,7 +2391,7 @@ _TEST_START(add_alloc_fixed_double_array_option)
 }
 _TEST_END()
 
-_TEST_START(add_alloc_fixed_string_array_option)
+_TEST_START(TEST_add_alloc_fixed_string_array_option)
 {
 	#define LENSTR 5
 	char **a = NULL;
@@ -2418,7 +2418,7 @@ _TEST_END()
 //
 // Misc output tests.
 //
-_TEST_START(print_usage)
+_TEST_START(TEST_print_usage)
 {
 	int a;
 	float b;
