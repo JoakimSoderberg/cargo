@@ -461,8 +461,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 		case CARGO_UINT:
 			CARGODBG(2, "      uint %s\n", val);
-			((unsigned int *)opt->target)[opt->target_idx]
-													= strtoul(val, NULL, 10); 
+			((unsigned int *)target)[opt->target_idx] = strtoul(val, NULL, 10);
 			break;
 		case CARGO_FLOAT:
 			CARGODBG(2, "      float %s\n", val);
