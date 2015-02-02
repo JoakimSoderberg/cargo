@@ -480,7 +480,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				{
 					char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
 					CARGODBG(2, "          COPY FULL STRING\n");
-					//if (!(((char **)target)[opt->target_idx] = strdup(val)))
+
 					if (!(*t = strdup(val)))
 					{
 						return -1;
@@ -2205,7 +2205,7 @@ _TEST_START(add_static_int_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[i]#", &a, &count, ARRAY_SIZE);
+						".[i]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %d, %d, %d\n",
 			count, a[0], a[1], a[2]);
@@ -2223,7 +2223,7 @@ _TEST_START(add_static_uint_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[u]#", &a, &count, ARRAY_SIZE);
+						".[u]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %u, %u, %u\n",
 			count, a[0], a[1], a[2]);
@@ -2241,7 +2241,7 @@ _TEST_START(add_static_bool_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[b]#", &a, &count, ARRAY_SIZE);
+						".[b]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %d, %d, %d\n",
 			count, a[0], a[1], a[2]);
@@ -2259,7 +2259,7 @@ _TEST_START(add_static_float_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[f]#", &a, &count, ARRAY_SIZE);
+						".[f]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %f, %f, %f\n",
 			count, a[0], a[1], a[2]);
@@ -2277,7 +2277,7 @@ _TEST_START(add_static_double_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[d]#", &a, &count, ARRAY_SIZE);
+						".[d]#", &a, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %f, %f, %f\n",
 			count, a[0], a[1], a[2]);
@@ -2295,7 +2295,7 @@ _TEST_START(add_static_string_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-							".[s#]#", &a, LENSTR, &count, ARRAY_SIZE);
+						".[s#]#", &a, LENSTR, &count, ARRAY_SIZE);
 
 	printf("Read %lu values from int array: %s, %s, %s\n",
 			count, a[0], a[1], a[2]);
@@ -2312,16 +2312,37 @@ _TEST_END()
 _TEST_START(add_alloc_fixed_int_array_option)
 {
 	int *a = NULL;
-	int a_expect[3] = { 1, 2, 3 };
+	int a_expect[3] = { 1, -2, 3 };
+	size_t count;
+	char *args[] = { "program", "--beta", "1", "-2", "3" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+						"[i]#", &a, &count, 3);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from int array: %d, %d, %d\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert_array(count, 3, a, a_expect);
+	free(a);
+}
+_TEST_END()
+
+_TEST_START(add_alloc_fixed_uint_array_option)
+{
+	unsigned int *a = NULL;
+	unsigned int a_expect[3] = { 1, 2, 3 };
 	size_t count;
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-							"[i]#", &a, &count, 3);
+						"[u]#", &a, &count, 3);
 
 	cargo_assert(a != NULL, "Array is null");
-	printf("Read %lu values from int array: %d, %d, %d\n",
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from int array: %u, %u, %u\n",
 			count, a[0], a[1], a[2]);
 	cargo_assert_array(count, 3, a, a_expect);
 	free(a);
@@ -2337,9 +2358,10 @@ _TEST_START(add_alloc_fixed_string_array_option)
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
 	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
-							"[s#]#", &a, LENSTR, &count, 3);
+						"[s#]#", &a, LENSTR, &count, 3);
 
 	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
 	printf("Read %lu values from int array: %s, %s, %s\n",
 			count, a[0], a[1], a[2]);
 	cargo_assert(count == 3, "Array count is not 3 as expected");
@@ -2349,6 +2371,7 @@ _TEST_START(add_alloc_fixed_string_array_option)
 	_cargo_free_str_list(&a, count);
 }
 _TEST_END()
+
 
 //
 // Misc output tests.
@@ -2433,6 +2456,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_static_double_array_option),
 	CARGO_ADD_TEST(TEST_add_static_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_int_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_uint_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_print_usage)
 };
