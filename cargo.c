@@ -2280,16 +2280,15 @@ _TEST_START(TEST_add_static_string_array_option)
 	char a[3][LENSTR];
 	size_t count;
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
-	#undef ARRAY_SIZE
-	#define ARRAY_SIZE (sizeof(a) / sizeof(a[0]))
+	#define ARRAY2_SIZE (sizeof(a) / sizeof(a[0]))
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
-	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE, 
-						".[s#]#", &a, LENSTR, &count, ARRAY_SIZE);
+	_TEST_ARRAY_OPTION(a, ARRAY2_SIZE, args, ARG_SIZE, 
+						".[s#]#", &a, LENSTR, &count, ARRAY2_SIZE);
 
 	printf("Read %lu values from int array: %s, %s, %s\n",
 			count, a[0], a[1], a[2]);
-	cargo_assert(count == ARRAY_SIZE, "Array count is not 3 as expected");
+	cargo_assert(count == ARRAY2_SIZE, "Array count is not 3 as expected");
 	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
 	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
@@ -2365,6 +2364,15 @@ _TEST_END()
 //
 // Dynamic sized alloc array tests.
 //
+_TEST_START(TEST_add_alloc_dynamic_int_array_option)
+{
+	int *a = NULL;
+	int a_expect[3] = { 1, -2, 3 };
+	char *args[] = { "program", "--beta", "1", "-2", "3" };
+	_ADD_TEST_FIXED_ARRAY("[i]+", "%d");
+	free(a);
+}
+_TEST_END()
 
 //
 // Misc output tests.
@@ -2453,6 +2461,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_float_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_print_usage)
 };
 
