@@ -2070,9 +2070,18 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 #define ANSI_COLOR_RESET			"\x1b[0m"
 #endif
 
-#define cargo_assert(test, message) do { if (!(test)) return message; } while (0)
+#define cargo_assert(test, message) \
+do 									\
+{									\
+	if (!(test))					\
+	{								\
+		msg = message;				\
+		goto fail;					\
+	}								\
+} while (0)
 
 #define cargo_assert_array(count, expected_count, array, array_expected)	\
+do 																			\
 {																			\
 	size_t k;																\
 	cargo_assert(count == expected_count, 									\
@@ -2082,9 +2091,10 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 		cargo_assert(array[k] == array_expected[k],							\
 			"Array contains unexpected value");								\
 	}																		\
-}
+} while (0)
 
 #define cargo_assert_str_array(count, expected_count, array, array_expected)\
+do 																			\
 {																			\
 	size_t k;																\
 	cargo_assert(count == expected_count, 									\
@@ -2094,7 +2104,7 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 		cargo_assert(!strcmp((char *)array[k], (char *)array_expected[k]),	\
 			"Array contains unexpected value");								\
 	}																		\
-}
+} while (0)
 
 typedef struct args_s
 {
@@ -2111,6 +2121,7 @@ typedef struct args_s
 #define _TEST_START(testname) 							\
 static char *_MAKE_TEST_FUNC_NAME(testname)				\
 {														\
+	char *msg = NULL;									\
 	int ret = 0;										\
 	cargo_t cargo;										\
 														\
@@ -2119,9 +2130,12 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 		return "Failed to init cargo";					\
 	}
 
+#define _TEST_CLEANUP()		\
+	fail: (void)0
+
 #define _TEST_END()			\
 	cargo_destroy(&cargo); 	\
-	return NULL;			\
+	return msg;				\
 }
 
 // =================================================================
@@ -2148,6 +2162,7 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 		}																	\
 		printf("Attempt to parse value: "#value"\n");						\
 		cargo_assert(a == value, "Failed to parse correct value "#value);	\
+		_TEST_CLEANUP();													\
 	}																		\
 	_TEST_END()
 
@@ -2173,6 +2188,7 @@ _TEST_START(TEST_add_static_string_option)
 	}
 	printf("Attempt to parse value: abc\n");
 	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2193,6 +2209,8 @@ _TEST_START(TEST_add_alloc_string_option)
 	printf("Attempt to parse value: abc\n");
 	cargo_assert(b, "pointer is null");
 	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
+
+	_TEST_CLEANUP();
 	free(b);
 }
 _TEST_END()
@@ -2235,6 +2253,7 @@ _TEST_START(TEST_add_static_int_array_option)
 	int a_expect[3] = { 1, -2, 3 };
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
 	_ADD_TEST_FIXED_ARRAY(".[i]#", "%d");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2244,6 +2263,7 @@ _TEST_START(TEST_add_static_uint_array_option)
 	unsigned int a_expect[3] = { 1, 2, 3 };
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	_ADD_TEST_FIXED_ARRAY(".[u]#", "%u");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2253,6 +2273,7 @@ _TEST_START(TEST_add_static_bool_array_option)
 	int a_expect[3] = { 1, 1, 1 };
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	_ADD_TEST_FIXED_ARRAY(".[b]#", "%d");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2262,6 +2283,7 @@ _TEST_START(TEST_add_static_float_array_option)
 	float a_expect[3] = { 0.1f, 0.2f, 0.3f };
 	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
 	_ADD_TEST_FIXED_ARRAY(".[f]#", "%f");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2271,6 +2293,7 @@ _TEST_START(TEST_add_static_double_array_option)
 	double a_expect[3] = { 0.1, 0.2, 0.3 };
 	char *args[] = { "program", "--beta", "0.1", "0.2", "0.3" };
 	_ADD_TEST_FIXED_ARRAY(".[d]#", "%f");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2292,6 +2315,7 @@ _TEST_START(TEST_add_static_string_array_option)
 	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
 	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2304,6 +2328,7 @@ _TEST_START(TEST_add_alloc_fixed_int_array_option)
 	int a_expect[3] = { 1, -2, 3 };
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[i]#", "%d");
+	_TEST_CLEANUP();
 	free(a);
 }
 _TEST_END()
@@ -2314,6 +2339,7 @@ _TEST_START(TEST_add_alloc_fixed_uint_array_option)
 	unsigned int a_expect[3] = { 1, 2, 3 };
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[u]#", "%u");
+	_TEST_CLEANUP();
 	free(a);
 }
 _TEST_END()
@@ -2324,6 +2350,7 @@ _TEST_START(TEST_add_alloc_fixed_float_array_option)
 	float a_expect[3] = { 1.1f, -2.2f, 3.3f };
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
 	_ADD_TEST_FIXED_ARRAY("[f]#", "%f");
+	_TEST_CLEANUP();
 	free(a);
 }
 _TEST_END()
@@ -2334,6 +2361,7 @@ _TEST_START(TEST_add_alloc_fixed_double_array_option)
 	double a_expect[3] = { 1.1, -2.2, 3.3 };
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
 	_ADD_TEST_FIXED_ARRAY("[d]#", "%f");
+	_TEST_CLEANUP();
 	free(a);
 }
 _TEST_END()
@@ -2357,6 +2385,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option)
 	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
 	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+	_TEST_CLEANUP();
 	_cargo_free_str_list(&a, count);
 }
 _TEST_END()
@@ -2370,6 +2399,7 @@ _TEST_START(TEST_add_alloc_dynamic_int_array_option)
 	int a_expect[3] = { 1, -2, 3 };
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[i]+", "%d");
+	_TEST_CLEANUP();
 	free(a);
 }
 _TEST_END()
@@ -2382,7 +2412,6 @@ _TEST_START(TEST_print_usage)
 	int a;
 	float b;
 	double c;
-	int d;
 	char *s;
 
  	ret |= cargo_add_option(cargo, "--alpha -a",
@@ -2422,6 +2451,7 @@ _TEST_START(TEST_print_usage)
 	cargo_set_epilog(cargo, "That's it!");
 
 	cargo_print_usage(cargo);
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -2439,6 +2469,7 @@ _TEST_START(TEST_misspelled_argument)
 
 	ret = cargo_parse(cargo, 1, 3, args);
 	cargo_assert(ret == -1, "Got valid parse with invalid input");
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
