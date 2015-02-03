@@ -2486,7 +2486,7 @@ static int _test_find_test_index(const char *name)
 int main(int argc, char **argv)
 {
 	size_t i;
-	int ret = 0;
+	int was_error = 0;
 	int testnum = 0;
 	char *res = NULL;
 	int tests_to_run[CARGO_NUM_TESTS];
@@ -2584,7 +2584,7 @@ int main(int argc, char **argv)
 		{
 			fprintf(stderr, "[%sFAIL%s] %s\n",
 				ANSI_COLOR_RED, ANSI_COLOR_RESET, t->error);
-			ret = -1;
+			was_error++;
 		}
 		else
 		{
@@ -2623,7 +2623,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (res)
+	if (was_error)
 	{
 		fprintf(stderr, "\n[[%sFAIL%s]] ", ANSI_COLOR_RED, ANSI_COLOR_RESET);
 	}
