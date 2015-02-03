@@ -1081,11 +1081,6 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 		name_padding,
 		ctx->usage.max_width - 2 - max_name_len - (2 * name_padding));
 
-	if (!opt_description)
-	{
-		ret = -1; goto fail;
-	}
-
 	if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
 	{
 		ret = -1; goto fail;
@@ -1117,7 +1112,11 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 	}
 
 fail:
-	free(opt_description);
+	if (opt_description)
+	{
+		free(opt_description);
+	}
+
 	_cargo_free_str_list(&desc_lines, line_count);
 
 	return ret;
