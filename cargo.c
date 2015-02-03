@@ -2410,7 +2410,7 @@ _TEST_START(TEST_print_usage)
 			"d",
 			&c);
 
- 	ret |= cargo_add_option(cargo, "--call_this_a_long_option_that_wont_fit -c",
+ 	ret |= cargo_add_option(cargo, "--shorter -s",
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
 			"accusantium doloremque laudantium, totam rem aperiam, eaque ipsa "
 			"quae ab illo inventore veritatis et quasi architecto beatae vitae "
@@ -2422,6 +2422,23 @@ _TEST_START(TEST_print_usage)
 	cargo_set_epilog(cargo, "That's it!");
 
 	cargo_print_usage(cargo);
+}
+_TEST_END()
+
+_TEST_START(TEST_misspelled_argument)
+{
+	int ret = 0;
+	int i;
+	float f;
+	int b;
+	char *args[] = { "program", "--bota", "0.1" };
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
+	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
+
+	ret = cargo_parse(cargo, 1, 3, args);
+	cargo_assert(ret == -1, "Got valid parse with invalid input");
 }
 _TEST_END()
 
@@ -2462,7 +2479,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
-	CARGO_ADD_TEST(TEST_print_usage)
+	CARGO_ADD_TEST(TEST_print_usage),
+	CARGO_ADD_TEST(TEST_misspelled_argument)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
