@@ -1,4 +1,8 @@
 env:
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "fX7x2AA1BEBmT1scgpE7oGZYpUjvwfLsYSSNV22t1OdswUPQPwyRxeVG9Fk0DfpPRR8AotF6yY+kAxzY81BNlqo7gEAf+0keiwe5I9ek3lyAZBh2sWmue6pyAhrBFZI6Z6oDbz0mud/q0IPzh9ILMQIejz2p/C/VIKh6/FhAeII="
   matrix:
    - CARGO_METHOD=memcheck
    - CARGO_METHOD=coveralls
@@ -8,3 +12,12 @@ install: sudo apt-get -qq -y update && sudo apt-get install valgrind
 script:
   - mkdir build && cd build && cmake -DCARGO_DEBUG=4 $CMAKE_ARGS .. && make && ctest --output-on-failure
   - if [ "$CARGO_METHOD" == "coveralls" ]; then cmake -DCARGO_DEBUG=0 .. && make && make coveralls; fi
+
+addons:
+  coverity_scan:
+    project:
+      name: "JoakimSoderberg/cargo"
+    notification_email: joakim.soderberg@gmail.com
+    build_command_prepend: "cmake .."
+    build_command:   "make"
+    branch_pattern: coverity_scan
