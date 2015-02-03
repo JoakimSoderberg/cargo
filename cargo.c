@@ -1053,6 +1053,76 @@ const char *_cargo_find_closest_opt(cargo_t ctx, const char *unknown)
 	return (min_dist <= 1) ? ctx->options[maxi].name[maxj] : NULL;
 }
 
+static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
+				size_t i, int name_padding, int option_causes_newline, int max_name_len)
+{
+	size_t j;
+	int ret = 0;
+	assert(str);
+	assert(ctx);
+
+	char **desc_lines = NULL;
+	size_t line_count = 0;
+
+	int padding = 0;
+	char *opt_description = _cargo_linebreak(ctx,
+		ctx->options[i].description,
+		ctx->usage.max_width - 2
+		- max_name_len - (2 * name_padding));
+
+	if (!opt_description)
+	{
+		ret = -1; goto fail;
+	}
+
+	CARGODBG(3, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
+	CARGODBG(3, "%lu - 2 - %d - (2 * %d) = %lu\n",
+		ctx->usage.max_width, max_name_len,
+		name_padding,
+		ctx->usage.max_width - 2 - max_name_len - (2 * name_padding));
+
+	if (!opt_description)
+	{
+		ret = -1; goto fail;
+	}
+
+	if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
+	{
+		ret = -1; goto fail;
+	}
+
+	for (j = 0; j < line_count; j++)
+	{
+		if ((j == 0) && !option_causes_newline)
+		{
+			// --theoption  Description <- First line of description.
+			padding = 0;
+		}
+		else
+		{
+			// --theoption  Description
+			//              continues here <- Now we want pre-padding.
+			// ---------------------------------------------------------
+			// --reallyreallyreallyreallylongoption
+			//              Description    <- First line but pad anyway.
+			//              continues here 
+			padding = max_name_len + name_padding;
+		}
+
+		if (cargo_appendf(str, "  %*s%s\n",
+			padding, "", desc_lines[j]) < 0)
+		{
+			ret = -1; goto fail;
+		}
+	}
+
+fail:
+	free(opt_description);
+	_cargo_free_str_list(&desc_lines, line_count);
+
+	return ret;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -1420,7 +1490,6 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 {
 	int ret = 0;
 	size_t i;
-	size_t j;
 	char *b;
 	char **namebufs = NULL;
 	int usagelen = 0;
@@ -1495,6 +1564,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 
 		*buf_size = usagelen;
+		ret = -2; goto fail;
 	}
 	else
 	{
@@ -1552,62 +1622,12 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 		else
 		{
-			// TODO: Break out into separate function.
 			// Add line breaks to fit the width we want.
-			char **desc_lines = NULL;
-			size_t line_count = 0;
-
-			int padding = 0;
-			char *opt_description = _cargo_linebreak(ctx,
-										ctx->options[i].description,
-										ctx->usage.max_width - 2
-										- max_name_len - (2 * NAME_PADDING));
-
-			CARGODBG(3, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
-			CARGODBG(3, "%lu - 2 - %d - (2 * %d) = %lu\n",
-					ctx->usage.max_width, max_name_len,
-					NAME_PADDING, 
-					ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING));
-
-			if (!opt_description)
+			if (_cargo_fit_optnames_and_description(ctx, &str, i,
+					NAME_PADDING, option_causes_newline, max_name_len))
 			{
 				ret = -1; goto fail;
 			}
-
-			if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
-			{
-				ret = -1; goto fail;
-			}
-
-			for (j = 0; j < line_count; j++)
-			{
-				if ((j == 0) && !option_causes_newline)
-				{
-					// --theoption  Description <- First line of description.
-					padding = 0;
-				}
-				else
-				{
-					// --theoption  Description
-					//              continues here <- Now we want pre-padding.
-					// ---------------------------------------------------------
-					// --reallyreallyreallyreallylongoption
-					//              Description    <- First line but pad anyway.
-					//              continues here 
-					padding = max_name_len + NAME_PADDING;
-				}
-
-				if (cargo_appendf(&str, "  %*s%s\n",
-					padding, "", desc_lines[j]) < 0)
-				{
-					free(opt_description);
-					_cargo_free_str_list(&desc_lines, line_count);
-					ret = -1; goto fail;
-				}
-			}
-
-			free(opt_description);
-			_cargo_free_str_list(&desc_lines, line_count);
 		}
 	}
 
@@ -1816,8 +1836,8 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	cargo_type_t type;
 	void *target = NULL;
 	size_t *target_count = NULL;
-	int ret;
-	char *tmp;
+	int ret = 0;
+	char *tmp = NULL;
 	size_t lenstr = 0;
 	int nargs;
 	size_t i;
@@ -1836,7 +1856,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		|| (optcount <= 0))
 	{
 		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
-		return -1;
+		ret = -1; goto fail;
 	}
 
 	CARGODBG(3, "Got %lu option names:\n", optcount);
@@ -1846,8 +1866,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		CARGODBG(3, " %s\n", optname_list[i]);
 	}
 	#endif
-
-	free(tmp);
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, optname_list[0], fmt);
@@ -2000,6 +2018,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	}
 
 fail:
+	if (tmp)
+	{
+		free(tmp);
+	}
+
 	if (optname_list)
 	{
 		_cargo_free_str_list(&optname_list, optcount);
@@ -2158,7 +2181,8 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 		cargo_assert(ret == 0, "Failed to add valid "#type" option");		\
 		if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))	\
 		{																	\
-			return "Failed to parse "#type" with value \""#value"\"";		\
+			msg = "Failed to parse "#type" with value \""#value"\"";		\
+			goto fail;														\
 		}																	\
 		printf("Attempt to parse value: "#value"\n");						\
 		cargo_assert(a == value, "Failed to parse correct value "#value);	\
@@ -2184,7 +2208,8 @@ _TEST_START(TEST_add_static_string_option)
 
 	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
 	{
-		return "Failed to parse static char * with value \"abc\"";
+		msg = "Failed to parse static char * with value \"abc\"";
+		goto fail;
 	}
 	printf("Attempt to parse value: abc\n");
 	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
@@ -2204,7 +2229,8 @@ _TEST_START(TEST_add_alloc_string_option)
 
 	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
 	{
-		return "Failed to parse alloc char * with value \"abc\"";
+		msg = "Failed to parse alloc char * with value \"abc\"";
+		goto fail;
 	}
 	printf("Attempt to parse value: abc\n");
 	cargo_assert(b, "pointer is null");
