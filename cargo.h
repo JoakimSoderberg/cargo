@@ -52,48 +52,6 @@ void cargo_set_epilog(cargo_t ctx, const char *epilog);
 
 void cargo_add_help(cargo_t ctx, int add_help);
 
-int cargo_add(cargo_t ctx,
-				const char *opt,
-				void *target,
-				cargo_type_t type,
-				const char *description);
-
-int cargo_add_str(cargo_t ctx,
-				const char *opt,
-				void *target,
-				size_t lenstr,
-				const char *description);
-
-int cargo_add_alloc(cargo_t ctx,
-				const char *opt,
-				void **target,
-				cargo_type_t type,
-				const char *description);
-
-int cargo_addv(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description);
-
-int cargo_addv_str(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				size_t lenstr,
-				int nargs,
-				const char *description);
-
-int cargo_addv_alloc(cargo_t ctx, 
-				const char *opt,
-				void **target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description);
-
 #define CARGO_FLAG_VALIDATE_ONLY (1 << 0)
 
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 

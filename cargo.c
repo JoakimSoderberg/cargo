@@ -923,7 +923,8 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 
 	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
-		if (cargo_add(ctx, "--help", &ctx->help, CARGO_BOOL, "Show this help."))
+		if (_cargo_add(ctx, "--help", (void **)&ctx->help,
+			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0))
 		{
 			return;
 		}
@@ -1215,78 +1216,6 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 {
 	assert(ctx);
 	ctx->format = format;
-}
-
-int cargo_add(cargo_t ctx,
-				const char *opt,
-				void *target,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, (void **)target, NULL, 0, (type != CARGO_BOOL),
-						type, description, 0);
-}
-
-int cargo_add_str(cargo_t ctx,
-				const char *opt,
-				void *target,
-				size_t lenstr,
-				const char *description)
-{
-	return _cargo_add(ctx, opt, target, NULL, lenstr, 1,
-						CARGO_STRING, description, 0);
-}
-
-int cargo_add_alloc(cargo_t ctx,
-				const char *opt,
-				void **target,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, NULL, 0, (type != CARGO_BOOL),
-						type, description, 1);
-}
-
-
-int cargo_addv(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, (void **)target, target_count, 0,
-						nargs, type, description, 0);
-}
-
-int cargo_addv_str(cargo_t ctx, 
-				const char *opt,
-				void *target,
-				size_t *target_count,
-				size_t lenstr,
-				int nargs,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, (void **)target, target_count, lenstr,
-						nargs, CARGO_STRING, description, 0);
-}	
-
-int cargo_addv_alloc(cargo_t ctx, 
-				const char *opt,
-				void **target,
-				size_t *target_count,
-				int nargs,
-				cargo_type_t type,
-				const char *description)
-{
-	assert(ctx);
-	return _cargo_add(ctx, opt, target, target_count, 0,
-						nargs, type, description, 1);
 }
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
@@ -2709,39 +2638,7 @@ int main(int argc, char **argv)
 
 typedef struct args_s
 {
-	int hello;
-	int geese;
-	int ducks[2];
-	size_t duck_count;
-
-	float arne;
-	double weise;
-	char *awesome;
-
-	char *poems[20];
-	size_t poem_count;
-
-	char **tut;
-	size_t tut_count;
-
-	char **blurp;
-	size_t blurp_count;
-
-	char tjo[10];
-
-	char nja[3][10];
-	size_t nja_count;
-
-	char party[10];
-
-	char *bored;
-	char fun[30];
-
-	float yes;
-
-	char **crazy;//[10];
-	size_t crazy_count;
-	//char crazy[5][10];
+	int a;
 } args_t;
 
 int main(int argc, char **argv)
@@ -2755,163 +2652,12 @@ int main(int argc, char **argv)
 
 	cargo_init(&cargo, 32, argv[0], "The parser");
 
-	ret = cargo_add(cargo, "--hello", &args.hello, CARGO_BOOL,
-				"Should we be greeted with a hello message?");
+	// TODO: Make a real example.
 
-	ret = cargo_add_str(cargo, "--tjo", args.tjo,
-				sizeof(args.tjo) / sizeof(args.tjo[0]),
-				"Tjo the string?");
-
-	ret = cargo_addv_str(cargo, "--nja", args.nja,
-				&args.nja_count, 10, 3,
-				"Nja string list");
-
-	args.geese = 3;
-	ret = cargo_add(cargo, "--geese", &args.geese, CARGO_INT,
-				"How man geese live on the farm");
-
-	args.ducks[0] = 6;
-	args.ducks[1] = 4;
-	args.duck_count = sizeof(args.ducks) / sizeof(args.ducks[0]);
-	ret |= cargo_addv(cargo, "--ducks", (void **)&args.ducks, &args.duck_count,
-				 2, CARGO_INT, "How man ducks live on the farm");
-
-	args.arne = 4.4f;
-	ret |= cargo_add(cargo, "--arne", &args.arne, CARGO_FLOAT,
-				"Arne");
-	cargo_add_alias(cargo, "--arne", "-a");
-
-	args.poem_count = 0;
-	ret |= cargo_addv(cargo, "--poemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoemspoems",
-				args.poems, &args.poem_count, 3,
-				CARGO_STRING,
-				"The poems. A very very long\ndescription for an option, "
-				"this couldn't possibly fit just one line, let's see if "
-				"we get any more? Let's try even more crap here! Awesomely "
-				"long sentences going on forever, so much crap in this text "
-				"that it's hard to read");
-
-	ret |= cargo_addv_alloc(cargo, "--tut", (void **)&args.tut, &args.tut_count, 
-							5, CARGO_STRING, "Tutiness");
-
-	args.blurp_count = 5;
-	ret |= cargo_addv_alloc(cargo, "--blurp", (void **)&args.blurp, &args.blurp_count, 
-							CARGO_NARGS_ONE_OR_MORE, CARGO_STRING, "Blurp");
-/*
-	ret |= cargo_add_option(cargo, "--party -p",
-							"Party string", 
-							"s#",
-							&args.party,
-							sizeof(args.party) / sizeof(args.party[0]));
-*/
-	ret |= cargo_add_option(cargo, "--bored -b",
-							"Bored string", 
-							"s",
-							&args.bored);
-
-	ret |= cargo_add_option(cargo, "--fun -f",
-							"Fun string", 
-							".s#",
-							&args.fun,
-							30);
-
-	ret |= cargo_add_option(cargo, "--yes -y",
-							"Yes float", 
-							"f",
-							&args.yes);
-/*
-*/
-	/*ret |= cargo_add_option(cargo, "--crazy -c",
-							"Crazy strings", 
-							"[s]+",
-							&args.crazy,
-							//3,
-							&args.crazy_count);*/
-	ret |= cargo_add_option(cargo, "--crazy -c",
-							"Crazy strings", 
-							"[s#]#",
-							&args.crazy,
-							10,
-							&args.crazy_count,
-							5);
-
-	if (ret != 0)
-	{
-		fprintf(stderr, "Failed to add argument\n");
-		ret = -1; goto fail;
-	}
-
-	if ((ret = cargo_parse(cargo, 1, argc, argv)))
-	{
-		if (ret < 0)
-		{
-			fprintf(stderr, "Error parsing!\n");
-			ret = -1; goto fail;
-		}
-
-		ret = 0; goto done;
-	}
-
-	printf("Arne %f\n", args.arne);
-
-	printf("Poems:\n");
-	for (i = 0; i < args.poem_count; i++)
-	{
-		printf("  %s\n", args.poems[i]);
-	}
-
-	printf("Tut %lu:\n", args.tut_count);
-	for (i = 0; i < args.tut_count; i++)
-	{
-		printf("  %s\n", args.tut[i]);
-	}
-
-	printf("Blurp %lu:\n", args.blurp_count);
-	for (i = 0; i < args.blurp_count; i++)
-	{
-		printf("  %s\n", args.blurp[i]);
-	}
-
-	if (args.hello)
-	{
-		printf("Hello! %d geese lives on the farm\n", args.geese);
-		printf("Also %d + %d = %d ducks. Read %lu duck args\n", 
-			args.ducks[0], args.ducks[1], args.ducks[0] + args.ducks[1],
-			args.duck_count);
-	}
-/*
-	printf("Tjo: %s\n", args.tjo);*/
-	printf("Bored: \"%s\"\n", args.bored);
-	printf("Fun: \"%s\"\n", args.fun);
-	printf("Yes: %f\n", args.yes);
-
-	printf("Crazy count: %lu\n", args.crazy_count);
-	for (i = 0; i < args.crazy_count; i++)
-	{
-		printf("Crazy %lu: %s\n", i, args.crazy[i]);
-	}
-
-	extra_args = cargo_get_args(cargo, &extra_count);
-	printf("\nExtra arguments:\n");
-
-	if (extra_count > 0)
-	{
-		for (i = 0; i < extra_count; i++)
-		{
-			printf("%s\n", extra_args[i]);
-		}
-	}
-	else
-	{
-		printf("  [None]\n");
-	}
 	cargo_print_usage(cargo);
 done:
 fail:
 	cargo_destroy(&cargo);
-	if (args.tut)
-		free(args.tut);
-
 	return ret;
 }
 
