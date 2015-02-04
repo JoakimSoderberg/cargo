@@ -249,7 +249,10 @@ static int _cargo_add(cargo_t ctx,
 	char *optcpy = NULL;
 
 	if (!_cargo_nargs_is_valid(nargs))
+	{
+		CARGODBG(1, "nargs is invalid\n");
 		return -1;
+	}
 
 	if (!opt)
 	{
@@ -309,37 +312,16 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
-	CARGODBG(2, "%s: lenstr = %lu, nargs = %d\n", opt, lenstr, nargs);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
 	if (nargs >= 0)
 	{
-		CARGODBG(2, "%s: max_target_count = nargs = %d\n", opt, nargs);
 		o->max_target_count = nargs;
-	}
-	else if (target_count)
-	{
-		// But when allocating the space internally
-		// and nargs is set to CARGO_NARGS_ONE_OR_MORE the max allowed
-		// value is specified by the value in "target_count", or if that 
-		// is 0 the size_t max value is used.
-		if (*target_count == 0)
-		{
-			o->max_target_count = (size_t)-1;
-			CARGODBG(2, "%s: max_target_count = %lu\n",
-					opt, o->max_target_count);
-		}
-		else
-		{
-			o->max_target_count = (*target_count);
-			CARGODBG(2, "%s: max_target_count = target_count = %lu\n",
-					opt, o->max_target_count);
-		}
 	}
 	else
 	{
-		o->max_target_count = 0;
+		o->max_target_count = (size_t)-1;
 	}
 
 	o->alloc = alloc;
@@ -357,6 +339,8 @@ static int _cargo_add(cargo_t ctx,
 	CARGODBG(2, " cargo_add %s:\n", opt);
 	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
 	CARGODBG(2, "   alloc = %d\n", o->alloc);
+	CARGODBG(2, "   lenstr = %lu\n", lenstr);
+	CARGODBG(2, "   nargs = %d\n", nargs);
 	CARGODBG(2, "   \n"); 
 
 	return 0;
