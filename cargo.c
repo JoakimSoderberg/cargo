@@ -527,6 +527,12 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 	return 0;
 }
 
+static int _cargo_zero_args_allowed(cargo_opt_t *opt)
+{
+	return (opt->nargs == CARGO_NARGS_NONE_OR_MORE)
+		|| (opt->type == CARGO_BOOL);
+}
+
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
@@ -570,9 +576,10 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		CARGODBG(3, "  Looking for %d args\n", args_to_look_for);
 
 		// Look for arguments for this option.
-		if ((start + args_to_look_for) > argc)
+		if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
 		{
-			int expected = (opt->nargs!=CARGO_NARGS_ONE_OR_MORE) ? opt->nargs:1;
+			// TODO: Don't print this to stderr.
+			int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
 			fprintf(stderr, "Not enough arguments for %s."
 							" %d expected but got only %d\n", 
 							name, expected, argc - start);
@@ -590,7 +597,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 			if (_cargo_is_another_option(ctx, argv[j]))
 			{
-				if ((j == ctx->i) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
+				if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
 				{
 					fprintf(stderr, "No argument specified for %s. "
 									"%d expected.\n",
@@ -617,7 +624,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 				break;
 		}
 
-		opt_arg_count = j - start;
+		opt_arg_count = (j - start);
 	}
 
 	return opt_arg_count;
@@ -2053,6 +2060,7 @@ typedef struct args_s
 //
 #define _MAKE_TEST_FUNC_NAME(f) f()
 
+// Start a test. Initializes the lib.
 #define _TEST_START(testname) 							\
 static char *_MAKE_TEST_FUNC_NAME(testname)				\
 {														\
@@ -2065,6 +2073,12 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 		return "Failed to init cargo";					\
 	}
 
+// Cleanup point, must be placed at the end of the test
+//
+// scope _TEST_START(name) { ... _TEST_CLEANUP(); free(something) } _TEST_END()
+//
+// cargo_assert jumps to this point on failure. Any cleanup should be
+// placed after this call.
 #define _TEST_CLEANUP()		\
 	fail: (void)0
 
@@ -2077,6 +2091,25 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 // Test functions.
 // =================================================================
 
+_TEST_START(TEST_no_args_bool_option)
+{
+	int a;
+	char *args[] = { "program", "--alpha" };
+	int argc = sizeof(args) / sizeof(args[0]);
+
+	ret = cargo_add_option(cargo, "--alpha", "Description", "b", &a);
+	cargo_assert(ret == 0, "Failed to add valid bool option");
+
+	if (cargo_parse(cargo, 1, argc, args))
+	{
+		msg = "Failed to parse bool with no argument";
+	}
+
+	cargo_assert(a == 1, "Failed to parse bool with no argument to 1");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 //
 // Simple add option tests.
@@ -2429,6 +2462,7 @@ typedef struct cargo_test_s
 
 cargo_test_t tests[] =
 {
+	CARGO_ADD_TEST(TEST_no_args_bool_option),
 	CARGO_ADD_TEST(TEST_add_integer_option),
 	CARGO_ADD_TEST(TEST_add_uinteger_option),
 	CARGO_ADD_TEST(TEST_add_float_option),
