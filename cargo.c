@@ -208,7 +208,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 
 static int _cargo_nargs_is_valid(int nargs)
 {
-	return (nargs >= 0) 
+	return (nargs > 0) 
 		|| (nargs == CARGO_NARGS_NONE_OR_MORE)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
 }
@@ -396,7 +396,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			void **new_target;
 			int alloc_count = opt->nargs; 
 
-			if (opt->nargs <= 0)
+			if (opt->nargs < 0)
 			{
 				// In this case we don't want to preallocate everything
 				// since we might have "unlimited" arguments.
@@ -536,98 +536,82 @@ static int _cargo_zero_args_allowed(cargo_opt_t *opt)
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
-	int start = ctx->i + 1;
-	int opt_arg_count = 0;
-
-	if (opt->nargs == 0)
+	int ret;
+	int j;
+	int args_to_look_for;
+	int start = (ctx->i + 1);
+	
+	// Keep looking until the end of the argument list.
+	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
+		(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
 	{
-		CARGODBG(2, "%s", "    No arguments\n");
+		args_to_look_for = (argc - start);
 
-		// Got no arguments, simply set the value to 1.
-		if (_cargo_set_target_value(ctx, opt, name, argv[ctx->i]) < 0)
+		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) 
+			&& (args_to_look_for == 0))
 		{
-			return -1;
+			args_to_look_for = 1;
 		}
 	}
 	else
 	{
-		int ret;
-		int j;
-		int args_to_look_for;
+		// Read (number of expected arguments) - (read so far).
+		args_to_look_for = (opt->nargs - opt->target_idx);
+	}
 
-		// Keep looking until the end of the argument list.
-		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
-			(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
+	CARGODBG(3, "  Looking for %d args\n", args_to_look_for);
+
+	// Look for arguments for this option.
+	if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
+	{
+		// TODO: Don't print this to stderr.
+		int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
+		fprintf(stderr, "Not enough arguments for %s."
+						" %d expected but got only %d\n", 
+						name, expected, argc - start);
+		return -1;
+	}
+
+	CARGODBG(3, "  Parse %d option args for %s:\n", args_to_look_for, name);
+	CARGODBG(3, "   Start %d, End %d\n", ctx->i, ctx->i + args_to_look_for);
+
+	// Read until we find another option, or we've "eaten" the
+	// arguments we want.
+	for (j = start; j < (start + args_to_look_for); j++)
+	{
+		CARGODBG(3, "    argv[%i]: %s\n", j, argv[j]);
+
+		if (_cargo_is_another_option(ctx, argv[j]))
 		{
-			args_to_look_for = (argc - start);
-
-			if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) 
-				&& (args_to_look_for == 0))
+			if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
 			{
-				args_to_look_for = 1;
-			}
-		}
-		else
-		{
-			// Read (number of expected arguments) - (read so far).
-			args_to_look_for = (opt->nargs - opt->target_idx);
-		}
-
-		CARGODBG(3, "  Looking for %d args\n", args_to_look_for);
-
-		// Look for arguments for this option.
-		if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
-		{
-			// TODO: Don't print this to stderr.
-			int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
-			fprintf(stderr, "Not enough arguments for %s."
-							" %d expected but got only %d\n", 
-							name, expected, argc - start);
-			return -1;
-		}
-
-		CARGODBG(3, "  Parse %d option args for %s:\n", args_to_look_for, name);
-		CARGODBG(3, "   Start %d, End %d\n", ctx->i, ctx->i + args_to_look_for);
-
-		// Read until we find another option, or we've "eaten" the
-		// arguments we want.
-		for (j = start; j < (start + args_to_look_for); j++)
-		{
-			CARGODBG(3, "    argv[%i]: %s\n", j, argv[j]);
-
-			if (_cargo_is_another_option(ctx, argv[j]))
-			{
-				if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
-				{
-					fprintf(stderr, "No argument specified for %s. "
-									"%d expected.\n",
-									name, 
-									(opt->nargs > 0) ? opt->nargs : 1);
-					return -1;
-				}
-
-				// We found another option, stop parsing arguments
-				// for this option.
-				CARGODBG(3, "%s", "    Found other option\n");
-				break;
-			}
-
-			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
-			{
+				fprintf(stderr, "No argument specified for %s. "
+								"%d expected.\n",
+								name, 
+								(opt->nargs > 0) ? opt->nargs : 1);
 				return -1;
 			}
 
-			// If we have exceeded opt->max_target_count
-			// for CARGO_NARGS_NONE_OR_MORE or CARGO_NARGS_ONE_OR_MORE
-			// we should stop so we don't eat all the remaining arguments.
-			if (ret)
-				break;
+			// We found another option, stop parsing arguments
+			// for this option.
+			CARGODBG(3, "%s", "    Found other option\n");
+			break;
 		}
 
-		opt_arg_count = (j - start);
+		if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
+		{
+			return -1;
+		}
+
+		// If we have exceeded opt->max_target_count
+		// for CARGO_NARGS_NONE_OR_MORE or CARGO_NARGS_ONE_OR_MORE
+		// we should stop so we don't eat all the remaining arguments.
+		if (ret)
+			break;
 	}
 
-	return opt_arg_count;
+	// Number of arguments read.
+	return (j - start); 
 }
 
 static const char *_cargo_check_options(cargo_t ctx,
@@ -735,7 +719,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	}
 
 	// If the option has an argument, add a "metavar".
-	if ((opt->nargs != 0) && (opt->nargs != CARGO_NARGS_NONE_OR_MORE))
+	if (!_cargo_zero_args_allowed(opt))
 	{
 		char metavarbuf[20];
 		const char *metavar = NULL;
