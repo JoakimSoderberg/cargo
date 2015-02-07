@@ -14,6 +14,18 @@
 #include <unistd.h>
 #endif // _WIN32
 
+#ifdef CARGO_DEBUG
+#define CARGODBG(level, fmt, ...)											\
+{																			\
+	if (level <= CARGO_DEBUG)												\
+	{																		\
+		fprintf(stderr, "[cargo.c:%4d]: " fmt, __LINE__, ##__VA_ARGS__);	\
+	}																		\
+}
+#else
+#define CARGODBG(level, fmt, ...)
+#endif
+
 #ifndef va_copy
   #ifdef __va_copy
     #define va_copy __va_copy
@@ -32,7 +44,8 @@ int cargo_get_console_width()
 		return -1;
 	}
 
-	CARGODBG(3, "Console width: %d\n", (int)(csbi.srWindow.Right - csbi.srWindow.Left));
+	CARGODBG(3, "Console width: %d\n",
+		(int)(csbi.srWindow.Right - csbi.srWindow.Left));
 
 	return (int)(csbi.srWindow.Right - csbi.srWindow.Left);
 
@@ -713,7 +726,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	{
 		if (!(sorted_names = calloc(opt->name_count, sizeof(char *))))
 		{
-			fprintf(stderr, "Out of memory\n");
+			CARGODBG(1, "%s", "Out of memory\n");
 			return -1;
 		}
 
@@ -866,21 +879,28 @@ fail:
 	return ss;
 }
 
-static void _cargo_free_str_list(char ***s, size_t count)
+static void _cargo_free_str_list(char ***s, size_t *count)
 {
 	size_t i;
 
 	if (!s || !*s)
-		return;
+		goto done;
 
-	for (i = 0; i < count; i++)
+	// Only free elements if we have a count.
+	if (count)
 	{
-		free((*s)[i]);
-		(*s)[i] = NULL;
+		for (i = 0; i < *count; i++)
+		{
+			free((*s)[i]);
+			(*s)[i] = NULL;
+		}
 	}
 
 	free(*s);
 	*s = NULL;
+done:
+	if (count)
+		*count = 0;
 }
 
 static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
@@ -1115,7 +1135,7 @@ fail:
 		free(opt_description);
 	}
 
-	_cargo_free_str_list(&desc_lines, line_count);
+	_cargo_free_str_list(&desc_lines, &line_count);
 
 	return ret;
 }
@@ -1165,35 +1185,34 @@ void cargo_destroy(cargo_t *ctx)
 	size_t i;
 	size_t j;
 
+	CARGODBG(2, "DESTROY!\n");
+
 	if (ctx)
 	{
-		if ((*ctx)->options)
+		cargo_t c = *ctx;
+
+		if (c->options)
 		{
-			for (i = 0; i < (*ctx)->opt_count; i++)
+			CARGODBG(2, "DESTROY %lu options!\n", c->opt_count);
+
+			for (i = 0; i < c->opt_count; i++)
 			{
-				for (j = 0; j < (*ctx)->options[i].name_count; j++ )
+				CARGODBG(2, "Free opt: %s\n", c->options[i].name[0]);
+
+				for (j = 0; j < c->options[i].name_count; j++)
 				{
-					free((*ctx)->options[i].name[j]);
+					free(c->options[i].name[j]);
 				}
+
+				c->options[i].name_count = 0;
 			}
 
-			free((*ctx)->options);
-			(*ctx)->options = NULL;
+			free(c->options);
+			c->options = NULL;
 		}
 
-		if ((*ctx)->args)
-		{
-			free((*ctx)->args);
-			(*ctx)->args = NULL;
-			(*ctx)->arg_count = 0;
-		}
-
-		if ((*ctx)->unknown_opts)
-		{
-			free((*ctx)->unknown_opts);
-			(*ctx)->unknown_opts = NULL;
-			(*ctx)->unknown_opts_count = 0;
-		}
+		_cargo_free_str_list(&c->args, NULL);
+		_cargo_free_str_list(&c->unknown_opts, NULL);
 
 		free(*ctx);
 		ctx = NULL;
@@ -1203,7 +1222,6 @@ void cargo_destroy(cargo_t *ctx)
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 {
 	assert(ctx);
-	// TODO: Hmmm, copy this instead?
 	ctx->prefix = prefix_chars;
 }
 
@@ -1244,20 +1262,10 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	_cargo_add_help_if_missing(ctx);
 
-	if (ctx->args)
-	{
-		free(ctx->args);
-		ctx->args = NULL;
-	}
-
+	_cargo_free_str_list(&ctx->args, NULL);
 	ctx->arg_count = 0;
 
-	if (ctx->unknown_opts)
-	{
-		free(ctx->unknown_opts);
-		ctx->unknown_opts = NULL;
-	}
-
+	_cargo_free_str_list(&ctx->unknown_opts, NULL);
 	ctx->unknown_opts_count = 0;
 
 	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
@@ -1564,7 +1572,10 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	}
 
 fail:
-	_cargo_free_str_list(&namebufs, ctx->opt_count);
+	{
+		size_t opt_count = ctx->opt_count;
+		_cargo_free_str_list(&namebufs, &opt_count);
+	}
 
 	return ret;
 }
@@ -1956,7 +1967,7 @@ fail:
 
 	if (optname_list)
 	{
-		_cargo_free_str_list(&optname_list, optcount);
+		_cargo_free_str_list(&optname_list, &optcount);
 	}
 	
 	return ret;
@@ -2370,7 +2381,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option)
 	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
 	_TEST_CLEANUP();
-	_cargo_free_str_list(&a, count);
+	_cargo_free_str_list(&a, &count);
 }
 _TEST_END()
 
@@ -2507,7 +2518,7 @@ static void _test_print_names()
 
 	for (i = 0; i < (int)CARGO_NUM_TESTS; i++)
 	{
-		printf("%d: %s\n", (i + 1), tests[i].name);
+		printf("%2d: %s\n", (i + 1), tests[i].name);
 	}
 }
 
@@ -2587,14 +2598,12 @@ int main(int argc, char **argv)
 	else
 	{
 		_test_print_names();
-		fprintf(stderr, "%s:\n\n", argv[0]);
-		fprintf(stderr, "Usage: %s [test_num ...] [test_name ...]\n\n", argv[0]);
+		fprintf(stderr, "\nUsage: %s [test_num ...] [test_name ...]\n\n", argv[0]);
 		fprintf(stderr, "  --list to get all available tests.\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "  Use test_num = -1 or all tests\n");
 		fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
 		fprintf(stderr, "  Return code for this usage message equals the number of available tests.\n");
-		printf("Test count: %d\n", (int)CARGO_NUM_TESTS);
 		return CARGO_NUM_TESTS;
 	}
 
