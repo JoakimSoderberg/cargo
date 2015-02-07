@@ -1140,6 +1140,27 @@ fail:
 	return ret;
 }
 
+void _cargo_set_usage_max_width(cargo_t ctx, size_t max_width)
+{
+	size_t console_width;
+
+	if (max_width == CARGO_AUTO_MAX_WIDTH)
+	{
+		if ((console_width = cargo_get_console_width()) > 0)
+		{
+			ctx->usage.max_width = console_width;
+		}
+		else
+		{
+			ctx->usage.max_width = CARGO_DEFAULT_MAX_WIDTH;
+		}
+	}
+	else
+	{
+		ctx->usage.max_width = max_width;
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -1170,12 +1191,7 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	c->description = description;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
-	c->usage.max_width = CARGO_DEFAULT_MAX_WIDTH;
-
-	if ((console_width = cargo_get_console_width()) > 0)
-	{
-		c->usage.max_width = console_width;
-	}
+	_cargo_set_usage_max_width(c, CARGO_AUTO_MAX_WIDTH);
 
 	return 0;
 }

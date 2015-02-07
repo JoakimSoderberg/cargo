@@ -51,6 +51,8 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 int cargo_add_option(cargo_t ctx, const char *optnames,
 					 const char *description, const char *fmt, ...);
 
+int cargo_add_alias(cargo_t ctx, const char *name, const char *alias);
+
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
 typedef enum cargo_format_e
@@ -81,8 +83,6 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
 char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 char **cargo_get_args(cargo_t ctx, size_t *argc);
-
-int cargo_add_alias(cargo_t ctx, const char *name, const char *alias);
 
 
 #endif // __CARGO_H__
