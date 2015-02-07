@@ -183,7 +183,7 @@ typedef struct cargo_s
 	const char *progname;
 	const char *description;
 	const char *epilog;
-	cargo_usage_settings_t usage;
+	size_t max_width;
 	cargo_format_t format;
 
 	int i;
@@ -1085,7 +1085,7 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 	int padding = 0;
 	char *opt_description = _cargo_linebreak(ctx,
 		ctx->options[i].description,
-		ctx->usage.max_width - 2
+		ctx->max_width - 2
 		- max_name_len - (2 * name_padding));
 
 	if (!opt_description)
@@ -1093,11 +1093,11 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 		ret = -1; goto fail;
 	}
 
-	CARGODBG(3, "ctx->usage.max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
+	CARGODBG(3, "ctx->max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
 	CARGODBG(3, "%lu - 2 - %d - (2 * %d) = %lu\n",
-		ctx->usage.max_width, max_name_len,
+		ctx->max_width, max_name_len,
 		name_padding,
-		ctx->usage.max_width - 2 - max_name_len - (2 * name_padding));
+		ctx->max_width - 2 - max_name_len - (2 * name_padding));
 
 	if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
 	{
@@ -1140,7 +1140,11 @@ fail:
 	return ret;
 }
 
-void _cargo_set_usage_max_width(cargo_t ctx, size_t max_width)
+// -----------------------------------------------------------------------------
+// Public functions
+// -----------------------------------------------------------------------------
+
+void cargo_set_max_width(cargo_t ctx, size_t max_width)
 {
 	size_t console_width;
 
@@ -1148,22 +1152,18 @@ void _cargo_set_usage_max_width(cargo_t ctx, size_t max_width)
 	{
 		if ((console_width = cargo_get_console_width()) > 0)
 		{
-			ctx->usage.max_width = console_width;
+			ctx->max_width = console_width;
 		}
 		else
 		{
-			ctx->usage.max_width = CARGO_DEFAULT_MAX_WIDTH;
+			ctx->max_width = CARGO_DEFAULT_MAX_WIDTH;
 		}
 	}
 	else
 	{
-		ctx->usage.max_width = max_width;
+		ctx->max_width = max_width;
 	}
 }
-
-// -----------------------------------------------------------------------------
-// Public functions
-// -----------------------------------------------------------------------------
 
 int cargo_init(cargo_t *ctx, size_t max_opts,
 				const char *progname, const char *description)
@@ -1191,7 +1191,7 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	c->description = description;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
-	_cargo_set_usage_max_width(c, CARGO_AUTO_MAX_WIDTH);
+	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
 
 	return 0;
 }
@@ -1253,10 +1253,10 @@ void cargo_set_epilog(cargo_t ctx, const char *epilog)
 	ctx->epilog = epilog;
 }
 
-void cargo_add_help(cargo_t ctx, int add_help)
+void cargo_set_auto_help(cargo_t ctx, int auto_help)
 {
 	assert(ctx);
-	ctx->add_help = add_help;
+	ctx->add_help = auto_help;
 }
 
 void cargo_set_format(cargo_t ctx, cargo_format_t format)
@@ -1468,13 +1468,13 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		if (!(namebufs[i] = malloc(ctx->usage.max_width)))
+		if (!(namebufs[i] = malloc(ctx->max_width)))
 		{
 			ret = -1; goto fail;
 		}
 
 		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
-											namebufs[i], ctx->usage.max_width);
+											namebufs[i], ctx->max_width);
 
 		if (namelen < 0)
 		{
@@ -1492,12 +1492,12 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		usagelen += namelen + strlen(ctx->options[i].description);
 	}
 
-	if (ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
+	if (ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
 		usagelen += strlen(ctx->description);
 	}
 
-	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
+	if (ctx->epilog && !(ctx->format & CARGO_FORMAT_HIDE_EPILOG))
 	{
 		usagelen += strlen(ctx->epilog);
 	}
@@ -1535,15 +1535,15 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 	str.l = usagelen;
 	str.offset = 0;
 
-	if(ctx->description && !(ctx->usage.format & CARGO_FORMAT_HIDE_DESCRIPTION))
+	if(ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
 		if (cargo_appendf(&str, "%s\nn", ctx->description) < 0) goto fail;
 	}
 
 	if (cargo_appendf(&str,  "Optional arguments:\n") < 0) goto fail;
 
-	CARGODBG(2, "max_name_len = %d, ctx->usage.max_width = %lu\n",
-		max_name_len, ctx->usage.max_width);
+	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
+		max_name_len, ctx->max_width);
 
 	// Option names + descriptions.
 	for (i = 0; i < ctx->opt_count; i++)
@@ -1562,8 +1562,8 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 
 		// Option description.
-		if ((ctx->usage.format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
-			|| (strlen(ctx->options[i].description) < ctx->usage.max_width))
+		if ((ctx->format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+			|| (strlen(ctx->options[i].description) < ctx->max_width))
 		{
 			if (cargo_appendf(&str, "%*s%s\n",
 				NAME_PADDING, "", ctx->options[i].description) < 0)
@@ -1582,7 +1582,7 @@ int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size)
 		}
 	}
 
-	if (ctx->epilog && !(ctx->usage.format & CARGO_FORMAT_HIDE_EPILOG))
+	if (ctx->epilog && !(ctx->format & CARGO_FORMAT_HIDE_EPILOG))
 	{
 		if (cargo_appendf(&str, "%s\n", ctx->epilog) < 0) goto fail;
 	}

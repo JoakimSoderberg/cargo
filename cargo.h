@@ -20,25 +20,19 @@ typedef enum cargo_type_e
 
 typedef struct cargo_s *cargo_t;
 
-#define CARGO_NARGS_ONE_OR_MORE -1
-#define CARGO_NARGS_NONE_OR_MORE -2
+#define CARGO_NARGS_ONE_OR_MORE 	-1
+#define CARGO_NARGS_NONE_OR_MORE	-2
 
 typedef enum cargo_copy_type_e
 {
-	CARGO_STATIC = 0,
-	CARGO_ALLOC = 1
+	CARGO_STATIC	= 0,
+	CARGO_ALLOC		= 1
 } cargo_copy_type_t;
 
 int cargo_init(cargo_t *ctx, size_t max_opts, 
 				const char *progname, const char *description);
 
 void cargo_destroy(cargo_t *ctx);
-
-void cargo_set_description(cargo_t ctx, const char *description);
-
-void cargo_set_epilog(cargo_t ctx, const char *epilog);
-
-void cargo_add_help(cargo_t ctx, int add_help);
 
 #define CARGO_FLAG_VALIDATE_ONLY (1 << 0)
 
@@ -57,26 +51,28 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
 typedef enum cargo_format_e
 {
-	CARGO_FORMAT_RAW_HELP = (1 << 0),
-	CARGO_FORMAT_RAW_DESCRIPTION = (1 << 1),
-	CARGO_FORMAT_RAW_OPT_DESCRIPTION = (1 << 2),
-	CARGO_FORMAT_HIDE_DESCRIPTION = (1 << 3),
-	CARGO_FORMAT_HIDE_EPILOG = (1 << 4),
-	CARGO_FORMAT_HIDE_SHORT = (1 << 5)
+	CARGO_FORMAT_RAW_HELP				= (1 << 0),
+	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 1),
+	CARGO_FORMAT_RAW_OPT_DESCRIPTION	= (1 << 2),
+	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 3),
+	CARGO_FORMAT_HIDE_EPILOG			= (1 << 4),
+	CARGO_FORMAT_HIDE_SHORT				= (1 << 5)
 } cargo_format_t;
 
 #define CARGO_DEFAULT_MAX_WIDTH 80
 #define CARGO_AUTO_MAX_WIDTH 0
 
-typedef struct cargo_usage_settings_s
-{
-	size_t max_width;
-	cargo_format_t format;
-} cargo_usage_settings_t;
+void cargo_set_max_width(cargo_t ctx, size_t max_width);
+
+void cargo_set_description(cargo_t ctx, const char *description);
+
+void cargo_set_epilog(cargo_t ctx, const char *epilog);
+
+void cargo_set_auto_help(cargo_t ctx, int auto_help);
+
+void cargo_set_format(cargo_t ctx, cargo_format_t format);
 
 int cargo_print_usage(cargo_t ctx);
-
-int cargo_set_usage_settings(cargo_usage_settings_t settings);
 
 int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
 
