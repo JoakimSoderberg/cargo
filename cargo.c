@@ -208,7 +208,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 
 static int _cargo_nargs_is_valid(int nargs)
 {
-	return (nargs > 0) 
+	return (nargs >= 0) 
 		|| (nargs == CARGO_NARGS_NONE_OR_MORE)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
 }
@@ -248,9 +248,11 @@ static int _cargo_add(cargo_t ctx,
 	cargo_opt_t *o = NULL;
 	char *optcpy = NULL;
 
+	CARGODBG(2, "_cargo_add: %s\n", opt);
+
 	if (!_cargo_nargs_is_valid(nargs))
 	{
-		CARGODBG(1, "nargs is invalid\n");
+		CARGODBG(1, "nargs is invalid %d\n", nargs);
 		return -1;
 	}
 
@@ -537,9 +539,9 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
 	int ret;
-	int j;
 	int args_to_look_for;
 	int start = (ctx->i + 1);
+	int j;
 	
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
@@ -573,44 +575,64 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 
 	CARGODBG(3, "  Parse %d option args for %s:\n", args_to_look_for, name);
-	CARGODBG(3, "   Start %d, End %d\n", ctx->i, ctx->i + args_to_look_for);
+	CARGODBG(3, "   Start %d, End %d (argc %d, nargs %d)\n",
+			start, (start + args_to_look_for), argc, opt->nargs);
 
-	// Read until we find another option, or we've "eaten" the
-	// arguments we want.
-	for (j = start; j < (start + args_to_look_for); j++)
+	j = start;
+	// TODO: When reading an option with no values at the end
+	// make sure we still call _cargo_set_target_value.
+	if (opt->nargs == 0)
 	{
-		CARGODBG(3, "    argv[%i]: %s\n", j, argv[j]);
-
-		if (_cargo_is_another_option(ctx, argv[j]))
+		if (_cargo_zero_args_allowed(opt))
 		{
-			if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
+			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
 			{
-				fprintf(stderr, "No argument specified for %s. "
-								"%d expected.\n",
-								name, 
-								(opt->nargs > 0) ? opt->nargs : 1);
+				CARGODBG(1, "Failed to set value for 0 arg\n");
+				return -1;
+			}
+		}
+	}
+	else
+	{
+		// Read until we find another option, or we've "eaten" the
+		// arguments we want.
+		for (j = start; j < (start + args_to_look_for); j++)
+		{
+			CARGODBG(3, "    argv[%i]: %s\n", j, argv[j]);
+
+			if (_cargo_is_another_option(ctx, argv[j]))
+			{
+				if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
+				{
+					fprintf(stderr, "No argument specified for %s. "
+									"%d expected.\n",
+									name, 
+									(opt->nargs > 0) ? opt->nargs : 1);
+					return -1;
+				}
+
+				// We found another option, stop parsing arguments
+				// for this option.
+				CARGODBG(3, "%s", "    Found other option\n");
+				break;
+			}
+
+			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
+			{
+				CARGODBG(1, "Failed to set target value for %s: \n", name);
 				return -1;
 			}
 
-			// We found another option, stop parsing arguments
-			// for this option.
-			CARGODBG(3, "%s", "    Found other option\n");
-			break;
+			// If we have exceeded opt->max_target_count
+			// for CARGO_NARGS_NONE_OR_MORE or CARGO_NARGS_ONE_OR_MORE
+			// we should stop so we don't eat all the remaining arguments.
+			if (ret)
+				break;
 		}
-
-		if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
-		{
-			return -1;
-		}
-
-		// If we have exceeded opt->max_target_count
-		// for CARGO_NARGS_NONE_OR_MORE or CARGO_NARGS_ONE_OR_MORE
-		// we should stop so we don't eat all the remaining arguments.
-		if (ret)
-			break;
 	}
 
 	// Number of arguments read.
+	CARGODBG(2, "_cargo_parse_option return %d\n", (j - start));
 	return (j - start); 
 }
 
@@ -1261,6 +1283,8 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 			if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
 													argc, argv)) < 0)
 			{
+				CARGODBG(1, "Failed to parse %s option: %s\n",
+						_cargo_type_map[opt->type], name);
 				return -1;
 			}
 
@@ -1881,10 +1905,14 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	}
 	else
 	{
+		// BOOLs never have arguments.
+		nargs = (type == CARGO_BOOL) ? 0 : 1;
+
 		// Never allocate single values (unless it's a string).
-		nargs = 1;
 		s.alloc = (type != CARGO_STRING) ? 0 : s.alloc;
 	}
+
+	CARGODBG(2, "Add option: nargs %d\n", nargs);
 
 	// .[s#]#    char s[5][10]; size_t c;    &s, &c, 5, 10  // 5 static str, len 10
  	// X[s#]+    char *s[10];   size_t c;    &s, 10, &c     // Alloc 1 or more strings of len 10
@@ -2087,6 +2115,7 @@ _TEST_START(TEST_no_args_bool_option)
 	if (cargo_parse(cargo, 1, argc, args))
 	{
 		msg = "Failed to parse bool with no argument";
+		goto fail;
 	}
 
 	cargo_assert(a == 1, "Failed to parse bool with no argument to 1");

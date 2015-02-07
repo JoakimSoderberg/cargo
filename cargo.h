@@ -76,6 +76,7 @@ typedef enum cargo_format_e
 } cargo_format_t;
 
 #define CARGO_DEFAULT_MAX_WIDTH 80
+#define CARGO_AUTO_MAX_WIDTH 0
 
 typedef struct cargo_usage_settings_s
 {
