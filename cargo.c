@@ -301,9 +301,24 @@ static int _cargo_add(cargo_t ctx,
 
 	if (ctx->opt_count >= ctx->max_opts)
 	{
-		CARGODBG(1, "%s: Too many options given %lu (max %lu)\n",
-					opt, ctx->opt_count, ctx->max_opts);
-		return -1;
+		cargo_opt_t *new_options = NULL;
+		CARGODBG(2, "Option count (%lu) >= Max option count (%lu)\n",
+			ctx->opt_count, ctx->max_opts);
+
+		ctx->max_opts *= 2;
+
+		if (!(new_options = realloc(ctx->options,
+									 ctx->max_opts * sizeof(cargo_opt_t))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+
+		ctx->options = new_options;
+
+		// The options struct is assumed to be zeroed.
+		memset(&ctx->options[ctx->opt_count],
+				0, (ctx->max_opts - ctx->opt_count) * sizeof(cargo_opt_t));
 	}
 
 	// TODO: assert for argument conflicts.
@@ -835,8 +850,6 @@ static char **_cargo_split(cargo_t ctx, char *s,
 
 	*count = 1;
 
-	CARGODBG(3, "_cargo_split:\n\n");
-
 	while (*p)
 	{
 		for (i = 0; i < (int)splitlen; i++)
@@ -861,7 +874,6 @@ static char **_cargo_split(cargo_t ctx, char *s,
 		{
 			goto fail;
 		}
-		CARGODBG(3, "%lu: %s\n", i, ss[i]);
 
 		p = strtok(NULL, splitchars);
 		i++;
@@ -2468,7 +2480,6 @@ _TEST_END()
 
 _TEST_START(TEST_misspelled_argument)
 {
-	int ret = 0;
 	int i;
 	float f;
 	int b;
@@ -2483,6 +2494,29 @@ _TEST_START(TEST_misspelled_argument)
 	_TEST_CLEANUP();
 }
 _TEST_END()
+
+static char *TEST_max_option_count()
+{
+	char *msg = NULL;
+	int i;
+	float f;
+	int b;
+	int ret;
+	cargo_t cargo;
+
+	ret = cargo_init(&cargo, 1, "program", "");
+	cargo_assert(ret == 0, "Failed to init");
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
+	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
+
+	cargo_assert(ret == 0, "Failed to add options");
+
+	_TEST_CLEANUP();
+	cargo_destroy(&cargo);
+	return msg;
+}
 
 //
 // List of all test functions to run:
@@ -2523,7 +2557,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_print_usage),
-	CARGO_ADD_TEST(TEST_misspelled_argument)
+	CARGO_ADD_TEST(TEST_misspelled_argument),
+	CARGO_ADD_TEST(TEST_max_option_count)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
