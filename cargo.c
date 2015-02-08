@@ -299,6 +299,15 @@ static int _cargo_add(cargo_t ctx,
 		return -1;
 	}
 
+	if (!ctx->options)
+	{
+		if (!(ctx->options = calloc(ctx->max_opts, sizeof(cargo_opt_t))))
+		{
+			CARGODBG(1, "Out of memory\n");
+			return -1;
+		}
+	}
+
 	if (ctx->opt_count >= ctx->max_opts)
 	{
 		cargo_opt_t *new_options = NULL;
@@ -1177,8 +1186,7 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	}
 }
 
-int cargo_init(cargo_t *ctx, size_t max_opts,
-				const char *progname, const char *description)
+int cargo_init(cargo_t *ctx, const char *progname)
 {
 	int console_width = -1;
 	cargo_s *c;
@@ -1190,17 +1198,9 @@ int cargo_init(cargo_t *ctx, size_t max_opts,
 	if (!c)
 		return -1;
 
-	c->max_opts = max_opts;
-
-	if (!(c->options = (cargo_opt_t *)calloc(max_opts, sizeof(cargo_opt_t))))
-	{
-		free(*ctx);
-		*ctx = NULL;
-		return -1;
-	}
+	c->max_opts = CARGO_DEFAULT_MAX_OPTS;
 
 	c->progname = progname;
-	c->description = description;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
@@ -1245,6 +1245,13 @@ void cargo_destroy(cargo_t *ctx)
 		free(*ctx);
 		ctx = NULL;
 	}
+}
+
+void cargo_set_option_count_hint(cargo_t ctx, size_t option_count)
+{
+	assert(ctx);
+	if (ctx->opt_count == 0)
+		ctx->max_opts = option_count;
 }
 
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
@@ -2119,7 +2126,7 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 	int ret = 0;										\
 	cargo_t cargo;										\
 														\
-	if (cargo_init(&cargo, 32, "program", "The parser"))\
+	if (cargo_init(&cargo, "program"))					\
 	{													\
 		return "Failed to init cargo";					\
 	}
@@ -2504,8 +2511,9 @@ static char *TEST_max_option_count()
 	int ret;
 	cargo_t cargo;
 
-	ret = cargo_init(&cargo, 1, "program", "");
+	ret = cargo_init(&cargo, "program");
 	cargo_assert(ret == 0, "Failed to init");
+	cargo_set_option_count_hint(cargo, 1);
 
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
 	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
@@ -2757,7 +2765,7 @@ int main(int argc, char **argv)
 	char **extra_args;
 	size_t extra_count;
 
-	cargo_init(&cargo, 32, argv[0], "The parser");
+	cargo_init(&cargo, argv[0]);
 
 	// TODO: Make a real example.
 

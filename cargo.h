@@ -29,8 +29,7 @@ typedef enum cargo_copy_type_e
 	CARGO_ALLOC		= 1
 } cargo_copy_type_t;
 
-int cargo_init(cargo_t *ctx, size_t max_opts, 
-				const char *progname, const char *description);
+int cargo_init(cargo_t *ctx, const char *progname);
 
 void cargo_destroy(cargo_t *ctx);
 
@@ -58,6 +57,8 @@ typedef enum cargo_format_e
 	CARGO_FORMAT_HIDE_EPILOG			= (1 << 4),
 	CARGO_FORMAT_HIDE_SHORT				= (1 << 5)
 } cargo_format_t;
+
+void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
 
 #define CARGO_DEFAULT_MAX_WIDTH 80
 #define CARGO_AUTO_MAX_WIDTH 0
