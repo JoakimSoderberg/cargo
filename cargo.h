@@ -73,9 +73,11 @@ void cargo_set_auto_help(cargo_t ctx, int auto_help);
 
 void cargo_set_format(cargo_t ctx, cargo_format_t format);
 
+int cargo_fprint_usage(FILE *f, cargo_t ctx);
+
 int cargo_print_usage(cargo_t ctx);
 
-int cargo_get_usage(cargo_t ctx, char **buf, size_t *buf_size);
+char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size);
 
 char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
