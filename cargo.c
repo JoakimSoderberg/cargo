@@ -290,10 +290,6 @@ static int _cargo_add(cargo_t ctx,
 	cargo_opt_t *o = NULL;
 	char *optcpy = NULL;
 
-	// TODO: Enable adding "NULL" options. Basically dummy options.
-	// Say a program removes an option, but don't want to break old 
-	// usage patterns.
-
 	CARGODBG(2, "_cargo_add: %s\n", opt);
 
 	if (!_cargo_nargs_is_valid(nargs))
@@ -883,21 +879,27 @@ done:
 		*count = 0;
 }
 
-static char **_cargo_split(cargo_t ctx, char *s,
-							const char *splitchars, size_t *count)
+static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 {
 	char **ss;
 	size_t i = 0;
-	char *p = s;
+	char *p = NULL;
+	char *scpy = NULL;
 	size_t splitlen = strlen(splitchars);
-	assert(ctx);
 	assert(count);
+
+	*count = 0;
 
 	if (!s)
 		return NULL;
 
 	if (!*s)
 		return NULL;
+
+	if (!(scpy = strdup(s)))
+		return NULL;
+
+	p = scpy;
 
 	*count = 1;
 
@@ -917,7 +919,7 @@ static char **_cargo_split(cargo_t ctx, char *s,
 	if (!(ss = calloc(*count, sizeof(char *))))
 		return NULL;
 
-	p = strtok(s, splitchars);
+	p = strtok(scpy, splitchars);
 	i = 0;
 	while (p)
 	{
@@ -930,8 +932,11 @@ static char **_cargo_split(cargo_t ctx, char *s,
 		i++;
 	}
 
+	free(scpy);
+
 	return ss;
 fail:
+	free(scpy);
 	_cargo_free_str_list(&ss, count);
 	return NULL;
 }
@@ -1132,7 +1137,7 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 		name_padding,
 		ctx->max_width - 2 - max_name_len - (2 * name_padding));
 
-	if (!(desc_lines = _cargo_split(ctx, opt_description, "\n", &line_count)))
+	if (!(desc_lines = _cargo_split(opt_description, "\n", &line_count)))
 	{
 		ret = -1; goto fail;
 	}
@@ -1874,7 +1879,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		return -1;
 	}
 
-	if (!(optname_list = _cargo_split(ctx, tmp, " ", &optcount))
+	if (!(optname_list = _cargo_split(tmp, " ", &optcount))
 		|| (optcount <= 0))
 	{
 		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
@@ -2819,6 +2824,66 @@ _TEST_START(TEST_get_unknown_opts)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_split)
+{
+	size_t i;
+	size_t j;
+	char **ss = NULL;
+	
+	char *in[] =
+	{
+		"abc def ghi",
+		"abc",
+		NULL
+	};
+	#define NUM (sizeof(in) / sizeof(in[0]))
+	
+	char *expect0[] = { "abc", "def", "ghi" };
+	char *expect1[] = { "abc" };
+	char *expect2[] = { NULL };
+	char **expect[] = { expect0, expect1, expect2 };
+	size_t expect_count[] =
+	{
+		3,
+		1,
+		0
+	};
+
+	char **out[NUM];
+	size_t out_count[NUM];
+
+	for (i = 0; i < NUM; i++)
+	{
+		printf("Split: \"%s\"", in[i]);
+		out[i] = _cargo_split(in[i], " ", &out_count[i]);
+		printf(" into %lu substrings\n", out_count[i]);
+
+		if (in[i] != NULL)
+			cargo_assert(out[i] != NULL, "Got null split result");
+
+		for (j = 0; j < out_count[i]; j++)
+		{
+			printf("\"%s\"%s ", 
+				out[i][j], ((j + 1) != out_count[i]) ? "," : "");
+		}
+
+		printf("\n");
+	}
+
+	for (i = 0; i < NUM; i++)
+	{
+		cargo_assert_str_array(out_count[i], expect_count[i], out[i], expect[i]);
+	}
+
+	_TEST_CLEANUP();
+	for (i = 0; i < NUM; i++)
+	{
+		_cargo_free_str_list(&out[i], &out_count[i]);
+	}
+	#undef NUM
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2870,7 +2935,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_max_option_count),
 	CARGO_ADD_TEST(TEST_add_duplicate_option),
 	CARGO_ADD_TEST(TEST_get_extra_args),
-	CARGO_ADD_TEST(TEST_get_unknown_opts)
+	CARGO_ADD_TEST(TEST_get_unknown_opts),
+	CARGO_ADD_TEST(TEST_cargo_split)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
