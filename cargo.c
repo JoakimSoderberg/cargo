@@ -1760,9 +1760,7 @@ int cargo_print_usage(cargo_t ctx)
 
 typedef struct cargo_fmt_token_s
 {
-	int line;
 	int column;
-	size_t pos;
 	char token;
 } cargo_fmt_token_t;
 
@@ -1774,10 +1772,8 @@ typedef struct cargo_fmt_scanner_s
 	cargo_fmt_token_t prev_token;
 	cargo_fmt_token_t token;
 	cargo_fmt_token_t next_token;
-	
-	int line;
+
 	int column;
-	size_t pos;
 
 	int array;
 	int alloc;
@@ -1799,9 +1795,7 @@ static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s,
 	s->opt = opt;
 	s->fmt = fmt;
 	s->start = fmt;
-	s->line = 1;
 	s->column = 0;
-	s->pos = 0;
 
 	s->token.token = *fmt;
 }
@@ -1816,29 +1810,16 @@ static void _next_token(cargo_fmt_scanner_t *s)
 	s->prev_token = s->token;
 
 	s->column++;
-	s->pos++;
 
 	fmt = s->fmt;
-	while ((*fmt == ' ') || (*fmt == '\t') || (*fmt == '\n'))
+	while ((*fmt == ' ') || (*fmt == '\t'))
 	{
-		if (*fmt == '\n')
-		{
-			s->line++;
-			s->column = 0;
-		}
-		else
-		{
-			s->column++;
-		}
-
-		s->pos++;
+		s->column++;
 		fmt++;
 	}
 
 	s->token.token = *fmt;
-	s->token.line = s->line;
 	s->token.column = s->column;
-	s->token.pos = s->pos;
 
 	fmt++;
 	s->fmt = fmt;
@@ -1849,7 +1830,7 @@ static void _prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, "PREV TOKEN\n");
 	s->next_token = s->token;
 	s->token = s->prev_token;
-	s->fmt = &s->start[s->token.pos];
+	s->fmt = &s->start[s->token.column];
 
 	CARGODBG(4, "\"%s\"\n", s->start);
 	CARGODBG(4, " %*s\n", s->token.column, "^");
