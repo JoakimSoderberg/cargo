@@ -2555,10 +2555,8 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_missing_arg)
 {
-	#define BUF_SIZE 1024
-	char buf[BUF_SIZE];
+	char buf[1024];
 	char *usage = NULL;
-	#undef BUF_SIZE
 
 	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, buf, NULL);
@@ -2570,10 +2568,8 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_size_only)
 {
-	#define BUF_SIZE 1024
-	char buf[BUF_SIZE];
-	size_t buf_size = BUF_SIZE;
-	#undef BUF_SIZE
+	char buf[1024];
+	size_t buf_size = 1024;
 	char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
@@ -2586,10 +2582,8 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_fixed)
 {
-	#define BUF_SIZE 1024
-	char buf[BUF_SIZE];
-	size_t buf_size = BUF_SIZE;
-	#undef BUF_SIZE
+	char buf[1024];
+	size_t buf_size = 1024;
 	char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
@@ -2604,10 +2598,8 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_fixed_too_small)
 {
-	#define BUF_SIZE 4
-	char buf[BUF_SIZE];
-	size_t buf_size = BUF_SIZE;
-	#undef BUF_SIZE
+	char buf[4];
+	size_t buf_size = 4;
 	char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
