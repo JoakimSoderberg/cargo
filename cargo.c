@@ -15,6 +15,7 @@
 #endif // _WIN32
 
 #ifdef CARGO_DEBUG
+// TODO: Add an inline macro as well...
 #define CARGODBG(level, fmt, ...)											\
 {																			\
 	if (level <= CARGO_DEBUG)												\
@@ -515,9 +516,17 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			((int *)target)[opt->target_idx] = 1;
 			break;
 		case CARGO_INT:
+		{
+			char *end = NULL;
 			CARGODBG(2, "      int %s\n", val);
-			((int *)target)[opt->target_idx] = atoi(val);
+			((int *)target)[opt->target_idx] = strtol(val, &end, 10);
+			if (end == val)
+			{
+				CARGODBG(1, "Cannot convert \"%s\" to an integer\n", val);
+				return -1;
+			}
 			break;
+		}
 		case CARGO_UINT:
 			CARGODBG(2, "      uint %s\n", val);
 			((unsigned int *)target)[opt->target_idx] = strtoul(val, NULL, 10);
