@@ -2490,7 +2490,8 @@ _TEST_END()
 //
 _TEST_START(TEST_print_usage)
 {
-	int a;
+	int a[3];
+	size_t a_count = 0;
 	float b;
 	double c;
 	char *s;
@@ -2504,8 +2505,8 @@ _TEST_START(TEST_print_usage)
 			"fugiat nulla pariatur. Excepteur sint occaecat cupidatat non "
 			"proident, sunt in culpa qui officia deserunt mollit anim id est "
 			"laborum", 
-			"i",
-			&a);
+			".[i]#",
+			&a, &a_count, sizeof(a) / sizeof(a[0]));
 
  	ret |= cargo_add_option(cargo, "--beta -b",
 			"Shorter description", 
