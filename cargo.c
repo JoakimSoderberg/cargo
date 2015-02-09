@@ -2667,6 +2667,30 @@ _TEST_START(TEST_add_duplicate_option)
 }
 _TEST_END()
 
+_TEST_START(TEST_get_extra_args)
+{
+	size_t argc = 0;
+	char **extra_args = NULL;
+	char *extra_args_expect[] = { "abc", "def", "ghi" };
+	int i;
+	char *args[] = { "program", "-a", "1", "abc", "def", "ghi" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse extra args input");
+
+	extra_args = cargo_get_args(cargo, &argc);
+	cargo_assert(extra_args != NULL, "Got NULL extra args");
+	printf("argc = %lu\n", argc);
+	cargo_assert(argc == 3, "Expected argc == 3");
+	cargo_assert_str_array(argc, 3, extra_args, extra_args_expect);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2713,7 +2737,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_get_usage_fixed_too_small),
 	CARGO_ADD_TEST(TEST_misspelled_argument),
 	CARGO_ADD_TEST(TEST_max_option_count),
-	CARGO_ADD_TEST(TEST_add_duplicate_option)
+	CARGO_ADD_TEST(TEST_add_duplicate_option),
+	CARGO_ADD_TEST(TEST_get_extra_args)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
