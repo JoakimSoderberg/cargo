@@ -247,6 +247,34 @@ static char _cargo_is_prefix(cargo_t ctx, char c)
 	return 0;
 }
 
+static int _cargo_find_option_name(cargo_t ctx, const char *name, 
+									int *opt_i, int *name_i)
+{
+	size_t i;
+	size_t j;
+	cargo_opt_t *opt;
+
+	if (!_cargo_starts_with_prefix(ctx, name))
+		return -1;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		for (j = 0; j < opt->name_count; j++)
+		{
+			if (!strcmp(opt->name[j], name))
+			{
+				if (opt_i) *opt_i = i;
+				if (name_i) *name_i = j;
+				return 0;
+			}
+		}
+	}
+
+	return -1; 
+}
+
 static int _cargo_add(cargo_t ctx,
 				const char *opt,
 				void **target,
@@ -306,6 +334,12 @@ static int _cargo_add(cargo_t ctx,
 			CARGODBG(1, "Out of memory\n");
 			return -1;
 		}
+	}
+
+	if (!_cargo_find_option_name(ctx, opt, NULL, NULL))
+	{
+		CARGODBG(1, "%s already exists\n", opt);
+		return -1;
 	}
 
 	if (ctx->opt_count >= ctx->max_opts)
@@ -603,7 +637,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	// Look for arguments for this option.
 	if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
 	{
-		// TODO: Don't print this to stderr.
+		// TODO: Don't print this to stderr (callback or similar instead)
 		int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
 		fprintf(stderr, "Not enough arguments for %s."
 						" %d expected but got only %d\n", 
@@ -616,8 +650,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			start, (start + args_to_look_for), argc, opt->nargs);
 
 	j = start;
-	// TODO: When reading an option with no values at the end
-	// make sure we still call _cargo_set_target_value.
+
 	if (opt->nargs == 0)
 	{
 		if (_cargo_zero_args_allowed(opt))
@@ -699,34 +732,6 @@ static const char *_cargo_check_options(cargo_t ctx,
 	*opt = NULL;
 
 	return NULL;
-}
-
-static int _cargo_find_option_name(cargo_t ctx, const char *name, 
-									int *opt_i, int *name_i)
-{
-	size_t i;
-	size_t j;
-	cargo_opt_t *opt;
-
-	if (!_cargo_starts_with_prefix(ctx, name))
-		return -1;
-
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		opt = &ctx->options[i];
-
-		for (j = 0; j < opt->name_count; j++)
-		{
-			if (!strcmp(opt->name[j], name))
-			{
-				if (opt_i) *opt_i = i;
-				if (name_i) *name_i = j;
-				return 0;
-			}
-		}
-	}
-
-	return -1; 
 }
 
 static int _cargo_compare_strlen(const void *a, const void *b)
@@ -1462,7 +1467,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 {
 	char *ret = NULL;
 	size_t i;
-	char *b;
+	char *b = NULL;
 	char **namebufs = NULL;
 	int usagelen = 0;
 	int namelen;
@@ -1478,7 +1483,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 		return NULL;
 	}
 
-	// TODO: If this is called before cargo_parse, --help won't exist yet!
+	_cargo_add_help_if_missing(ctx);
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -2522,19 +2527,23 @@ _TEST_START(TEST_print_usage)
 }
 _TEST_END()
 
-// TODO: Compact these get_usage tests with macro.
+#define _ADD_TEST_USAGE_OPTIONS() 										\
+do 																		\
+{																		\
+	int i;																\
+	float f;															\
+	int b;																\
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);	\
+	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);		\
+	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);	\
+	cargo_assert(ret == 0, "Failed to add options");					\
+} while (0)
+
 _TEST_START(TEST_get_usage)
 {
-	int i;
-	float f;
-	int b;
 	char *usage = NULL;
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
-	cargo_assert(ret == 0, "Failed to add options");
-
+	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, NULL, NULL);
 	cargo_assert(usage != NULL, "Failed to get allocated usage");
 	printf("%s\n", usage);
@@ -2546,18 +2555,12 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_missing_arg)
 {
-	int i;
-	float f;
-	int b;
 	#define BUF_SIZE 1024
 	char buf[BUF_SIZE];
 	char *usage = NULL;
+	#undef BUF_SIZE
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
-	cargo_assert(ret == 0, "Failed to add options");
-
+	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, buf, NULL);
 	cargo_assert(usage == NULL, "Expected NULL usage on missing buf_size arg");
 
@@ -2567,20 +2570,13 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_size_only)
 {
-	int i;
-	float f;
-	int b;
 	#define BUF_SIZE 1024
 	char buf[BUF_SIZE];
 	size_t buf_size = BUF_SIZE;
 	#undef BUF_SIZE
 	char *usage = NULL;
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
-	cargo_assert(ret == 0, "Failed to add options");
-
+	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, NULL, &buf_size);
 	cargo_assert(usage == NULL, "Expected NULL usage on buf_size only");
 
@@ -2590,20 +2586,13 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_fixed)
 {
-	int i;
-	float f;
-	int b;
 	#define BUF_SIZE 1024
 	char buf[BUF_SIZE];
 	size_t buf_size = BUF_SIZE;
 	#undef BUF_SIZE
 	char *usage = NULL;
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
-	cargo_assert(ret == 0, "Failed to add options");
-
+	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, buf, &buf_size);
 	cargo_assert(usage != NULL, "Buffer size large enough but got NULL");
 	cargo_assert(usage == buf, "Did not get buf pointer back from call");
@@ -2615,20 +2604,13 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_fixed_too_small)
 {
-	int i;
-	float f;
-	int b;
 	#define BUF_SIZE 4
 	char buf[BUF_SIZE];
 	size_t buf_size = BUF_SIZE;
 	#undef BUF_SIZE
 	char *usage = NULL;
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
-	cargo_assert(ret == 0, "Failed to add options");
-
+	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo, buf, &buf_size);
 	cargo_assert(usage == NULL, "Buffer size too small but got non-null buf");
 
@@ -2678,6 +2660,19 @@ static char *TEST_max_option_count()
 	return msg;
 }
 
+_TEST_START(TEST_add_duplicate_option)
+{
+	int i;
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	cargo_assert(ret != 0, "Succesfully added duplicated, not allowed");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2723,7 +2718,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_get_usage_fixed),
 	CARGO_ADD_TEST(TEST_get_usage_fixed_too_small),
 	CARGO_ADD_TEST(TEST_misspelled_argument),
-	CARGO_ADD_TEST(TEST_max_option_count)
+	CARGO_ADD_TEST(TEST_max_option_count),
+	CARGO_ADD_TEST(TEST_add_duplicate_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
