@@ -2628,17 +2628,12 @@ _TEST_START(TEST_misspelled_argument)
 }
 _TEST_END()
 
-static char *TEST_max_option_count()
+_TEST_START(TEST_max_option_count)
 {
-	char *msg = NULL;
 	int i;
 	float f;
 	int b;
-	int ret;
-	cargo_t cargo;
 
-	ret = cargo_init(&cargo, "program");
-	cargo_assert(ret == 0, "Failed to init");
 	cargo_set_option_count_hint(cargo, 1);
 
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
@@ -2646,11 +2641,9 @@ static char *TEST_max_option_count()
 	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
 
 	cargo_assert(ret == 0, "Failed to add options");
-
 	_TEST_CLEANUP();
-	cargo_destroy(&cargo);
-	return msg;
 }
+_TEST_END()
 
 _TEST_START(TEST_add_duplicate_option)
 {
