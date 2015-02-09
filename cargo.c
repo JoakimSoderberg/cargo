@@ -290,6 +290,10 @@ static int _cargo_add(cargo_t ctx,
 	cargo_opt_t *o = NULL;
 	char *optcpy = NULL;
 
+	// TODO: Enable adding "NULL" options. Basically dummy options.
+	// Say a program removes an option, but don't want to break old 
+	// usage patterns.
+
 	CARGODBG(2, "_cargo_add: %s\n", opt);
 
 	if (!_cargo_nargs_is_valid(nargs))
@@ -2525,8 +2529,109 @@ _TEST_START(TEST_print_usage)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_epilog(cargo, "That's it!");
+	cargo_set_description(cargo, "Introductionary description");
 
 	cargo_print_usage(cargo);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_get_usage_settings)
+{
+	typedef struct _test_usage_settings_s
+	{
+		cargo_format_t fmt;
+		char *expect[4];
+		size_t expect_count;
+	} _test_usage_settings_t;
+
+	#define DESCRIPT "Brown fox"
+	#define EPILOG "Lazy fox"
+	#define OPT_TXT "The alpha"
+	size_t j;
+	size_t k;
+	int i;
+	char *usage = NULL;
+	_test_usage_settings_t tus[] =
+	{
+		{ 0,								{ DESCRIPT, EPILOG, OPT_TXT }, 3},
+		{ CARGO_FORMAT_HIDE_EPILOG,			{ DESCRIPT, OPT_TXT }, 2},
+		{ CARGO_FORMAT_HIDE_DESCRIPTION,	{ EPILOG, OPT_TXT }, 2}
+	};
+
+	ret |= cargo_add_option(cargo, "--alpha -a", OPT_TXT, "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_set_description(cargo, "Brown fox");
+	cargo_set_epilog(cargo, "Lazy fox");
+
+	for (j = 0; j < sizeof(tus) / sizeof(tus[0]); j++)
+	{
+		cargo_set_format(cargo, tus[j].fmt);
+		usage = cargo_get_usage(cargo, NULL, NULL);
+		cargo_assert(usage != NULL, "Got null usage");
+		printf("\n\n");
+
+		for (k = 0; k < tus[j].expect_count; k++)
+		{
+			char *s = tus[j].expect[k];
+			char *found = strstr(usage, s);
+			printf("Expecting to find in usage: \"%s\"\n", s);
+			cargo_assert(found != NULL,
+				"Usage formatting unexpected");
+		}
+
+		printf("-------------------------------------\n");
+		printf("%s\n", usage);
+		printf("-------------------------------------\n");
+
+		free(usage);
+		usage = NULL;
+	}
+
+	_TEST_CLEANUP();
+	if (usage) free(usage);
+}
+_TEST_END()
+
+_TEST_START(TEST_autohelp_default)
+{
+	int i;
+	char *usage = NULL;
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+
+	// Default is to automatically add --help option.
+	usage = cargo_get_usage(cargo, NULL, NULL);
+	cargo_assert(usage != NULL, "Got NULL usage");
+	printf("-------------------------------------\n");
+	printf("%s", usage);
+	printf("-------------------------------------\n");
+	cargo_assert(strstr(usage, "help") != NULL, "No help found by default");
+	free(usage);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_autohelp_off)
+{
+	int i;
+	char *usage = NULL;
+
+	// Turn off auto_help (--help).
+	cargo_set_auto_help(cargo, 0);
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+
+	usage = cargo_get_usage(cargo, NULL, NULL);
+	cargo_assert(usage != NULL, "Got NULL usage");
+	printf("-------------------------------------\n");
+	printf("%s", usage);
+	printf("-------------------------------------\n");
+	cargo_assert(strstr(usage, "help") == NULL,
+				"Help found when auto_help turned off");
+	free(usage);
+
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -2676,11 +2781,39 @@ _TEST_START(TEST_get_extra_args)
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse extra args input");
 
+	// Get left over arguments.
 	extra_args = cargo_get_args(cargo, &argc);
 	cargo_assert(extra_args != NULL, "Got NULL extra args");
+
 	printf("argc = %lu\n", argc);
 	cargo_assert(argc == 3, "Expected argc == 3");
 	cargo_assert_str_array(argc, 3, extra_args, extra_args_expect);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_get_unknown_opts)
+{
+	size_t unknown_count = 0;
+	char **unknown_opts = NULL;
+	char *unknown_opts_expect[] = { "-b", "-c" };
+	int i;
+	char *args[] = { "program", "-a", "1", "-b", "-c", "3" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succeeded parsing with unknown options");
+
+	// Get left over arguments.
+	unknown_opts = cargo_get_unknown(cargo, &unknown_count);
+	cargo_assert(unknown_opts != NULL, "Got NULL unknown options");
+
+	printf("Unknown option count = %lu\n", unknown_count);
+	cargo_assert(unknown_count == 2, "Unknown option count == 2");
+	cargo_assert_str_array(unknown_count, 2, unknown_opts, unknown_opts_expect);
 
 	_TEST_CLEANUP();
 }
@@ -2725,6 +2858,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_print_usage),
+	CARGO_ADD_TEST(TEST_get_usage_settings),
+	CARGO_ADD_TEST(TEST_autohelp_default),
+	CARGO_ADD_TEST(TEST_autohelp_off),
 	CARGO_ADD_TEST(TEST_get_usage),
 	CARGO_ADD_TEST(TEST_get_usage_missing_arg),
 	CARGO_ADD_TEST(TEST_get_usage_size_only),
@@ -2733,7 +2869,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_misspelled_argument),
 	CARGO_ADD_TEST(TEST_max_option_count),
 	CARGO_ADD_TEST(TEST_add_duplicate_option),
-	CARGO_ADD_TEST(TEST_get_extra_args)
+	CARGO_ADD_TEST(TEST_get_extra_args),
+	CARGO_ADD_TEST(TEST_get_unknown_opts)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -2851,12 +2988,15 @@ int main(int argc, char **argv)
 		t = &tests[test_index];
 		t->ran = 1;
 
-		fprintf(stderr, "%sTest %2d:%s\n",
+		fprintf(stderr, "\n%sStart Test %2d:%s\n",
 			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET);
 
-		fprintf(stderr, "%s\n", ANSI_COLOR_DARK_GRAY);
+		fprintf(stderr, "%s", ANSI_COLOR_DARK_GRAY);
 		t->error = t->f();
-		fprintf(stderr, "%s\n", ANSI_COLOR_RESET);
+		fprintf(stderr, "%s", ANSI_COLOR_RESET);
+
+		fprintf(stderr, "%sEnd Test %2d:%s ",
+			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET);
 
 		if (t->error)
 		{
@@ -2866,7 +3006,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			printf("[%sSUCCESS%s]\n",
+			fprintf(stderr, "[%sSUCCESS%s]\n",
 				ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
 
 			success_count++;
