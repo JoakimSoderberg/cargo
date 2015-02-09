@@ -855,6 +855,30 @@ fail:
 	return ret;
 }
 
+static void _cargo_free_str_list(char ***s, size_t *count)
+{
+	size_t i;
+
+	if (!s || !*s)
+		goto done;
+
+	// Only free elements if we have a count.
+	if (count)
+	{
+		for (i = 0; i < *count; i++)
+		{
+			free((*s)[i]);
+			(*s)[i] = NULL;
+		}
+	}
+
+	free(*s);
+	*s = NULL;
+done:
+	if (count)
+		*count = 0;
+}
+
 static char **_cargo_split(cargo_t ctx, char *s,
 							const char *splitchars, size_t *count)
 {
@@ -904,38 +928,8 @@ static char **_cargo_split(cargo_t ctx, char *s,
 
 	return ss;
 fail:
-	for (i = 0; i < *count; i++)
-	{
-		free(ss[i]);
-		ss[i] = NULL;
-	}
-	free(ss);
-	ss = NULL;
-	return ss;
-}
-
-static void _cargo_free_str_list(char ***s, size_t *count)
-{
-	size_t i;
-
-	if (!s || !*s)
-		goto done;
-
-	// Only free elements if we have a count.
-	if (count)
-	{
-		for (i = 0; i < *count; i++)
-		{
-			free((*s)[i]);
-			(*s)[i] = NULL;
-		}
-	}
-
-	free(*s);
-	*s = NULL;
-done:
-	if (count)
-		*count = 0;
+	_cargo_free_str_list(&ss, count);
+	return NULL;
 }
 
 static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
