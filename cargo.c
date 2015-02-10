@@ -187,7 +187,8 @@ typedef struct cargo_s
 	size_t max_width;
 	cargo_format_t format;
 
-	int i;
+	int i;	// argv index.
+	int j;	// sub-argv index (when getting arguments for options)
 	int argc;
 	char **argv;
 
@@ -444,10 +445,57 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
+static void _cargo_fprint_args(cargo_t ctx, FILE *f, int highlight)
+{
+	// TODO: Write this to a string buffer instead!
+	int i;
+	size_t indentopt = 0;
+	size_t indentarg = 0;
+	size_t curlen = 0;
+	assert(ctx);
+
+	if (highlight > ctx->argc)
+	{
+		highlight = -1;
+	}
+	CARGODBG(2, "argc: %d\n", ctx->argc);
+
+	for (i = 0; i < ctx->argc; i++)
+	{
+		fprintf(f, "%s ", ctx->argv[i]);
+
+		if (highlight)
+		{
+			curlen = strlen(ctx->argv[i]) + 1; // + 1 for space.
+			indentopt += (i < ctx->i) ? curlen : 0;
+			indentarg += (i < ctx->j) ? curlen : 0;
+		}
+	}
+
+	fprintf(f, "\n");
+
+	if (highlight > 0)
+	{
+		const char argh[] = "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^";
+		const char opth[] = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~";
+		int arglen = (int)strlen(ctx->argv[ctx->j]);
+		int optlen = (int)strlen(ctx->argv[ctx->i]);
+
+		// Highlight option.
+		fprintf(f, "%*s%*.*s", (int)indentopt, "", optlen, optlen, opth);
+
+		// Highlight arg.
+		fprintf(f, "%*s%*.*s\n",
+			(int)(indentarg - indentopt - optlen), "", arglen, arglen, argh);
+	}
+}
+
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
 	void *target;
+	char *end = NULL;
+	assert(ctx);
 
 	if ((opt->type != CARGO_BOOL) 
 		&& (opt->target_idx >= opt->max_target_count))
@@ -506,8 +554,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		target = (void *)opt->target;
 	}
 
-	errno = 0;
-
 	switch (opt->type)
 	{
 		default: return -1;
@@ -517,28 +563,28 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 		case CARGO_INT:
 		{
-			char *end = NULL;
 			CARGODBG(2, "      int %s\n", val);
 			((int *)target)[opt->target_idx] = strtol(val, &end, 10);
-			if (end == val)
-			{
-				CARGODBG(1, "Cannot convert \"%s\" to an integer\n", val);
-				return -1;
-			}
 			break;
 		}
 		case CARGO_UINT:
+		{
 			CARGODBG(2, "      uint %s\n", val);
-			((unsigned int *)target)[opt->target_idx] = strtoul(val, NULL, 10);
+			((unsigned int *)target)[opt->target_idx] = strtoul(val, &end, 10);
 			break;
+		}
 		case CARGO_FLOAT:
+		{
 			CARGODBG(2, "      float %s\n", val);
-			((float *)target)[opt->target_idx] = (float)atof(val);
+			((float *)target)[opt->target_idx] = (float)strtof(val, &end);
 			break;
+		}
 		case CARGO_DOUBLE:
+		{
 			CARGODBG(2, "      double %s\n", val);
-			((double *)target)[opt->target_idx] = (double)atof(val);
+			((double *)target)[opt->target_idx] = (double)strtod(val, &end);
 			break;
+		}
 		case CARGO_STRING:
 			CARGODBG(2, "      string \"%s\"\n", val);
 			if (opt->alloc)
@@ -575,10 +621,15 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 	}
 
-	if (errno != 0)
+	// This indicates error for the strtox functions.
+	if (end == val)
 	{
-		fprintf(stderr, "Failed to parse \"%s\", expected %s. %s.\n", 
-				val, _cargo_type_map[opt->type], strerror(errno));
+		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
+				val, _cargo_type_map[opt->type]);
+
+		_cargo_fprint_args(ctx, stderr, ctx->i);
+		fprintf(stderr, "Cannot parse \"%s\" as %s for option %s\n",
+				val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
 		return -1;
 	}
 
@@ -621,7 +672,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	int ret;
 	int args_to_look_for;
 	int start = (ctx->i + 1);
-	int j;
 	
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
@@ -658,13 +708,13 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	CARGODBG(3, "   Start %d, End %d (argc %d, nargs %d)\n",
 			start, (start + args_to_look_for), argc, opt->nargs);
 
-	j = start;
+	ctx->j = start;
 
 	if (opt->nargs == 0)
 	{
 		if (_cargo_zero_args_allowed(opt))
 		{
-			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
+			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 			{
 				CARGODBG(1, "Failed to set value for 0 arg\n");
 				return -1;
@@ -675,13 +725,13 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	{
 		// Read until we find another option, or we've "eaten" the
 		// arguments we want.
-		for (j = start; j < (start + args_to_look_for); j++)
+		for (ctx->j = start; ctx->j < (start + args_to_look_for); ctx->j++)
 		{
-			CARGODBG(3, "    argv[%i]: %s\n", j, argv[j]);
+			CARGODBG(3, "    argv[%i]: %s\n", ctx->j, argv[ctx->j]);
 
-			if (_cargo_is_another_option(ctx, argv[j]))
+			if (_cargo_is_another_option(ctx, argv[ctx->j]))
 			{
-				if ((j == ctx->i) && !_cargo_zero_args_allowed(opt))
+				if ((ctx->j == ctx->i) && !_cargo_zero_args_allowed(opt))
 				{
 					fprintf(stderr, "No argument specified for %s. "
 									"%d expected.\n",
@@ -696,7 +746,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 				break;
 			}
 
-			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[j])) < 0)
+			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 			{
 				CARGODBG(1, "Failed to set target value for %s: \n", name);
 				return -1;
@@ -711,8 +761,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 
 	// Number of arguments read.
-	CARGODBG(2, "_cargo_parse_option return %d\n", (j - start));
-	return (j - start); 
+	CARGODBG(2, "_cargo_parse_option return %d\n", (ctx->j - start));
+	return (ctx->j - start); 
 }
 
 static const char *_cargo_check_options(cargo_t ctx,
@@ -2865,6 +2915,23 @@ _TEST_START(TEST_cargo_split)
 }
 _TEST_END()
 
+_TEST_START(TEST_parse_invalid_value)
+{
+	int i;
+	int j;
+	char *args[] = { "program", "--alpha", "1", "--beta", "a" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed invalid value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2917,7 +2984,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_duplicate_option),
 	CARGO_ADD_TEST(TEST_get_extra_args),
 	CARGO_ADD_TEST(TEST_get_unknown_opts),
-	CARGO_ADD_TEST(TEST_cargo_split)
+	CARGO_ADD_TEST(TEST_cargo_split),
+	CARGO_ADD_TEST(TEST_parse_invalid_value)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
