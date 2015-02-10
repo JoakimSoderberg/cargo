@@ -454,12 +454,6 @@ static void _cargo_fprint_args(cargo_t ctx, FILE *f, int highlight)
 	size_t curlen = 0;
 	assert(ctx);
 
-	if (highlight > ctx->argc)
-	{
-		highlight = -1;
-	}
-	CARGODBG(2, "argc: %d\n", ctx->argc);
-
 	for (i = 0; i < ctx->argc; i++)
 	{
 		fprintf(f, "%s ", ctx->argv[i]);
@@ -496,15 +490,15 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	void *target;
 	char *end = NULL;
 	assert(ctx);
+	assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_STRING));
 
 	if ((opt->type != CARGO_BOOL) 
 		&& (opt->target_idx >= opt->max_target_count))
 	{
+		CARGODBG(1, "Target index out of bounds (%lu > max %lu)\n",
+				opt->target_idx, opt->max_target_count);
 		return 1;
 	}
-
-	if ((opt->type < CARGO_BOOL) || (opt->type > CARGO_STRING))
-		return -1;
 
 	CARGODBG(2, "_cargo_set_target_value:\n");
 	CARGODBG(2, "  alloc: %d\n", opt->alloc);
@@ -556,11 +550,12 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 
 	switch (opt->type)
 	{
-		default: return -1;
 		case CARGO_BOOL:
+		{
 			CARGODBG(2, "%s", "      bool\n");
 			((int *)target)[opt->target_idx] = 1;
 			break;
+		}
 		case CARGO_INT:
 		{
 			CARGODBG(2, "      int %s\n", val);
@@ -716,7 +711,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		{
 			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 			{
-				CARGODBG(1, "Failed to set value for 0 arg\n");
+				CARGODBG(1, "Failed to set value for no argument option\n");
 				return -1;
 			}
 		}
@@ -2384,6 +2379,7 @@ _TEST_END()
 
 _TEST_START(TEST_add_static_bool_array_option)
 {
+	// TODO: Hmmmm don't support this, bools should be for flags only.
 	int a[3];
 	int a_expect[3] = { 1, 1, 1 };
 	char *args[] = { "program", "--beta", "1", "2", "3" };
