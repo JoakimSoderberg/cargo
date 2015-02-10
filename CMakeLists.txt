@@ -4,6 +4,7 @@ project(cargo C)
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
 option(CARGO_EXAMPLE "Build example application" ON)
+option(CARGO_HELPER "Build cargo formatting helper" ON)
 option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
 
 option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind" ON)
@@ -38,7 +39,12 @@ endif()
 
 if (CARGO_EXAMPLE)
 	add_executable(cargo cargo.c cargo.h)
-	set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=ON")
+	set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1")
+endif()
+
+if (CARGO_HELPER)
+	add_executable(cargo_helper cargo.c cargo.h)
+	set_target_properties(cargo_helper PROPERTIES COMPILE_DEFINITIONS "CARGO_HELPER=1")
 endif()
 
 if (CARGO_TEST)

@@ -87,7 +87,7 @@ int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 	return r;
 }
 
-#if 0
+#if 1
 int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 {
 	int r;
@@ -3216,5 +3216,245 @@ fail:
 	return ret;
 }
 
-#endif // CARGO_EXAMPLE
+#elif defined(CARGO_HELPER)
+
+int main(int argc, char **argv)
+{
+	int ret = 0;
+	char *fmt = NULL;
+	char *end = NULL;
+	char arrsize[1024];
+	char lenstr[1024];
+	char varname[1024];
+	cargo_type_t types[3];
+	size_t type_count = 0;
+	int array = 0;
+	int alloc = 0;
+	int static_str = 0;
+	size_t example_count = 1;
+	size_t i;
+	size_t j;
+
+	if (argc < 2)
+	{
+		fprintf(stderr, "%s: <variable declaration>\n", argv[0]);
+		return -1;
+	}
+
+	fmt = argv[1];
+
+	printf("%s;\n", fmt);
+
+	while (isspace(*fmt)) fmt++;
+
+	// Get type.
+	if (!strncmp(fmt, "int", 3))
+	{
+		types[type_count++] = CARGO_INT;
+		types[type_count++] = CARGO_BOOL;
+		fmt += 3;
+	}
+	else if (!strncmp(fmt, "char", 4))
+	{
+		types[type_count++] = CARGO_STRING;
+		fmt += 4;
+	}
+	else if (!strncmp(fmt, "float", 5))
+	{
+		types[type_count++] = CARGO_FLOAT;
+		fmt += 5;
+	}
+	else if (!strncmp(fmt, "double", 6))
+	{
+		types[type_count++] = CARGO_DOUBLE;
+		fmt += 6;
+	}
+	else if (!strncmp(fmt, "unsigned int", 12))
+	{
+		types[type_count++] = CARGO_UINT;
+		fmt += 12;
+	}
+
+	while (isspace(*fmt)) fmt++;
+
+	// Set array and alloc status.
+	if (types[0] == CARGO_STRING)
+	{
+		if (!strncmp(fmt, "**", 2))
+		{
+			alloc = 1;
+			array = 1;
+			fmt += 2;
+		}
+		else if (*fmt == '*')
+		{
+			alloc = 1;
+			fmt++;
+		}
+	}
+	else
+	{
+		if (*fmt == '*')
+		{
+			alloc = 1;
+			array = 1;
+			// We can't have CARGO_BOOL arrays.
+			if (types[0] == CARGO_INT)
+				type_count--;
+
+			fmt++;
+		}
+	}
+
+	// Get var name.
+	if ((end = strchr(fmt, '[')) != NULL)
+	{
+		cargo_snprintf(varname, sizeof(varname), "%.*s", (end - fmt), fmt);
+	}
+	else
+	{
+		cargo_snprintf(varname, sizeof(varname), "%s", fmt);
+	}
+
+	// Get variable name.
+	if ((end = strchr(fmt, '[')) != NULL)
+	{
+		char *start = end + 1;
+		array = 1;
+
+		// We can't have CARGO_BOOL arrays.
+		if (types[0] == CARGO_INT)
+			type_count--;
+
+		if ((end = strchr(fmt, ']')) == NULL)
+		{
+			fprintf(stderr, "Missing ']'\n");
+			ret = -1; goto fail;
+		}
+
+		cargo_snprintf(arrsize, sizeof(arrsize), "%.*s", (end - start), start);
+
+		if (types[0] == CARGO_STRING)
+		{
+			if (alloc)
+			{
+				fprintf(stderr, "You cannot use string arrays of this format\n");
+				ret = -1; goto fail;
+			}
+
+			if ((end = strchr(start, '[')) != NULL)
+			{
+				// We have an array of strings.
+				// char bla[COUNT][LENSTR];
+				start = end + 1;
+
+				if ((end = strchr(start, ']')) == NULL)
+				{
+					fprintf(stderr, "Missing ']'\n");
+					ret = -1; goto fail;
+				}
+
+				static_str = 1;
+				cargo_snprintf(lenstr, sizeof(lenstr), "%.*s", (end - start), start);
+			}
+			else
+			{
+				// This is not an array, simply a static string.
+				// char bla[123];
+				array = 0;
+				static_str = 1;
+				cargo_snprintf(lenstr, sizeof(lenstr), "%s", arrsize);
+			}
+		}
+
+		if (strlen(arrsize) == 0)
+		{
+			cargo_snprintf(arrsize, sizeof(arrsize), "sizeof(%s) / sizeof(%s[0])",
+							varname, varname);
+		}
+	}
+
+	if ((types[0] == CARGO_STRING) && !array && !alloc)
+	{
+		fprintf(stderr, "\"char\" is not a valid variable type by itself, did you mean \"char *\"?\n");
+		return -1;
+	}
+
+	if (alloc) example_count++;
+	if (array) printf("size_t %s_count;\n", varname);
+
+	// TODO: Create extra examples for [s#]#
+	//if ((types[0] == CARGO_STRING)) example_count += 2;
+
+	#define IS_EXTRA_EXAMPLE(num) (j == num)
+
+	for (j = 0; j < example_count; j++)
+	{
+		for (i = 0; i < type_count; i++)
+		{
+			printf("cargo_add_option(cargo, \"--%s", varname);
+			if (strlen(varname) > 1) printf(" %c", varname[0]);
+			printf("\", \"Description of %s\", \"", varname);
+
+			if (!alloc)
+			{
+				if (static_str || array)
+					printf(".");
+			}
+
+			if (array) printf("[");
+
+			printf("%c", _cargo_type_map[types[i]][0]);
+
+			if (array && static_str) printf("#");
+			if (array) printf("]");
+
+			if (array && IS_EXTRA_EXAMPLE(1))
+			{
+				printf("#");
+			}
+			else
+			{
+				if (array) printf("+");
+			}
+
+			printf("\", &%s", varname);
+
+			if (static_str) printf(", %s", lenstr);
+
+			if (array)
+			{
+				printf(", &%s_count", varname);
+
+				if (!alloc)
+				{
+					printf(", %s", arrsize);
+				}
+			}
+
+			if (array && alloc && IS_EXTRA_EXAMPLE(1))
+			{
+				printf(", 128");
+			}
+
+			printf(");");
+
+			if (array && alloc && IS_EXTRA_EXAMPLE(1))
+			{
+				printf(" // Allocated with max length 128.");
+			}
+			else if (array && alloc)
+			{
+				printf(" // Allocated unlimited length.");
+			}
+
+			printf("\n");
+		}
+	}
+
+fail:
+	return ret;
+}
+
+#endif // CARGO_HELPER
 // LCOV_EXCL_END
