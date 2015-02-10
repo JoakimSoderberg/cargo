@@ -2519,6 +2519,23 @@ _TEST_START(TEST_add_alloc_dynamic_int_array_option)
 }
 _TEST_END()
 
+_TEST_START(TEST_add_alloc_dynamic_int_array_option_noargs)
+{
+	int *a = NULL;
+	char *args[] = { "program", "--beta" };
+	size_t count;
+
+	ret = cargo_add_option(cargo, "--beta -b", "Description", "[i]+",
+							&a, &count);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Successfully parsed when no args");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // Misc output tests.
 //
@@ -2970,6 +2987,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option_noargs),
 	CARGO_ADD_TEST(TEST_print_usage),
 	CARGO_ADD_TEST(TEST_get_usage_settings),
 	CARGO_ADD_TEST(TEST_autohelp_default),
