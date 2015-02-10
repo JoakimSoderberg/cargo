@@ -3185,33 +3185,6 @@ int main(int argc, char **argv)
 	return (num_tests - success_count);
 }
 
-#elif defined(CARGO_EXAMPLE)
-
-typedef struct args_s
-{
-	int a;
-} args_t;
-
-int main(int argc, char **argv)
-{
-	size_t i;
-	int ret = 0;
-	cargo_t cargo;
-	args_t args;
-	char **extra_args;
-	size_t extra_count;
-
-	cargo_init(&cargo, argv[0]);
-
-	// TODO: Make a real example.
-
-	cargo_print_usage(cargo);
-done:
-fail:
-	cargo_destroy(&cargo);
-	return ret;
-}
-
 #elif defined(CARGO_HELPER)
 
 int main(int argc, char **argv)
@@ -3452,5 +3425,33 @@ fail:
 	return ret;
 }
 
-#endif // CARGO_HELPER
+#elif defined(CARGO_EXAMPLE)
+
+typedef struct args_s
+{
+	int a;
+} args_t;
+
+int main(int argc, char **argv)
+{
+	size_t i;
+	int ret = 0;
+	cargo_t cargo;
+	args_t args;
+	char **extra_args;
+	size_t extra_count;
+
+	cargo_init(&cargo, argv[0]);
+
+	// TODO: Make a real example.
+
+	cargo_print_usage(cargo);
+done:
+fail:
+	cargo_destroy(&cargo);
+	return ret;
+}
+
+#endif // CARGO_EXAMPLE
+
 // LCOV_EXCL_END
