@@ -23,8 +23,18 @@
 		fprintf(stderr, "[cargo.c:%4d]: " fmt, __LINE__, ##__VA_ARGS__);	\
 	}																		\
 }
+
+#define CARGODBGI(level, fmt, ...)											\
+{																			\
+	if (level <= CARGO_DEBUG)												\
+	{																		\
+		fprintf(stderr, fmt, ##__VA_ARGS__);								\
+	}																		\
+}
+
 #else
 #define CARGODBG(level, fmt, ...)
+#define CARGODBGI(level, fmt, ...)
 #endif
 
 #ifndef va_copy
@@ -1424,7 +1434,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 			for (k = start; k < (start + ate ); k++)
 			{
-				CARGODBG(2, "\"%s\" ", argv[k]);
+				CARGODBGI(2, "\"%s\" ", argv[k]);
 			}
 
 			CARGODBG(2, "%s", "\n");
@@ -2945,6 +2955,44 @@ _TEST_START(TEST_parse_invalid_value)
 }
 _TEST_END()
 
+_TEST_START(TEST_advanced_parse)
+{
+	size_t i = 0;
+	int flag = 0;
+	int ports[3];
+	size_t ports_count = 0;
+	char *name = NULL;
+	char **vals = NULL;
+	size_t vals_count = 0;
+	char *args[] =
+	{
+		"program",
+		"--ports", "22", "24", "26",
+		"--vals", "abc", "def", "123456789101112", "ghi", "jklmnopq",
+		"--name", "server"
+	};
+
+	ret |= cargo_add_option(cargo, "--ports -p", "Ports", ".[i]#",
+							&ports, &ports_count, sizeof(ports) / sizeof(ports[0]));
+	ret |= cargo_add_option(cargo, "--name -n", "Name", "s", &name);
+	ret |= cargo_add_option(cargo, "--vals -v", "Description of vals", "[s]+",
+							&vals, &vals_count);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse advanced example");
+
+	_TEST_CLEANUP();
+	for (i = 0; i < vals_count; i++)
+	{
+		free(vals[i]);
+	}
+
+	free(vals);
+	free(name);
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -2999,7 +3047,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_get_extra_args),
 	CARGO_ADD_TEST(TEST_get_unknown_opts),
 	CARGO_ADD_TEST(TEST_cargo_split),
-	CARGO_ADD_TEST(TEST_parse_invalid_value)
+	CARGO_ADD_TEST(TEST_parse_invalid_value),
+	CARGO_ADD_TEST(TEST_advanced_parse)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -3343,7 +3392,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if ((types[0] == CARGO_STRING) && !array && !alloc)
+	if ((types[0] == CARGO_STRING) && !array && !alloc && !static_str)
 	{
 		fprintf(stderr, "\"char\" is not a valid variable type by itself, did you mean \"char *\"?\n");
 		return -1;
@@ -3355,14 +3404,14 @@ int main(int argc, char **argv)
 	// TODO: Create extra examples for [s#]#
 	//if ((types[0] == CARGO_STRING)) example_count += 2;
 
-	#define IS_EXTRA_EXAMPLE(num) (j == num)
+	#define IS_EXTRA_EXAMPLE(num) ((j % 2) == 0)
 
 	for (j = 0; j < example_count; j++)
 	{
 		for (i = 0; i < type_count; i++)
 		{
 			printf("cargo_add_option(cargo, \"--%s", varname);
-			if (strlen(varname) > 1) printf(" %c", varname[0]);
+			if (strlen(varname) > 1) printf(" -%c", varname[0]);
 			printf("\", \"Description of %s\", \"", varname);
 
 			if (!alloc)
@@ -3384,7 +3433,7 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				if (array) printf("+");
+				if (array && alloc) printf("+");
 			}
 
 			printf("\", &%s", varname);
