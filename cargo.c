@@ -1561,7 +1561,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	// What should the above width be.
 	if (!(namebufs = calloc(ctx->opt_count, sizeof(char *))))
 	{
-		CARGODBG(1, "Out of memory!\n");
+		CARGODBG(1, "Out of memory allocating %lu options!\n", ctx->opt_count);
 		return NULL;
 	}
 
