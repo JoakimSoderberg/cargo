@@ -1243,18 +1243,32 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 
 	if (max_width == CARGO_AUTO_MAX_WIDTH)
 	{
+		CARGODBG(2, "User specified CARGO_AUTO_MAX_WIDTH\n");
+
 		if ((console_width = cargo_get_console_width()) > 0)
 		{
+			CARGODBG(2, "Max width based on console width\n");
 			ctx->max_width = console_width;
 		}
 		else
 		{
+			CARGODBG(2, "Max width set to CARGO_DEFAULT_MAX_WIDTH\n");
 			ctx->max_width = CARGO_DEFAULT_MAX_WIDTH;
 		}
 	}
 	else
 	{
+		CARGODBG(2, "User specified max width\n");
 		ctx->max_width = max_width;
+	}
+
+	// Since we allocate memory based on this later on, make sure this
+	// is something sane. Anything above 1024 characters is more than enough.
+	// Also some systems might have a really big console width for instance.
+	// (This happened on drone.io continous integration service).
+	if (ctx->max_width > CARGO_MAX_MAX_WIDTH)
+	{
+		ctx->max_width = CARGO_MAX_MAX_WIDTH;
 	}
 
 	CARGODBG(2, "Usage max width: %lu\n", console_width);

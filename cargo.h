@@ -62,6 +62,7 @@ void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
 
 #define CARGO_DEFAULT_MAX_WIDTH 80
 #define CARGO_AUTO_MAX_WIDTH 0
+#define CARGO_MAX_MAX_WIDTH 1024
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width);
 
