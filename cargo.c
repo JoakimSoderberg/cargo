@@ -1239,7 +1239,9 @@ fail:
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width)
 {
-	size_t console_width;
+	int console_width;
+
+	ctx->max_width = CARGO_DEFAULT_MAX_WIDTH;
 
 	if (max_width == CARGO_AUTO_MAX_WIDTH)
 	{
@@ -1247,18 +1249,18 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 
 		if ((console_width = cargo_get_console_width()) > 0)
 		{
-			CARGODBG(2, "Max width based on console width\n");
+			CARGODBG(2, "Max width based on console width: %d\n", console_width);
 			ctx->max_width = console_width;
 		}
 		else
 		{
-			CARGODBG(2, "Max width set to CARGO_DEFAULT_MAX_WIDTH\n");
-			ctx->max_width = CARGO_DEFAULT_MAX_WIDTH;
+			CARGODBG(2, "Max width set to CARGO_DEFAULT_MAX_WIDTH = %d\n",
+					CARGO_DEFAULT_MAX_WIDTH);
 		}
 	}
 	else
 	{
-		CARGODBG(2, "User specified max width\n");
+		CARGODBG(2, "User specified max width: %lu\n", max_width);
 		ctx->max_width = max_width;
 	}
 
@@ -1268,10 +1270,11 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	// (This happened on drone.io continous integration service).
 	if (ctx->max_width > CARGO_MAX_MAX_WIDTH)
 	{
+		CARGODBG(2, "Max width too large, capping at: %d\n", CARGO_MAX_MAX_WIDTH);
 		ctx->max_width = CARGO_MAX_MAX_WIDTH;
 	}
 
-	CARGODBG(2, "Usage max width: %lu\n", console_width);
+	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
 int cargo_init(cargo_t *ctx, const char *progname)
