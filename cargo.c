@@ -97,7 +97,7 @@ int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 	return r;
 }
 
-#if 1
+#if CARGO_HELPER // Only used by this...
 int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 {
 	int r;
@@ -162,6 +162,16 @@ int cargo_appendf(cargo_str_t *str, const char *fmt, ...)
 	return ret;
 }
 
+typedef enum cargo_type_e
+{
+	CARGO_BOOL = 0,
+	CARGO_INT = 1,
+	CARGO_UINT = 2,
+	CARGO_FLOAT = 3,
+	CARGO_DOUBLE = 4,
+	CARGO_STRING = 5
+} cargo_type_t;
+
 static const char *_cargo_type_map[] = 
 {
 	"bool",
@@ -219,9 +229,10 @@ typedef struct cargo_s
 
 static size_t _cargo_get_type_size(cargo_type_t t)
 {
+	assert((t >= CARGO_BOOL) && (t <= CARGO_STRING));
+
 	switch (t)
 	{
-		default: assert(1 == 0);
 		case CARGO_BOOL: 
 		case CARGO_INT: return sizeof(int);
 		case CARGO_UINT: return sizeof(unsigned int);
@@ -266,6 +277,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	size_t j;
 	cargo_opt_t *opt;
 
+	// TODO: Hmm how about for positional arguments?
 	if (!_cargo_starts_with_prefix(ctx, name))
 		return -1;
 
@@ -807,6 +819,46 @@ static int _cargo_compare_strlen(const void *a, const void *b)
 	return alen - blen;
 }
 
+static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, size_t bufsize)
+{
+	int j = 0;
+	int i = 0;
+	char metavarname[20];
+	cargo_str_t str = { buf, bufsize, 0 };
+	assert(ctx);
+	assert(opt);
+
+	while (_cargo_is_prefix(ctx, opt->name[0][i]))
+	{
+		i++;
+	}
+
+	while (opt->name[0][i] && (j < (sizeof(metavarname) - 1)))
+	{
+		metavarname[j++] = toupper(opt->name[0][i++]);
+	}
+
+	metavarname[j] = '\0';
+
+	if (opt->nargs < 0)
+	{
+		// List the number of arguments.
+		if (cargo_appendf(&str, "%s [%s ...]", metavarname, metavarname) < 0)
+			return -1;
+	}
+	else if (opt->nargs > 0)
+	{
+		if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+
+		for (i = 1; (int)i < opt->nargs; i++)
+		{
+			if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+		}
+	}
+
+	return 0;
+}
+
 static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	char *namebuf, size_t buf_size)
 {
@@ -849,7 +901,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	// If the option has an argument, add a "metavar".
 	if (!_cargo_zero_args_allowed(opt))
 	{
-		char metavarbuf[20];
+		char metavarbuf[256];
 		const char *metavar = NULL;
 
 		if (opt->metavar)
@@ -858,41 +910,11 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		}
 		else
 		{
-			// Got no user supplied metavar, simply use the
-			// option name in upper case instead.
-			int j = 0;
-			i = 0;
-
-			while (_cargo_is_prefix(ctx, opt->name[0][i]))
-			{
-				i++;
-			}
-
-			while (opt->name[0][i] && (j < (sizeof(metavarbuf)-1)))
-			{
-				metavarbuf[j++] = toupper(opt->name[0][i++]);
-			}
-
-			metavarbuf[j] = '\0';
+			_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf));
 			metavar = metavarbuf;
 		}
 
-		if (opt->nargs < 0)
-		{
-			// List the number of arguments.
-			if (cargo_appendf(&str, " [%s ...]", metavar) < 0) goto fail;
-		}
-		else if (opt->nargs > 0)
-		{
-			if (cargo_appendf(&str, " [%s", metavar) < 0) goto fail;
-
-			for (i = 1; (int)i < opt->nargs; i++)
-			{
-				if (cargo_appendf(&str, " %s", metavar) < 0) goto fail;
-			}
-
-			if (cargo_appendf(&str, "]") < 0) goto fail;
-		}
+		cargo_appendf(&str, " %s", metavar);
 	}
 
 	ret = strlen(namebuf);
@@ -1511,20 +1533,20 @@ char **cargo_get_args(cargo_t ctx, size_t *argc)
 	return ctx->args;
 }
 
-int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
+int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 {
 	int opt_i;
 	int name_i;
 	cargo_opt_t *opt;
 	assert(ctx);
 
-	if (_cargo_find_option_name(ctx, name, &opt_i, &name_i))
+	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
 	{
-		CARGODBG(1, "Failed alias %s to %s, not found.\n", name, alias);
+		CARGODBG(1, "Failed alias %s to %s, not found.\n", optname, alias);
 		return -1;
 	}
 
-	CARGODBG(2, "Found option \"%s\"\n", name);
+	CARGODBG(2, "Found option \"%s\"\n", optname);
 
 	opt = &ctx->options[opt_i];
 
@@ -1543,6 +1565,25 @@ int cargo_add_alias(cargo_t ctx, const char *name, const char *alias)
 	opt->name_count++;
 
 	CARGODBG(2, "  Added alias \"%s\"\n", alias);
+
+	return 0;
+}
+
+int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
+{
+	int opt_i;
+	int name_i;
+	cargo_opt_t *opt;
+	assert(ctx);
+
+	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
+	{
+		CARGODBG(1, "Failed to find option \"%s\"\n", optname);
+		return -1;
+	}
+
+	opt = &ctx->options[opt_i];
+	opt->metavar = metavar;
 
 	return 0;
 }
@@ -2568,7 +2609,9 @@ _TEST_START(TEST_print_usage)
 	size_t a_count = 0;
 	float b;
 	double c;
-	char *s;
+	char *s = NULL;
+	int *vals = NULL;
+	size_t val_count = 0;
 
  	ret |= cargo_add_option(cargo, "--alpha -a",
 			"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
@@ -2586,6 +2629,7 @@ _TEST_START(TEST_print_usage)
 			"Shorter description", 
 			"f",
 			&b);
+	ret |= cargo_set_metavar(cargo, "--beta", "FLOAT");
 
  	ret |= cargo_add_option(cargo, "--call_this_a_long_option_that_wont_fit -c",
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
@@ -2602,6 +2646,11 @@ _TEST_START(TEST_print_usage)
 			"dicta sunt explicabo", 
 			"s",
 			&s);
+
+ 	ret |= cargo_add_option(cargo, "--vals -v",
+			"Shorter description",
+			"[ i ]+",
+			&vals, &val_count);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_epilog(cargo, "That's it!");

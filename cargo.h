@@ -4,16 +4,6 @@
 
 #include <stdio.h>
 
-typedef enum cargo_type_e
-{
-	CARGO_BOOL = 0,
-	CARGO_INT = 1,
-	CARGO_UINT = 2,
-	CARGO_FLOAT = 3,
-	CARGO_DOUBLE = 4,
-	CARGO_STRING = 5
-} cargo_type_t;
-
 #define CARGO_NAME_COUNT 4
 #define CARGO_DEFAULT_PREFIX "-"
 #define CARGO_DEFAULT_MAX_OPTS 32
@@ -21,7 +11,7 @@ typedef enum cargo_type_e
 typedef struct cargo_s *cargo_t;
 
 #define CARGO_NARGS_ONE_OR_MORE 	-1
-#define CARGO_NARGS_NONE_OR_MORE	-2
+#define CARGO_NARGS_NONE_OR_MORE	-2 // TODO: Remove this?
 
 typedef enum cargo_copy_type_e
 {
@@ -44,7 +34,9 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 int cargo_add_option(cargo_t ctx, const char *optnames,
 					 const char *description, const char *fmt, ...);
 
-int cargo_add_alias(cargo_t ctx, const char *name, const char *alias);
+int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
+
+int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
