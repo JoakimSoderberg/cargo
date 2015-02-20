@@ -456,10 +456,11 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	{
 		name = opt->name[i];
 
-		CARGODBG(3, "    Check name \"%s\"\n", name);
+		CARGODBG(3, "    %10s == %s ?\n", name, arg);
 
 		if (!strcmp(name, arg))
 		{
+			CARGODBG(3, "          Match\n");
 			return name;
 		}
 	}
@@ -689,6 +690,11 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	int ret;
 	int args_to_look_for;
 	int start = (ctx->i + 1);
+
+	CARGODBG(2, "------ Parse option %s ------\n", opt->name[0]);
+	CARGODBG(2, "argc: %d\n", argc);
+	CARGODBG(2, "i: %d\n", ctx->i);
+	CARGODBG(2, "start: %d\n", start);
 	
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
@@ -708,7 +714,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		args_to_look_for = (opt->nargs - opt->target_idx);
 	}
 
-	CARGODBG(3, "  Looking for %d args\n", args_to_look_for);
+	CARGODBG(3, "Looking for %d args\n", args_to_look_for);
 
 	// Look for arguments for this option.
 	if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
@@ -721,8 +727,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		return -1;
 	}
 
-	CARGODBG(3, "  Parse %d option args for %s:\n", args_to_look_for, name);
-	CARGODBG(3, "   Start %d, End %d (argc %d, nargs %d)\n",
+	CARGODBG(3, "Start %d, End %d (argc %d, nargs %d)\n",
 			start, (start + args_to_look_for), argc, opt->nargs);
 
 	ctx->j = start;
@@ -800,7 +805,6 @@ static const char *_cargo_check_options(cargo_t ctx,
 
 		if ((name = _cargo_is_option_name(ctx, *opt, argv[i])))
 		{
-			CARGODBG(2, "  Option argv[%i]: %s\n", i, name);
 			return name;
 		}
 	}
@@ -1399,11 +1403,14 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
+	int i;
 	int start;
 	int opt_arg_count;
 	char *arg;
 	const char *name;
 	cargo_opt_t *opt = NULL;
+
+	CARGODBG(2, "============ Cargo Parse =============\n");
 
 	ctx->argc = argc;
 	ctx->argv = argv;
@@ -1416,22 +1423,35 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	_cargo_free_str_list(&ctx->unknown_opts, NULL);
 	ctx->unknown_opts_count = 0;
 
+	// Make sure we start over, if this function is
+	// called more than once.
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		ctx->options[i].target_idx = 0;
+	}
+
 	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
 	{
+		CARGODBG(1, "Out of memory!\n");
 		return -1;
 	}
 
 	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
 	{
+		CARGODBG(1, "Out of memory!\n");
 		return -1;
 	}
+
+	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
 
 	for (ctx->i = start_index; ctx->i < argc; ctx->i++)
 	{
 		arg = argv[ctx->i];
 		start = ctx->i;
 
-		CARGODBG(3, "\nargv[%d] = %s\n", ctx->i, arg);
+		CARGODBG(3, "\n");
+		CARGODBG(3, "argv[%d] = %s\n", ctx->i, arg);
+		CARGODBG(3, "  Look for opt matching %s:\n", arg);
 
 		if ((name = _cargo_check_options(ctx, &opt, argc, argv, ctx->i)))
 		{
@@ -1476,7 +1496,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 				CARGODBGI(2, "\"%s\" ", argv[k]);
 			}
 
-			CARGODBG(2, "%s", "\n");
+			CARGODBGI(2, "%s", "\n");
 		}
 		#endif // CARGO_DEBUG
 	}
@@ -2232,34 +2252,31 @@ do 									\
 do 																			\
 {																			\
 	size_t k;																\
-	cargo_assert(count == expected_count, 									\
+	printf("Check that \""#array"\" has "#expected_count" elements\n");		\
+	cargo_assert((count) == (expected_count), 								\
 		#array" array count "#count" is not expected "#expected_count);		\
-	for (k = 0; k < count; k++)												\
+	for (k = 0; k < (count); k++)											\
 	{																		\
-		cargo_assert(array[k] == array_expected[k],							\
+		cargo_assert((array)[k] == (array_expected)[k],						\
 			"Array contains unexpected value");								\
 	}																		\
 } while (0)
 
-#define cargo_assert_str_array(count, expected_count, array, array_expected)\
-do 																			\
-{																			\
-	size_t k;																\
-	cargo_assert(count == expected_count, 									\
-		#array" array count "#count" is not expected "#expected_count);		\
-	for (k = 0; k < count; k++)												\
-	{																		\
-		cargo_assert(!strcmp((char *)array[k], (char *)array_expected[k]),	\
-			"Array contains unexpected value");								\
-	}																		\
+#define cargo_assert_str_array(count, expected_count, array, array_expected)	\
+do 																				\
+{																				\
+	size_t k;																	\
+	printf("Check that \""#array"\" has "#expected_count" elements\n");			\
+	cargo_assert((count) == (expected_count), 									\
+		#array" array count "#count" is not expected "#expected_count);			\
+	for (k = 0; k < count; k++)													\
+	{																			\
+		printf("  %lu: \"%s\" -> \"%s\"\n",										\
+			k+1, (char *)(array)[k], (char *)(array_expected)[k]);				\
+		cargo_assert(!strcmp((char *)(array)[k], (char *)(array_expected)[k]),	\
+			"Array contains unexpected value");									\
+	}																			\
 } while (0)
-
-typedef struct args_s
-{
-	int a;
-	float b;
-	char *s;
-} args_t;
 
 //
 // Some helper macros for creating test functions.
@@ -3025,37 +3042,67 @@ _TEST_START(TEST_advanced_parse)
 {
 	size_t i = 0;
 	int flag = 0;
-	int ports[3];
+	#define PORTS_COUNT 3
+	int ports[PORTS_COUNT];
 	size_t ports_count = 0;
 	char *name = NULL;
 	char **vals = NULL;
 	size_t vals_count = 0;
-	char *args[] =
+
+	char *args1[] =
 	{
 		"program",
 		"--ports", "22", "24", "26",
 		"--vals", "abc", "def", "123456789101112", "ghi", "jklmnopq",
 		"--name", "server"
 	};
+	int args1_ports_expect[] = { 22, 24, 26 };
+	char *args1_vals_expect[] = { "abc", "def", "123456789101112", "ghi", "jklmnopq" };
+
+	char *args2[] =
+	{
+		"program",
+		"--vals", "abc", "def", "123456789101112", "ghi", "jklmnopq",
+		"--ports", "33", "34", "36",
+		"--name", "server"
+	};
+	int args2_ports_expect[] = { 33, 34, 36 };
 
 	ret |= cargo_add_option(cargo, "--ports -p", "Ports", ".[i]#",
-							&ports, &ports_count, sizeof(ports) / sizeof(ports[0]));
+							&ports, &ports_count, PORTS_COUNT);
 	ret |= cargo_add_option(cargo, "--name -n", "Name", "s", &name);
 	ret |= cargo_add_option(cargo, "--vals -v", "Description of vals", "[s]+",
 							&vals, &vals_count);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret == 0, "Failed to parse advanced example");
-
-	_TEST_CLEANUP();
-	for (i = 0; i < vals_count; i++)
+	printf("\nArgs 1:\n");
 	{
-		free(vals[i]);
+		ret = cargo_parse(cargo, 1, sizeof(args1) / sizeof(args1[0]), args1);
+
+		cargo_assert(ret == 0, "Failed to parse advanced example");
+		cargo_assert_array(ports_count, PORTS_COUNT, ports, args1_ports_expect);
+		cargo_assert_str_array(vals_count, 5, vals, args1_vals_expect);
+		cargo_assert(!strcmp(name, "server"), "Expected name = \"server\"");
+
+		_cargo_free_str_list(&vals, &vals_count);
+		if (name) free(name);
+		name = NULL;
+		memset(&ports, 0, sizeof(ports));
 	}
 
-	free(vals);
-	free(name);
+	printf("\nArgs 2:\n");
+	{
+		ret = cargo_parse(cargo, 1, sizeof(args2) / sizeof(args2[0]), args2);
+
+		cargo_assert(ret == 0, "Failed to parse advanced example");
+		cargo_assert_str_array(vals_count, 5, vals, args1_vals_expect);
+		cargo_assert_array(ports_count, PORTS_COUNT, ports, args2_ports_expect);
+		cargo_assert(!strcmp(name, "server"), "Expected name = \"server\"");
+	}
+
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&vals, &vals_count);
+	if (name) free(name);
 }
 _TEST_END()
 
