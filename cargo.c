@@ -3191,6 +3191,18 @@ static int _test_find_test_index(const char *name)
 	return -1;
 }
 
+static int _tests_print_usage(const char *progname)
+{
+	_test_print_names();
+	fprintf(stderr, "\nUsage: %s [test_num ...] [test_name ...]\n\n", progname);
+	fprintf(stderr, "  --list to get all available tests.\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "  Use test_num = -1 or all tests\n");
+	fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
+	fprintf(stderr, "  Return code for this usage message equals the number of available tests.\n");
+	return CARGO_NUM_TESTS;
+}
+
 int main(int argc, char **argv)
 {
 	size_t i;
@@ -3225,17 +3237,17 @@ int main(int argc, char **argv)
 				if (test_index <= 0)
 				{
 					fprintf(stderr, "Unknown test specified: \"%s\"\n", argv[i]);
-					return -1;
+					return CARGO_NUM_TESTS;
 				}
 			}
 			else
 			{
 				test_index = atoi(argv[i]);
 
-				if (test_index == 0)
+				if ((test_index == 0) || (test_index > CARGO_NUM_TESTS))
 				{
 					fprintf(stderr, "Invalid test number %s\n", argv[i]);
-					return -1;
+					return CARGO_NUM_TESTS;
 				}
 				else if (test_index < 0)
 				{
@@ -3251,14 +3263,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		_test_print_names();
-		fprintf(stderr, "\nUsage: %s [test_num ...] [test_name ...]\n\n", argv[0]);
-		fprintf(stderr, "  --list to get all available tests.\n");
-		fprintf(stderr, "\n");
-		fprintf(stderr, "  Use test_num = -1 or all tests\n");
-		fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
-		fprintf(stderr, "  Return code for this usage message equals the number of available tests.\n");
-		return CARGO_NUM_TESTS;
+		return _tests_print_usage(argv[0]);
 	}
 
 	// Run all tests.
