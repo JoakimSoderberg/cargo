@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 2.8)
 project(cargo C)
 
+
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
 option(CARGO_EXAMPLE "Build example application" ON)
@@ -52,7 +53,10 @@ if (CARGO_TEST)
 
 	if (CARGO_WITH_MEMCHECK)
 		if (WIN32)
+			cmake_policy(PUSH)
+			cmake_policy(SET CMP0053 OLD) # Allow () in the var
 			find_program(DRMEMORY_PROGRAM NAMES drmemory.exe PATHS "$ENV{ProgramFiles(x86)}/Dr. Memory/bin")
+			cmake_policy(POP)
 
 			if (NOT EXISTS ${DRMEMORY_PROGRAM})
 				message(WARNING "Dr. Memory not found! Tests will be run without memory check. Turn this warning off by installing Dr. Memory or settings -DCARGO_WITH_MEMCHECK=OFF")
