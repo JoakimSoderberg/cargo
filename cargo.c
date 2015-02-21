@@ -470,6 +470,108 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
+static int _cargo_fprint_args2(FILE *f, int argc, char **argv, int start, size_t highlight_count, ...)
+{
+	int ret = -1;
+	// TODO: Write this to a string buffer instead!
+	int i;
+	int j;
+	int global_indent = 0;
+	typedef struct cargo_highlight_s
+	{
+		int i;				// Index of highlight in argv.
+		char c;				// Highlight character.
+		int indent; 		// Indent position for highlight.
+		int highlight_len;	// Length of the highlight.
+	} cargo_highlight_t;
+	cargo_highlight_t *highlights = NULL;
+	int highlight;
+	va_list ap;
+
+	// Create a list of indices to highlight from the va_args.
+	if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
+	{
+		CARGODBG(1, "Out of memory trying to allocat %lu highlights!\n", highlight_count);
+		return -1;
+	}
+
+	va_start(ap, highlight_count);
+	for (i = 0; i < (int)highlight_count; i++)
+	{
+		highlights[i].i = va_arg(ap, int);
+		highlights[i].c = (char)va_arg(ap, int);
+	}
+	va_end(ap);
+
+	for (i = start; i < argc; i++)
+	{
+		fprintf(f, "%d ", global_indent);
+		global_indent += (int)strlen(argv[i]) + 1;
+	}
+
+	fprintf(f, "\n");
+	global_indent = 0;
+
+	for (i = start, j = 0; i < argc; i++)
+	{
+		fprintf(f, "%s ", argv[i]);
+
+		if (j < highlight_count)
+		{
+			cargo_highlight_t *h = &highlights[j];
+			if (h->i == i)
+			{
+				h->highlight_len = strlen(argv[i]);
+				h->indent = global_indent;
+
+				// We want to indent in relation to the previous indentation.
+				if (j > 0)
+				{
+					cargo_highlight_t *hprev = &highlights[j - 1];
+					h->indent -= (hprev->indent + hprev->highlight_len);
+				}
+
+				CARGODBG(3, "Highlight %d: index = %d, indent = %d, highlight_len = %d, global indent = %d\n",
+						j, h->i, h->indent, h->highlight_len, global_indent);
+				j++;
+			}
+		}
+
+		global_indent += (int)strlen(argv[i]) + 1; // + 1 for space.
+	}
+
+	fprintf(f, "\n");
+
+	for (i = 0; i < highlight_count; i++)
+	{
+		cargo_highlight_t *h = &highlights[i];
+		char *highlvec;
+
+		if (!(highlvec = malloc(h->highlight_len)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+
+		memset(highlvec, h->c, h->highlight_len);
+
+		fprintf(f, "%*s%*.*s",
+			h->indent, "",
+			h->highlight_len,
+			h->highlight_len,
+			highlvec);
+
+		free(highlvec);
+	}
+
+	ret = 0;
+
+fail:
+	free(highlights);
+
+	return ret;
+}
+
 static void _cargo_fprint_args(cargo_t ctx, FILE *f, int highlight)
 {
 	// TODO: Write this to a string buffer instead!
@@ -3220,6 +3322,54 @@ _TEST_START(TEST_parse_missing_array_value_ensure_free)
 }
 _TEST_END()
 
+_TEST_START(TEST_parse_same_option_twice)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	int i;
+	char *args[] = { "program", "--alpha", "1", "--alpha", "2" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed missing value");
+	printf("--alpha == %d\n", i);
+	cargo_assert(i == 1, "Expected --alpha to have value 1");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_highlight_args)
+{
+	char *args[] = { "program", "--alpha", "abc", "--beta", "def", "ghi", "--crazy", "banans" };
+	_cargo_fprint_args2(stdout,
+						sizeof(args) / sizeof(args[0]), // argc
+						args,
+						1, // Start index.
+						3, // Highlight count.
+						1, '^', 3, '~', 4, '-');
+	fprintf(stdout, "\n");
+}
+_TEST_END()
+
+/*
+_TEST_START(TEST_parse_same_option_twice_string)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	char *s;
+	char *args[] = { "program", "--alpha", "1", "--alpha" "2" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed missing value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+*/
 //
 // List of all test functions to run:
 //
