@@ -15,7 +15,6 @@
 #endif // _WIN32
 
 #ifdef CARGO_DEBUG
-// TODO: Add an inline macro as well...
 #define CARGODBG(level, fmt, ...)											\
 {																			\
 	if (level <= CARGO_DEBUG)												\
@@ -35,6 +34,42 @@
 #else
 #define CARGODBG(level, fmt, ...)
 #define CARGODBGI(level, fmt, ...)
+#endif
+
+#ifdef _WIN32
+#define CARGO_COLOR_BLACK			""
+#define CARGO_COLOR_RED				""
+#define CARGO_COLOR_GREEN			""
+#define CARGO_COLOR_YELLOW			""
+#define CARGO_COLOR_BLUE			""
+#define CARGO_COLOR_MAGENTA			""
+#define CARGO_COLOR_CYAN			""
+#define CARGO_COLOR_GRAY			""
+#define CARGO_COLOR_DARK_GRAY		""
+#define CARGO_COLOR_LIGHT_RED		""
+#define CARGO_COLOR_LIGHT_GREEN		""
+#define CARGO_COLOR_LIGHT_BLUE		""
+#define CARGO_COLOR_LIGHT_MAGNETA	""
+#define CARGO_COLOR_LIGHT_CYAN		""
+#define CARGO_COLOR_WHITE			""
+#define CARGO_COLOR_RESET			""
+#else
+#define CARGO_COLOR_BLACK			"\x1b[22;30m"
+#define CARGO_COLOR_RED				"\x1b[22;31m"
+#define CARGO_COLOR_GREEN			"\x1b[22;32m"
+#define CARGO_COLOR_YELLOW			"\x1b[22;33m"
+#define CARGO_COLOR_BLUE			"\x1b[22;34m"
+#define CARGO_COLOR_MAGENTA			"\x1b[22;35m"
+#define CARGO_COLOR_CYAN			"\x1b[22;36m"
+#define CARGO_COLOR_GRAY			"\x1b[22;37m"
+#define CARGO_COLOR_DARK_GRAY		"\x1b[01;30m"
+#define CARGO_COLOR_LIGHT_RED		"\x1b[01;31m"
+#define CARGO_COLOR_LIGHT_GREEN		"\x1b[01;32m"
+#define CARGO_COLOR_LIGHT_BLUE		"\x1b[01;34m"
+#define CARGO_COLOR_LIGHT_MAGNETA	"\x1b[01;35m"
+#define CARGO_COLOR_LIGHT_CYAN		"\x1b[01;36m"
+#define CARGO_COLOR_WHITE			"\x1b[01;37m"
+#define CARGO_COLOR_RESET			"\x1b[0m"
 #endif
 
 #ifndef va_copy
@@ -470,17 +505,18 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
-static char *_cargo_fprint_args2(int argc, char **argv, int start,
+static char *_cargo_fprint_args(int argc, char **argv, int start,
 								size_t highlight_count, ...)
 {
 	typedef struct cargo_highlight_s
 	{
 		int i;				// Index of highlight in argv.
-		char c;				// Highlight character.
+		char *c;			// Highlight character (followed by color).
 		int indent; 		// Indent position for highlight in relation
 							// to previous highlight.
 		int total_indent;	// Total indentation since start of string.
 		int highlight_len;	// Length of the highlight.
+
 	} cargo_highlight_t;
 
 	char *ret = NULL;
@@ -507,7 +543,7 @@ static char *_cargo_fprint_args2(int argc, char **argv, int start,
 		for (i = 0; i < (int)highlight_count; i++)
 		{
 			highlights[i].i = va_arg(ap, int);
-			highlights[i].c = (char)va_arg(ap, int);
+			highlights[i].c = va_arg(ap, char *);
 		}
 		va_end(ap);
 	}
@@ -565,6 +601,7 @@ static char *_cargo_fprint_args2(int argc, char **argv, int start,
 	{
 		cargo_highlight_t *h = &highlights[i];
 		char *highlvec;
+		int has_color = strlen(h->c) > 1;
 
 		if (!(highlvec = malloc(h->highlight_len)))
 		{
@@ -572,13 +609,31 @@ static char *_cargo_fprint_args2(int argc, char **argv, int start,
 			goto fail;
 		}
 
-		memset(highlvec, h->c, h->highlight_len);
+		// Use the first character as the highlight character.
+		//                                ~~~~~~~~~
+		memset(highlvec, *h->c, h->highlight_len);
+
+		// If we have more characters, we append that as a string.
+		// (This can be used for color ansi color codes).
+		#ifndef _WIN32
+		if (has_color)
+		{
+			cargo_appendf(&str, "%s", &h->c[1]);
+		}
+		#endif // _WIN32
 
 		cargo_appendf(&str, "%*s%*.*s",
 			h->indent, "", 
 			h->highlight_len,
 			h->highlight_len,
 			highlvec);
+
+		#ifndef _WIN32
+		if (has_color)
+		{
+			cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
+		}
+		#endif // _WIN32
 
 		free(highlvec);
 	}
@@ -590,52 +645,6 @@ fail:
 	if (!ret) free(out);
 
 	return ret;
-}
-
-static void _cargo_fprint_args(cargo_t ctx, FILE *f, int highlight)
-{
-	// TODO: Write this to a string buffer instead!
-	int i;
-	size_t indentopt = 0;
-	size_t indentarg = 0;
-	size_t curlen = 0;
-	assert(ctx);
-
-	for (i = 0; i < ctx->argc; i++)
-	{
-		fprintf(f, "%s ", ctx->argv[i]);
-
-		if (highlight)
-		{
-			curlen = strlen(ctx->argv[i]) + 1; // + 1 for space.
-			indentopt += (i < ctx->i) ? curlen : 0;
-			indentarg += (i < ctx->j) ? curlen : 0;
-		}
-	}
-
-	fprintf(f, "\n");
-
-	if (highlight > 0)
-	{
-		const char argh[] = "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^";
-		const char opth[] = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~";
-		int arglen;
-		int optlen;
-
-		optlen = (int)strlen(ctx->argv[ctx->i]);
-
-		if (ctx->j < ctx->argc)
-			arglen = (int)strlen(ctx->argv[ctx->j]);
-		else
-			arglen = optlen;
-
-		// Highlight option.
-		fprintf(f, "%*s%*.*s", (int)indentopt, "", optlen, optlen, opth);
-
-		// Highlight arg.
-		fprintf(f, "%*s%*.*s\n",
-			(int)(indentarg - indentopt - optlen), "", arglen, arglen, argh);
-	}
 }
 
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
@@ -778,7 +787,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
 
-		_cargo_fprint_args(ctx, stderr, ctx->i);
+		//_cargo_fprint_args(ctx, stderr, ctx->i);
 		fprintf(stderr, "Cannot parse \"%s\" as %s for option %s\n",
 				val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
 		return -1;
