@@ -827,11 +827,13 @@ static const char *_cargo_check_options(cargo_t ctx,
 
 static int _cargo_compare_strlen(const void *a, const void *b)
 {
-	const char *as = (const char *)a;
-	const char *bs = (const char *)b;
+	const char *as = *((const char **)a);
+	const char *bs = *((const char **)b);
 	size_t alen = strlen(as);
 	size_t blen = strlen(bs);
-	return alen - blen;
+	CARGODBG(4, "Compare length: %s (%lu) < %s (%lu) (%lu)\n",
+			as, alen, bs, blen, (alen - blen));
+	return (alen - blen);
 }
 
 static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, size_t bufsize)
@@ -881,6 +883,8 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	size_t i;
 	char **sorted_names = NULL;
 	cargo_str_t str = { namebuf, buf_size, 0 };
+
+	CARGODBG(3, "Sorting %lu option names:\n", opt->name_count);
 
 	// Sort the names by length.
 	{
