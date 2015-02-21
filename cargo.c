@@ -197,6 +197,7 @@ typedef struct cargo_opt_s
 	size_t *target_count;
 	size_t lenstr;
 	size_t max_target_count;
+	int array;
 } cargo_opt_t;
 
 typedef struct cargo_s
@@ -409,6 +410,7 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
+	o->array = (nargs > 1) || (nargs == CARGO_NARGS_ONE_OR_MORE);
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -495,8 +497,15 @@ static void _cargo_fprint_args(cargo_t ctx, FILE *f, int highlight)
 	{
 		const char argh[] = "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^";
 		const char opth[] = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~";
-		int arglen = (int)strlen(ctx->argv[ctx->j]);
-		int optlen = (int)strlen(ctx->argv[ctx->i]);
+		int arglen;
+		int optlen;
+
+		optlen = (int)strlen(ctx->argv[ctx->i]);
+
+		if (ctx->j < ctx->argc)
+			arglen = (int)strlen(ctx->argv[ctx->j]);
+		else
+			arglen = optlen;
 
 		// Highlight option.
 		fprintf(f, "%*s%*.*s", (int)indentopt, "", optlen, optlen, opth);
@@ -532,6 +541,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		// Allocate the memory needed.
 		if (!*(opt->target))
 		{
+			// TODO: Break out into function.
 			void **new_target;
 			int alloc_count = opt->nargs; 
 
@@ -1260,6 +1270,46 @@ fail:
 	return ret;
 }
 
+void _cargo_cleanup_option_values(cargo_t ctx)
+{
+	int i;
+	cargo_opt_t *opt = NULL;
+	assert(ctx);
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+		opt->target_idx = 0;
+		CARGODBG(3, "Free opt: %s\n", opt->name[0]);
+		if (opt->alloc)
+		{
+			if (opt->target && *opt->target)
+			{
+				if (opt->array)
+				{
+					if (opt->type == CARGO_STRING)
+					{
+						_cargo_free_str_list((char ***)&opt->target, opt->target_count);
+					}
+					else
+					{
+						free(*opt->target);
+						*opt->target = NULL;
+					}
+				}
+			}
+		}
+		else
+		{
+			if (opt->target && opt->target_count)
+				memset(opt->target, 0, _cargo_get_type_size(opt->type) * (*opt->target_count));
+		}
+
+		if (opt->target_count)
+			*opt->target_count = 0;
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -1426,21 +1476,18 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	// Make sure we start over, if this function is
 	// called more than once.
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		ctx->options[i].target_idx = 0;
-	}
+	_cargo_cleanup_option_values(ctx);
 
 	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		return -1;
+		goto fail;
 	}
 
 	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		return -1;
+		goto fail;
 	}
 
 	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
@@ -1462,7 +1509,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 			{
 				CARGODBG(1, "Failed to parse %s option: %s\n",
 						_cargo_type_map[opt->type], name);
-				return -1;
+				goto fail;
 			}
 
 			ctx->i += opt_arg_count;
@@ -1518,7 +1565,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 			fprintf(stderr, "\n");
 		}
 
-		return -1;
+		goto fail;
 	}
 
 	if (ctx->help)
@@ -1528,6 +1575,9 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	}
 
 	return 0;
+fail:
+	_cargo_cleanup_option_values(ctx);
+	return -1;
 }
 
 char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
@@ -3039,8 +3089,10 @@ _TEST_START(TEST_parse_invalid_value)
 }
 _TEST_END()
 
-_TEST_START(TEST_advanced_parse)
+_TEST_START(TEST_parse_twice)
 {
+	// This test make sure the parser is reset between
+	// different parse sessions.
 	size_t i = 0;
 	int flag = 0;
 	#define PORTS_COUNT 3
@@ -3085,6 +3137,7 @@ _TEST_START(TEST_advanced_parse)
 		cargo_assert_str_array(vals_count, 5, vals, args1_vals_expect);
 		cargo_assert(!strcmp(name, "server"), "Expected name = \"server\"");
 
+		// TODO: Remove this and make sure these are freed at cargo_parse instead
 		_cargo_free_str_list(&vals, &vals_count);
 		if (name) free(name);
 		name = NULL;
@@ -3104,6 +3157,62 @@ _TEST_START(TEST_advanced_parse)
 	_TEST_CLEANUP();
 	_cargo_free_str_list(&vals, &vals_count);
 	if (name) free(name);
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_missing_value)
+{
+	int i;
+	int j;
+	char *args[] = { "program", "--alpha", "1", "--beta" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed missing value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_missing_array_value)
+{
+	int i[3];
+	size_t i_count;
+	int j;
+	char *args[] = { "program", "--beta", "2", "--alpha", "1", "2" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
+	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed missing value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_missing_array_value_ensure_free)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	int i[3];
+	size_t i_count;
+	int *j;
+	size_t j_count;
+	char *args[] = { "program", "--beta", "2", "3", "--alpha", "1", "2" };
+
+	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
+	ret = cargo_add_option(cargo, "--beta -b", "The beta", "[i]#", &j, &j_count, 2);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed missing value");
+	cargo_assert(j == NULL, "Array non-NULL after failed parse");
+
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -3162,7 +3271,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_get_unknown_opts),
 	CARGO_ADD_TEST(TEST_cargo_split),
 	CARGO_ADD_TEST(TEST_parse_invalid_value),
-	CARGO_ADD_TEST(TEST_advanced_parse)
+	CARGO_ADD_TEST(TEST_parse_twice),
+	CARGO_ADD_TEST(TEST_parse_missing_value),
+	CARGO_ADD_TEST(TEST_parse_missing_array_value),
+	CARGO_ADD_TEST(TEST_parse_missing_array_value_ensure_free)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -3244,8 +3356,9 @@ int main(int argc, char **argv)
 			else
 			{
 				test_index = atoi(argv[i]);
+				fprintf(stderr, "%d\n", test_index);
 
-				if ((test_index == 0) || (test_index > CARGO_NUM_TESTS))
+				if ((test_index == 0) || (test_index > (int)CARGO_NUM_TESTS))
 				{
 					fprintf(stderr, "Invalid test number %s\n", argv[i]);
 					return CARGO_NUM_TESTS;
@@ -3285,8 +3398,8 @@ int main(int argc, char **argv)
 		t = &tests[test_index];
 		t->ran = 1;
 
-		fprintf(stderr, "\n%sStart Test %2d:%s\n",
-			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET);
+		fprintf(stderr, "\n%sStart Test %2d:%s - %s\n",
+			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET, t->name);
 
 		fprintf(stderr, "%s", ANSI_COLOR_DARK_GRAY);
 		t->error = t->f();
