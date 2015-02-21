@@ -470,77 +470,96 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
-static int _cargo_fprint_args2(FILE *f, int argc, char **argv, int start, size_t highlight_count, ...)
+static char *_cargo_fprint_args2(int argc, char **argv, int start,
+								size_t highlight_count, ...)
 {
-	int ret = -1;
-	// TODO: Write this to a string buffer instead!
-	int i;
-	int j;
-	int global_indent = 0;
 	typedef struct cargo_highlight_s
 	{
 		int i;				// Index of highlight in argv.
 		char c;				// Highlight character.
-		int indent; 		// Indent position for highlight.
+		int indent; 		// Indent position for highlight in relation
+							// to previous highlight.
+		int total_indent;	// Total indentation since start of string.
 		int highlight_len;	// Length of the highlight.
 	} cargo_highlight_t;
+
+	char *ret = NULL;
+	int i;
+	int j;
+	int global_indent = 0;
+	size_t arglen = 0;
 	cargo_highlight_t *highlights = NULL;
-	int highlight;
+	cargo_str_t str;
+	char *out = NULL;
+	size_t out_size = 0;
 	va_list ap;
 
 	// Create a list of indices to highlight from the va_args.
-	if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
 	{
-		CARGODBG(1, "Out of memory trying to allocat %lu highlights!\n", highlight_count);
-		return -1;
+		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
+		{
+			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
+					highlight_count);
+			goto fail;
+		}
+
+		va_start(ap, highlight_count);
+		for (i = 0; i < (int)highlight_count; i++)
+		{
+			highlights[i].i = va_arg(ap, int);
+			highlights[i].c = (char)va_arg(ap, int);
+		}
+		va_end(ap);
 	}
 
-	va_start(ap, highlight_count);
-	for (i = 0; i < (int)highlight_count; i++)
-	{
-		highlights[i].i = va_arg(ap, int);
-		highlights[i].c = (char)va_arg(ap, int);
-	}
-	va_end(ap);
-
-	for (i = start; i < argc; i++)
-	{
-		fprintf(f, "%d ", global_indent);
-		global_indent += (int)strlen(argv[i]) + 1;
-	}
-
-	fprintf(f, "\n");
-	global_indent = 0;
-
+	// Get buffer size and highlight data.
 	for (i = start, j = 0; i < argc; i++)
 	{
-		fprintf(f, "%s ", argv[i]);
+		arglen = strlen(argv[i]);
 
 		if (j < highlight_count)
 		{
 			cargo_highlight_t *h = &highlights[j];
 			if (h->i == i)
 			{
-				h->highlight_len = strlen(argv[i]);
-				h->indent = global_indent;
+				h->highlight_len = (int)arglen;
+				h->total_indent = (int)out_size;
 
 				// We want to indent in relation to the previous indentation.
 				if (j > 0)
 				{
 					cargo_highlight_t *hprev = &highlights[j - 1];
-					h->indent -= (hprev->indent + hprev->highlight_len);
+					h->indent = h->total_indent
+							  - (hprev->total_indent + hprev->highlight_len);
 				}
 
-				CARGODBG(3, "Highlight %d: index = %d, indent = %d, highlight_len = %d, global indent = %d\n",
-						j, h->i, h->indent, h->highlight_len, global_indent);
 				j++;
 			}
 		}
 
-		global_indent += (int)strlen(argv[i]) + 1; // + 1 for space.
+		out_size += arglen + 1; // + 1 for space.
 	}
 
-	fprintf(f, "\n");
+	// Allocate and fill buffer.
+	out_size += 2; // New lines.
+	out_size *= 2; // Two rows, one for args and one for highlighting.
+
+	if (!(out = malloc(out_size)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	str.s = out;
+	str.l = out_size;
+	str.offset = 0;
+
+	for (i = start; i < argc; i++)
+	{
+		cargo_appendf(&str, "%s ", argv[i]);
+	}
+
+	cargo_appendf(&str, "\n");
 
 	for (i = 0; i < highlight_count; i++)
 	{
@@ -555,8 +574,8 @@ static int _cargo_fprint_args2(FILE *f, int argc, char **argv, int start, size_t
 
 		memset(highlvec, h->c, h->highlight_len);
 
-		fprintf(f, "%*s%*.*s",
-			h->indent, "",
+		cargo_appendf(&str, "%*s%*.*s",
+			h->indent, "", 
 			h->highlight_len,
 			h->highlight_len,
 			highlvec);
@@ -564,10 +583,11 @@ static int _cargo_fprint_args2(FILE *f, int argc, char **argv, int start, size_t
 		free(highlvec);
 	}
 
-	ret = 0;
+	ret = out;
 
 fail:
-	free(highlights);
+	if (highlights) free(highlights);
+	if (!ret) free(out);
 
 	return ret;
 }
