@@ -640,7 +640,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	}
 
 	// This indicates error for the strtox functions.
-	if (end == val)
+	// (Don't include bool here, since val will be NULL in that case).
+	if ((opt->type != CARGO_BOOL) && (end == val))
 	{
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
