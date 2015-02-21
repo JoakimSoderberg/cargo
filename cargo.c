@@ -233,6 +233,7 @@ typedef struct cargo_opt_s
 	size_t lenstr;
 	size_t max_target_count;
 	int array;
+	int parsed;
 } cargo_opt_t;
 
 typedef struct cargo_s
@@ -247,6 +248,7 @@ typedef struct cargo_s
 	int j;	// sub-argv index (when getting arguments for options)
 	int argc;
 	char **argv;
+	int start;
 
 	int add_help;
 	int help;
@@ -645,7 +647,9 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
 
-		//_cargo_fprint_args(ctx, stderr, ctx->i);
+		// TODO: Dont use fprintf here.
+		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+						1, ctx->i, "~"CARGO_COLOR_RED);
 		fprintf(stderr, "Cannot parse \"%s\" as %s for option %s\n",
 				val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
 		return -1;
@@ -654,6 +658,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	// TODO: For single options that are repeated this will cause write beyond buffer!
 	// --bla 1 --bla 2 <-- Second call will be written outside
 	opt->target_idx++;
+	CARGODBG(3, "UPDATED TARGET INDEX: %lu\n", opt->target_idx);
 
 	if (opt->target_count)
 	{
@@ -695,6 +700,16 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	CARGODBG(2, "argc: %d\n", argc);
 	CARGODBG(2, "i: %d\n", ctx->i);
 	CARGODBG(2, "start: %d\n", start);
+
+	if (opt->parsed)
+	{
+		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+						2, // Number of highlights.
+						opt->parsed, "^"CARGO_COLOR_GREEN,
+						ctx->i, "~"CARGO_COLOR_RED);
+		fprintf(stderr, "%s was already specified before.\n", name);
+		return -1;
+	}
 	
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
@@ -781,6 +796,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 				break;
 		}
 	}
+
+	opt->parsed = ctx->i;
 
 	// Number of arguments read.
 	CARGODBG(2, "_cargo_parse_option return %d\n", (ctx->j - start));
@@ -1265,7 +1282,7 @@ fail:
 
 void _cargo_cleanup_option_values(cargo_t ctx)
 {
-	int i;
+	size_t i;
 	cargo_opt_t *opt = NULL;
 	assert(ctx);
 
@@ -1273,7 +1290,9 @@ void _cargo_cleanup_option_values(cargo_t ctx)
 	{
 		opt = &ctx->options[i];
 		opt->target_idx = 0;
-		CARGODBG(3, "Free opt: %s\n", opt->name[0]);
+		opt->parsed = 0;
+		CARGODBG(3, "Cleanup option target: %s\n", opt->name[0]);
+
 		if (opt->alloc)
 		{
 			if (opt->target && *opt->target)
@@ -1637,6 +1656,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	ctx->argc = argc;
 	ctx->argv = argv;
+	ctx->start = start_index;
 
 	_cargo_add_help_if_missing(ctx);
 
@@ -3006,7 +3026,6 @@ _TEST_END()
 
 _TEST_START(TEST_get_usage_size_only)
 {
-	char buf[1024];
 	size_t buf_size = 1024;
 	char *usage = NULL;
 
@@ -3356,9 +3375,11 @@ _TEST_START(TEST_parse_same_option_twice)
 {
 	// Here we make sure allocated values get freed on a failed parse.
 	int i;
-	char *args[] = { "program", "--alpha", "1", "--alpha", "2" };
+	int j;
+	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -3374,9 +3395,11 @@ _TEST_START(TEST_parse_same_option_twice_string)
 {
 	// Here we make sure allocated values get freed on a failed parse.
 	char *s;
-	char *args[] = { "program", "--alpha", "1", "--alpha" "2" };
+	int i;
+	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha" "2" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
