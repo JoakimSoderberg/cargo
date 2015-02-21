@@ -505,148 +505,6 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
-static char *_cargo_fprint_args(int argc, char **argv, int start,
-								size_t highlight_count, ...)
-{
-	typedef struct cargo_highlight_s
-	{
-		int i;				// Index of highlight in argv.
-		char *c;			// Highlight character (followed by color).
-		int indent; 		// Indent position for highlight in relation
-							// to previous highlight.
-		int total_indent;	// Total indentation since start of string.
-		int highlight_len;	// Length of the highlight.
-
-	} cargo_highlight_t;
-
-	char *ret = NULL;
-	int i;
-	int j;
-	int global_indent = 0;
-	size_t arglen = 0;
-	cargo_highlight_t *highlights = NULL;
-	cargo_str_t str;
-	char *out = NULL;
-	size_t out_size = 0;
-	va_list ap;
-
-	// Create a list of indices to highlight from the va_args.
-	{
-		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
-		{
-			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
-					highlight_count);
-			goto fail;
-		}
-
-		va_start(ap, highlight_count);
-		for (i = 0; i < (int)highlight_count; i++)
-		{
-			highlights[i].i = va_arg(ap, int);
-			highlights[i].c = va_arg(ap, char *);
-		}
-		va_end(ap);
-	}
-
-	// Get buffer size and highlight data.
-	for (i = start, j = 0; i < argc; i++)
-	{
-		arglen = strlen(argv[i]);
-
-		if (j < highlight_count)
-		{
-			cargo_highlight_t *h = &highlights[j];
-			if (h->i == i)
-			{
-				h->highlight_len = (int)arglen;
-				h->total_indent = (int)out_size;
-
-				// We want to indent in relation to the previous indentation.
-				if (j > 0)
-				{
-					cargo_highlight_t *hprev = &highlights[j - 1];
-					h->indent = h->total_indent
-							  - (hprev->total_indent + hprev->highlight_len);
-				}
-
-				j++;
-			}
-		}
-
-		out_size += arglen + 1; // + 1 for space.
-	}
-
-	// Allocate and fill buffer.
-	out_size += 2; // New lines.
-	out_size *= 2; // Two rows, one for args and one for highlighting.
-
-	if (!(out = malloc(out_size)))
-	{
-		CARGODBG(1, "Out of memory!\n");
-		goto fail;
-	}
-
-	str.s = out;
-	str.l = out_size;
-	str.offset = 0;
-
-	for (i = start; i < argc; i++)
-	{
-		cargo_appendf(&str, "%s ", argv[i]);
-	}
-
-	cargo_appendf(&str, "\n");
-
-	for (i = 0; i < highlight_count; i++)
-	{
-		cargo_highlight_t *h = &highlights[i];
-		char *highlvec;
-		int has_color = strlen(h->c) > 1;
-
-		if (!(highlvec = malloc(h->highlight_len)))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			goto fail;
-		}
-
-		// Use the first character as the highlight character.
-		//                                ~~~~~~~~~
-		memset(highlvec, *h->c, h->highlight_len);
-
-		// If we have more characters, we append that as a string.
-		// (This can be used for color ansi color codes).
-		#ifndef _WIN32
-		if (has_color)
-		{
-			cargo_appendf(&str, "%s", &h->c[1]);
-		}
-		#endif // _WIN32
-
-		cargo_appendf(&str, "%*s%*.*s",
-			h->indent, "", 
-			h->highlight_len,
-			h->highlight_len,
-			highlvec);
-
-		#ifndef _WIN32
-		if (has_color)
-		{
-			cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
-		}
-		#endif // _WIN32
-
-		free(highlvec);
-	}
-
-	ret = out;
-
-fail:
-	if (highlights) free(highlights);
-	if (!ret) free(out);
-
-	return ret;
-}
-
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
@@ -1587,9 +1445,188 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 	ctx->format = format;
 }
 
+char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, va_list ap)
+{
+	typedef struct cargo_highlight_s
+	{
+		int i;				// Index of highlight in argv.
+		char *c;			// Highlight character (followed by color).
+		int indent; 		// Indent position for highlight in relation
+							// to previous highlight.
+		int total_indent;	// Total indentation since start of string.
+		int highlight_len;	// Length of the highlight.
+
+	} cargo_highlight_t;
+
+	char *ret = NULL;
+	int i;
+	int j;
+	int global_indent = 0;
+	size_t arglen = 0;
+	cargo_highlight_t *highlights = NULL;
+	cargo_str_t str;
+	char *out = NULL;
+	size_t out_size = 0;
+
+	// Create a list of indices to highlight from the va_args.
+	{
+		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
+		{
+			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
+					highlight_count);
+			goto fail;
+		}
+
+		for (i = 0; i < (int)highlight_count; i++)
+		{
+			highlights[i].i = va_arg(ap, int);
+			highlights[i].c = va_arg(ap, char *);
+		}
+	}
+
+	// Get buffer size and highlight data.
+	for (i = start, j = 0; i < argc; i++)
+	{
+		arglen = strlen(argv[i]);
+
+		if (j < highlight_count)
+		{
+			cargo_highlight_t *h = &highlights[j];
+			if (h->i == i)
+			{
+				h->highlight_len = (int)arglen;
+				h->total_indent = global_indent;
+
+				// We want to indent in relation to the previous indentation.
+				if (j > 0)
+				{
+					cargo_highlight_t *hprev = &highlights[j - 1];
+					h->indent = h->total_indent
+							  - (hprev->total_indent + hprev->highlight_len);
+				}
+
+				// If we use color, we must include the ANSI color code length
+				// in the buffer length as well.
+				out_size += + strlen(h->c);
+
+				j++;
+			}
+		}
+
+		global_indent += arglen + 1; // + 1 for space.
+		out_size += global_indent;
+	}
+
+	// Allocate and fill buffer.
+	out_size += 2; // New lines.
+	out_size *= 2; // Two rows, one for args and one for highlighting.
+
+	if (!(out = malloc(out_size)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	str.s = out;
+	str.l = out_size;
+	str.offset = 0;
+
+	if (!(flags & CARGO_FPRINT_NOARGS))
+	{
+		for (i = start; i < argc; i++)
+		{
+			cargo_appendf(&str, "%s ", argv[i]);
+		}
+
+		cargo_appendf(&str, "\n");
+	}
+
+	if (!(flags & CARGO_FPRINT_NOHIGHLIGHT))
+	{
+		for (i = 0; i < highlight_count; i++)
+		{
+			cargo_highlight_t *h = &highlights[i];
+			char *highlvec;
+			int has_color = strlen(h->c) > 1;
+
+			if (!(highlvec = malloc(h->highlight_len)))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				goto fail;
+			}
+
+			// Use the first character as the highlight character.
+			//                                ~~~~~~~~~
+			memset(highlvec, *h->c, h->highlight_len);
+
+			// If we have more characters, we append that as a string.
+			// (This can be used for color ansi color codes).
+			#ifndef _WIN32
+			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color)
+			{
+				cargo_appendf(&str, "%s", &h->c[1]);
+			}
+			#endif // _WIN32
+
+			cargo_appendf(&str, "%*s%*.*s",
+				h->indent, "",
+				h->highlight_len,
+				h->highlight_len,
+				highlvec);
+
+			#ifndef _WIN32
+			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color)
+			{
+				cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
+			}
+			#endif // _WIN32
+
+			free(highlvec);
+		}
+	}
+
+	ret = out;
+
+fail:
+	if (highlights) free(highlights);
+	if (!ret) free(out);
+
+	return ret;
+}
+
+char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, ...)
+{
+	char *ret;
+	va_list ap;
+	va_start(ap, highlight_count);
+	ret = cargo_get_vfprint_args(argc, argv, start, flags, highlight_count, ap);
+	va_end(ap);
+	return ret;
+}
+
+int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
+							size_t flags, size_t highlight_count, ...)
+{
+	char *ret;
+	va_list ap;
+	va_start(ap, highlight_count);
+	ret = cargo_get_vfprint_args(argc, argv, start, flags, highlight_count, ap);
+	va_end(ap);
+
+	if (!ret)
+	{
+		return -1;
+	}
+	
+	fprintf(f, "%s\n", ret);
+	free(ret);
+	return 0;
+}
+
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
-	int i;
 	int start;
 	int opt_arg_count;
 	char *arg;
@@ -2387,42 +2424,6 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 // -----------------------------------------------------------------------------
 // LCOV_EXCL_START
 #ifdef CARGO_TEST
-
-#ifdef _WIN32
-#define ANSI_COLOR_BLACK			""
-#define ANSI_COLOR_RED				""
-#define ANSI_COLOR_GREEN			""
-#define ANSI_COLOR_YELLOW			""
-#define ANSI_COLOR_BLUE				""
-#define ANSI_COLOR_MAGENTA			""
-#define ANSI_COLOR_CYAN				""
-#define ANSI_COLOR_GRAY				""
-#define ANSI_COLOR_DARK_GRAY		""
-#define ANSI_COLOR_LIGHT_RED		""
-#define ANSI_COLOR_LIGHT_GREEN		""
-#define ANSI_COLOR_LIGHT_BLUE		""
-#define ANSI_COLOR_LIGHT_MAGNETA	""
-#define ANSI_COLOR_LIGHT_CYAN		""
-#define ANSI_COLOR_WHITE			""
-#define ANSI_COLOR_RESET			""
-#else
-#define ANSI_COLOR_BLACK			"\x1b[22;30m"
-#define ANSI_COLOR_RED				"\x1b[22;31m"
-#define ANSI_COLOR_GREEN			"\x1b[22;32m"
-#define ANSI_COLOR_YELLOW			"\x1b[22;33m"
-#define ANSI_COLOR_BLUE				"\x1b[22;34m"
-#define ANSI_COLOR_MAGENTA			"\x1b[22;35m"
-#define ANSI_COLOR_CYAN				"\x1b[22;36m"
-#define ANSI_COLOR_GRAY				"\x1b[22;37m"
-#define ANSI_COLOR_DARK_GRAY		"\x1b[01;30m"
-#define ANSI_COLOR_LIGHT_RED		"\x1b[01;31m"
-#define ANSI_COLOR_LIGHT_GREEN		"\x1b[01;32m"
-#define ANSI_COLOR_LIGHT_BLUE		"\x1b[01;34m"
-#define ANSI_COLOR_LIGHT_MAGNETA	"\x1b[01;35m"
-#define ANSI_COLOR_LIGHT_CYAN		"\x1b[01;36m"
-#define ANSI_COLOR_WHITE			"\x1b[01;37m"
-#define ANSI_COLOR_RESET			"\x1b[0m"
-#endif
 
 #define cargo_assert(test, message) \
 do 									\
@@ -3369,20 +3370,6 @@ _TEST_START(TEST_parse_same_option_twice)
 }
 _TEST_END()
 
-_TEST_START(TEST_highlight_args)
-{
-	char *args[] = { "program", "--alpha", "abc", "--beta", "def", "ghi", "--crazy", "banans" };
-	_cargo_fprint_args2(stdout,
-						sizeof(args) / sizeof(args[0]), // argc
-						args,
-						1, // Start index.
-						3, // Highlight count.
-						1, '^', 3, '~', 4, '-');
-	fprintf(stdout, "\n");
-}
-_TEST_END()
-
-/*
 _TEST_START(TEST_parse_same_option_twice_string)
 {
 	// Here we make sure allocated values get freed on a failed parse.
@@ -3398,7 +3385,61 @@ _TEST_START(TEST_parse_same_option_twice_string)
 	_TEST_CLEANUP();
 }
 _TEST_END()
-*/
+
+_TEST_START(TEST_highlight_args)
+{
+	char *args[] = { "program", "--alpha", "abc", "--beta", "def", "ghi", "--crazy", "banans" };
+	int argc = sizeof(args) / sizeof(args[0]);
+	int e;
+
+	printf("With color highlight & args:\n");
+	printf("----------------------------\n");
+	e = cargo_fprint_args(stdout,
+						argc,
+						args,
+						1, // Start index.
+						0, // flags
+						3, // Highlight count.
+						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+
+	printf("With highlight & args:\n");
+	printf("----------------------\n");
+	e = cargo_fprint_args(stdout,
+						argc,
+						args,
+						1, // Start index.
+						CARGO_FPRINT_NOCOLOR, // flags
+						3, // Highlight count.
+						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+
+	printf("With highlight & no args:\n");
+	printf("-------------------------\n");
+	e = cargo_fprint_args(stdout,
+						argc,
+						args,
+						1, // Start index.
+						CARGO_FPRINT_NOARGS, // flags
+						3, // Highlight count.
+						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+
+	printf("With no highlight & args:\n");
+	printf("-------------------------\n");
+	e = cargo_fprint_args(stdout,
+						argc,
+						args,
+						1, // Start index.
+						CARGO_FPRINT_NOHIGHLIGHT, // flags
+						3, // Highlight count.
+						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -3457,7 +3498,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_twice),
 	CARGO_ADD_TEST(TEST_parse_missing_value),
 	CARGO_ADD_TEST(TEST_parse_missing_array_value),
-	CARGO_ADD_TEST(TEST_parse_missing_array_value_ensure_free)
+	CARGO_ADD_TEST(TEST_parse_missing_array_value_ensure_free),
+	CARGO_ADD_TEST(TEST_parse_same_option_twice),
+	CARGO_ADD_TEST(TEST_highlight_args)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -3582,25 +3625,25 @@ int main(int argc, char **argv)
 		t->ran = 1;
 
 		fprintf(stderr, "\n%sStart Test %2d:%s - %s\n",
-			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET, t->name);
+			CARGO_COLOR_CYAN, test_index + 1, CARGO_COLOR_RESET, t->name);
 
-		fprintf(stderr, "%s", ANSI_COLOR_DARK_GRAY);
+		fprintf(stderr, "%s", CARGO_COLOR_DARK_GRAY);
 		t->error = t->f();
-		fprintf(stderr, "%s", ANSI_COLOR_RESET);
+		fprintf(stderr, "%s", CARGO_COLOR_RESET);
 
 		fprintf(stderr, "%sEnd Test %2d:%s ",
-			ANSI_COLOR_CYAN, test_index + 1, ANSI_COLOR_RESET);
+			CARGO_COLOR_CYAN, test_index + 1, CARGO_COLOR_RESET);
 
 		if (t->error)
 		{
 			fprintf(stderr, "[%sFAIL%s] %s\n",
-				ANSI_COLOR_RED, ANSI_COLOR_RESET, t->error);
+				CARGO_COLOR_RED, CARGO_COLOR_RESET, t->error);
 			was_error++;
 		}
 		else
 		{
 			fprintf(stderr, "[%sSUCCESS%s]\n",
-				ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+				CARGO_COLOR_GREEN, CARGO_COLOR_RESET);
 
 			success_count++;
 		}
@@ -3617,30 +3660,30 @@ int main(int argc, char **argv)
 		if (!tests[i].ran)
 		{
 			printf(" [%sNOT RUN%s] %2lu: %s\n",
-				ANSI_COLOR_DARK_GRAY, ANSI_COLOR_RESET, (i + 1), tests[i].name);
+				CARGO_COLOR_DARK_GRAY, CARGO_COLOR_RESET, (i + 1), tests[i].name);
 			continue;
 		}
 
 		if (tests[i].success)
 		{
 			printf(" [%sSUCCESS%s] %2lu: %s\n",
-				ANSI_COLOR_GREEN, ANSI_COLOR_RESET, (i + 1), tests[i].name);
+				CARGO_COLOR_GREEN, CARGO_COLOR_RESET, (i + 1), tests[i].name);
 		}
 		else
 		{
 			fprintf(stderr, " [%sFAILED%s]  %2lu: %s - %s\n",
-				ANSI_COLOR_RED, ANSI_COLOR_RESET,
+				CARGO_COLOR_RED, CARGO_COLOR_RESET,
 				(i + 1), tests[i].name, tests[i].error);
 		}
 	}
 
 	if (was_error)
 	{
-		fprintf(stderr, "\n[[%sFAIL%s]] ", ANSI_COLOR_RED, ANSI_COLOR_RESET);
+		fprintf(stderr, "\n[[%sFAIL%s]] ", CARGO_COLOR_RED, CARGO_COLOR_RESET);
 	}
 	else
 	{
-		printf("\n[[%sSUCCESS%s]] ", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+		printf("\n[[%sSUCCESS%s]] ", CARGO_COLOR_GREEN, CARGO_COLOR_RESET);
 	}
 
 	printf("%lu of %lu tests run were successful (%lu of %lu tests ran)\n",

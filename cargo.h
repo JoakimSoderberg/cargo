@@ -76,5 +76,20 @@ char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 char **cargo_get_args(cargo_t ctx, size_t *argc);
 
+typedef enum cargo_fprint_flags_e
+{
+	CARGO_FPRINT_NOCOLOR		= (1 << 0),
+	CARGO_FPRINT_NOARGS			= (1 << 1),
+	CARGO_FPRINT_NOHIGHLIGHT	= (1 << 2)
+} cargo_fprint_flags_t;
+
+char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, ...);
+
+char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, va_list ap);
+
+int cargo_fprint_args(FILE *f, int argc, char **argv, int start, size_t flags,
+					  size_t highlight_count, ...);
 
 #endif // __CARGO_H__
