@@ -3556,8 +3556,8 @@ static int _test_find_test_index(const char *name)
 static int _tests_print_usage(const char *progname)
 {
 	_test_print_names();
-	fprintf(stderr, "\nUsage: %s [test_num ...] [test_name ...]\n\n", progname);
-	fprintf(stderr, "  --list to get all available tests.\n");
+	fprintf(stderr, "\nUsage: %s [--shortlist] [test_num ...] [test_name ...]\n\n", progname);
+	fprintf(stderr, "  --shortlist  Don't list test that were not run (must be first argument).\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "  Use test_num = -1 or all tests\n");
 	fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
@@ -3576,6 +3576,8 @@ int main(int argc, char **argv)
 	size_t success_count = 0;
 	int all = 0;
 	int test_index = 0;
+	int shortlist = 0;
+	int start = 1;
 	cargo_test_t *t;
 
 	memset(tests_to_run, 0, sizeof(tests_to_run));
@@ -3583,13 +3585,13 @@ int main(int argc, char **argv)
 	// Get test numbers to run from command line.
 	if (argc >= 2)
 	{
-		if (!strcmp("--list", argv[1]))
+		if (!strcmp("--shortlist", argv[1]))
 		{
-			_test_print_names();
-			return 0;
+			shortlist = 1;
+			start++;
 		}
 
-		for (i = 1; i < (size_t)argc; i++)
+		for (i = start; i < (size_t)argc; i++)
 		{
 			// First check if we were given a function name.
 			if (!strncmp(argv[i], "TEST_", 5))
@@ -3682,8 +3684,12 @@ int main(int argc, char **argv)
 	{
 		if (!tests[i].ran)
 		{
-			printf(" [%sNOT RUN%s] %2lu: %s\n",
-				CARGO_COLOR_DARK_GRAY, CARGO_COLOR_RESET, (i + 1), tests[i].name);
+			if (!shortlist)
+			{
+				printf(" [%sNOT RUN%s] %2lu: %s\n",
+					CARGO_COLOR_DARK_GRAY, CARGO_COLOR_RESET, (i + 1), tests[i].name);
+			}
+
 			continue;
 		}
 
