@@ -202,7 +202,7 @@ typedef struct cargo_opt_s
 	size_t max_target_count;
 	int array;
 	int parsed;
-	size_t flags;
+	size_t flags; // TODO: replace with cargo_option_flags_t
 	int num_eaten;
 } cargo_opt_t;
 
@@ -213,6 +213,7 @@ typedef struct cargo_s
 	const char *epilog;
 	size_t max_width;
 	cargo_format_t format;
+	cargo_flags_t flags;
 
 	int i;	// argv index.
 	int j;	// sub-argv index (when getting arguments for options)
@@ -561,6 +562,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 
 				if (opt->type == CARGO_STRING)
 				{
+					CARGODBG(4, "    String\n");
 					free(*opt->target);
 					*opt->target = NULL;
 				}
@@ -1421,7 +1423,7 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
-int cargo_init(cargo_t *ctx, const char *progname)
+int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags)
 {
 	int console_width = -1;
 	cargo_s *c;
@@ -1434,7 +1436,7 @@ int cargo_init(cargo_t *ctx, const char *progname)
 		return -1;
 
 	c->max_opts = CARGO_DEFAULT_MAX_OPTS;
-
+	c->flags = flags;
 	c->progname = progname;
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
@@ -1443,16 +1445,27 @@ int cargo_init(cargo_t *ctx, const char *progname)
 	return 0;
 }
 
+int cargo_init(cargo_t *ctx, const char *progname)
+{
+	return cargo_init_ex(ctx, progname, 0);
+}
+
 void cargo_destroy(cargo_t *ctx)
 {
 	size_t i;
 	size_t j;
 
-	CARGODBG(2, "DESTROY!\n");
+	CARGODBG(2, "cargo_destroy: DESTROY!\n");
 
 	if (ctx)
 	{
 		cargo_t c = *ctx;
+
+		if (c->flags & CARGO_AUTOCLEAN)
+		{
+			CARGODBG(2, "Auto clean target values\n");
+			_cargo_cleanup_option_values(c);
+		}
 
 		if (c->options)
 		{
@@ -2512,17 +2525,19 @@ do 																				\
 #define _MAKE_TEST_FUNC_NAME(f) f()
 
 // Start a test. Initializes the lib.
-#define _TEST_START(testname) 							\
+#define _TEST_START_EX(testname, flags) 				\
 static char *_MAKE_TEST_FUNC_NAME(testname)				\
 {														\
 	char *msg = NULL;									\
 	int ret = 0;										\
 	cargo_t cargo;										\
 														\
-	if (cargo_init(&cargo, "program"))					\
+	if (cargo_init_ex(&cargo, "program", flags))		\
 	{													\
 		return "Failed to init cargo";					\
 	}
+
+#define _TEST_START(testname) _TEST_START_EX(testname, 0)
 
 // Cleanup point, must be placed at the end of the test
 //
@@ -2536,6 +2551,12 @@ static char *_MAKE_TEST_FUNC_NAME(testname)				\
 #define _TEST_END()			\
 	cargo_destroy(&cargo); 	\
 	return msg;				\
+}
+
+// For tests where we want to assert after
+// cargo_destroy has been called.
+#define _TEST_END_NODESTROY()	\
+	return msg;					\
 }
 
 // =================================================================
@@ -3671,6 +3692,7 @@ _TEST_END()
 
 _TEST_START(TEST_multiple_positional_array_argument3)
 {
+	// Test with an allocated array of 1 or more positional arguments.
 	size_t k;
 	int i;
 	int j[3];
@@ -3716,6 +3738,46 @@ _TEST_START(TEST_multiple_positional_array_argument3)
 	if (m) free(m);
 }
 _TEST_END()
+
+_TEST_START_EX(TEST_autoclean_flag, CARGO_AUTOCLEAN)
+{
+	char *s = NULL;
+	char *args[] = { "program", "--alpha", "abc" };
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse valid option");
+	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+
+	_TEST_CLEANUP();
+	// Note! We're not using the normal _TEST_END here so we can assert after
+	// the cargo_destroy call. Important not to use cargo_assert after
+	// _TEST_CLEANUP. Since it will result in an infinite loop!
+	cargo_destroy(&cargo);
+	if (s != NULL) return "Expected \"s\" to be freed and NULL";
+}
+_TEST_END_NODESTROY()
+
+_TEST_START_EX(TEST_autoclean_flag_off, 0)
+{
+	char *s = NULL;
+	char *args[] = { "program", "--alpha", "abc" };
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse valid option");
+	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+
+	_TEST_CLEANUP();
+	cargo_destroy(&cargo);
+	if (s == NULL) return "Expected \"s\" to be non-NULL";
+	free(s);
+}
+_TEST_END_NODESTROY()
 
 //
 // List of all test functions to run:
@@ -3785,7 +3847,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_positional_array_argument),
 	CARGO_ADD_TEST(TEST_multiple_positional_array_argument),
 	CARGO_ADD_TEST(TEST_multiple_positional_array_argument2),
-	CARGO_ADD_TEST(TEST_multiple_positional_array_argument3)
+	CARGO_ADD_TEST(TEST_multiple_positional_array_argument3),
+	CARGO_ADD_TEST(TEST_autoclean_flag),
+	CARGO_ADD_TEST(TEST_autoclean_flag_off)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
