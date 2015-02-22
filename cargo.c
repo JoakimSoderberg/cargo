@@ -540,14 +540,17 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 
 	opt->target_idx = 0;
 	opt->parsed = 0;
-	CARGODBG(3, "Cleanup option target: %s\n", opt->name[0]);
-
+	CARGODBG(3, "Cleanup option (%s) target: %s\n", _cargo_type_map[opt->type], opt->name[0]);
 	if (opt->alloc)
 	{
+		CARGODBG(4, "    Allocated value\n");
+
 		if (opt->target && *opt->target)
 		{
 			if (opt->array)
 			{
+				CARGODBG(4, "    Array\n");
+
 				if (opt->type == CARGO_STRING)
 				{
 					_cargo_free_str_list((char ***)&opt->target, opt->target_count);
@@ -558,6 +561,20 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 					*opt->target = NULL;
 				}
 			}
+			else
+			{
+				CARGODBG(4, "    Not array\n");
+
+				if (opt->type == CARGO_STRING)
+				{
+					free(*opt->target);
+					*opt->target = NULL;
+				}
+			}
+		}
+		else
+		{
+			CARGODBG(4, "    Target value NULL\n");
 		}
 	}
 	else
@@ -3426,7 +3443,7 @@ _TEST_START(TEST_parse_same_option_twice_string_with_unique)
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("--alpha = %s\n", s);
 	cargo_assert(ret != 0, "Succesfully parsed duplicate option");
-	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+	cargo_assert(s == NULL, "Expected --alpha to have value NULL");
 
 	_TEST_CLEANUP();
 	if (s) free(s);
