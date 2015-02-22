@@ -135,7 +135,7 @@ typedef enum cargo_flags_e
 } cargo_flags_t;
 
 #define CARGO_NARGS_ONE_OR_MORE 	-1
-#define CARGO_NARGS_NONE_OR_MORE	-2 // TODO: Remove this?
+#define CARGO_NARGS_ZERO_OR_MORE	-2
 
 //
 // Functions.

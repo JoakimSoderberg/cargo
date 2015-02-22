@@ -254,7 +254,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 static int _cargo_nargs_is_valid(int nargs)
 {
 	return (nargs >= 0) 
-		|| (nargs == CARGO_NARGS_NONE_OR_MORE)
+		|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
 }
 
@@ -628,7 +628,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				// In this case we don't want to preallocate everything
 				// since we might have "unlimited" arguments.
 				// CARGO_NARGS_ONE_OR_MORE
-				// CARGO_NARGS_NONE_OR_MORE
+				// CARGO_NARGS_ZERO_OR_MORE
 				// TODO: Don't allocate all of these right away.
 				alloc_count = ctx->argc - ctx->i;
 				assert(alloc_count >= 0);
@@ -772,7 +772,7 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 
 static int _cargo_zero_args_allowed(cargo_opt_t *opt)
 {
-	return (opt->nargs == CARGO_NARGS_NONE_OR_MORE)
+	return (opt->nargs == CARGO_NARGS_ZERO_OR_MORE)
 		|| (opt->type == CARGO_BOOL);
 }
 
@@ -829,7 +829,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
-		(opt->nargs == CARGO_NARGS_NONE_OR_MORE))
+		(opt->nargs == CARGO_NARGS_ZERO_OR_MORE))
 	{
 		args_to_look_for = (argc - start);
 
@@ -906,7 +906,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			}
 
 			// If we have exceeded opt->max_target_count
-			// for CARGO_NARGS_NONE_OR_MORE or CARGO_NARGS_ONE_OR_MORE
+			// for CARGO_NARGS_ZERO_OR_MORE or CARGO_NARGS_ONE_OR_MORE
 			// we should stop so we don't eat all the remaining arguments.
 			if (ret)
 				break;
@@ -2360,7 +2360,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 		switch (_token(&s))
 		{
-			case '*': nargs = CARGO_NARGS_NONE_OR_MORE; break;
+			case '*': nargs = CARGO_NARGS_ZERO_OR_MORE; break;
 			case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
 			case '#': nargs = va_arg(ap, int); break;
 			default:
