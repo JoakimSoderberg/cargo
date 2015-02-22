@@ -1,6 +1,13 @@
+branches:
+  except:
+    - gh-pages
+
+install:
+  - cinst drmemory.install -Version 1.8.0.8
+
 build_script:
-  - SET PATH=C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\BIN\;%PATH%
-  - SET PATH=c:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\;%PATH%
-  - vcvarsall.bat
-  - cl /nologo /errorReport:prompt /DCARGO_TEST cargo.c
-  - cargo.exe
+  - md build
+  - cd build
+  - cmake -DCARGO_DEBUG=4 ..
+  - cmake --build . --config Debug
+  - ctest --output-on-failure

@@ -1,0 +1,3 @@
+test:
+  override:
+    - mkdir build && cd build && cmake -DCARGO_DEBUG=4 .. && make && ctest -V
