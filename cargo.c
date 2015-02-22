@@ -187,7 +187,7 @@ typedef struct cargo_opt_s
 	size_t name_count;
 	const char *description;
 	const char *metavar;
-	int optional;
+	int positional;
 	cargo_type_t type;
 	int nargs;
 	int alloc;
@@ -199,6 +199,7 @@ typedef struct cargo_opt_s
 	int array;
 	int parsed;
 	size_t flags;
+	int num_eaten;
 } cargo_opt_t;
 
 typedef struct cargo_s
@@ -280,7 +281,6 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	size_t j;
 	cargo_opt_t *opt;
 
-	// TODO: Hmm how about for positional arguments?
 	if (!_cargo_starts_with_prefix(ctx, name))
 		return -1;
 
@@ -403,8 +403,8 @@ static int _cargo_add(cargo_t ctx,
 	ctx->opt_count++;
 
 	// Check if the option has a prefix
-	// (this means it's optional).
-	o->optional = _cargo_is_prefix(ctx, opt[0]);
+	// (if not it's positional).
+	o->positional = !_cargo_is_prefix(ctx, opt[0]);
 
 	o->name[o->name_count++] = optcpy;
 	o->nargs = nargs;
@@ -447,6 +447,28 @@ static int _cargo_add(cargo_t ctx,
 	CARGODBG(2, "   \n"); 
 
 	return 0;
+}
+
+static int _cargo_get_positional(cargo_t ctx, size_t *opt_i)
+{
+	size_t i;
+	cargo_opt_t *opt = NULL;
+	assert(ctx);
+
+	*opt_i = 0;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		if (opt->positional && (opt->num_eaten < opt->nargs))
+		{
+			*opt_i = i;
+			return 0;
+		}
+	}
+
+	return -1;
 }
 
 static const char *_cargo_is_option_name(cargo_t ctx, 
@@ -504,7 +526,10 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 
 	opt->target_idx = 0;
 	opt->parsed = 0;
+	opt->num_eaten = 0;
+
 	CARGODBG(3, "Cleanup option (%s) target: %s\n", _cargo_type_map[opt->type], opt->name[0]);
+
 	if (opt->alloc)
 	{
 		CARGODBG(4, "    Allocated value\n");
@@ -781,7 +806,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 {
 	int ret;
 	int args_to_look_for;
-	int start = (ctx->i + 1);
+	int start = opt->positional ? ctx->i : (ctx->i + 1);
 
 	CARGODBG(2, "------ Parse option %s ------\n", opt->name[0]);
 	CARGODBG(2, "argc: %d\n", argc);
@@ -882,9 +907,10 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 	opt->parsed = ctx->i;
 
-	// Number of arguments read.
-	CARGODBG(2, "_cargo_parse_option return %d\n", (ctx->j - start));
-	return (ctx->j - start); 
+	// Number of arguments eaten.
+	opt->num_eaten = (ctx->j - start);
+	CARGODBG(2, "_cargo_parse_option ate %d\n", opt->num_eaten);
+	return opt->num_eaten;
 }
 
 static const char *_cargo_check_options(cargo_t ctx,
@@ -1734,10 +1760,28 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 			}
 			else
 			{
-				// Normal argument.
-				CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
-				ctx->args[ctx->arg_count] = argv[ctx->i];
-				ctx->arg_count++;
+				size_t opt_i = 0;
+				CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+
+				// Positional argument.
+				if (_cargo_get_positional(ctx, &opt_i) == 0)
+				{
+					opt = &ctx->options[opt_i];
+					if ((opt_arg_count = _cargo_parse_option(ctx, opt,
+														opt->name[0],
+														argc, argv)) < 0)
+					{
+						CARGODBG(1, "    Failed to parse %s option: %s\n",
+								_cargo_type_map[opt->type], name);
+						goto fail;
+					}
+				}
+				else
+				{
+					CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
+					ctx->args[ctx->arg_count] = argv[ctx->i];
+					ctx->arg_count++;
+				}
 			}
 		}
 
@@ -3468,6 +3512,54 @@ _TEST_START(TEST_highlight_args)
 }
 _TEST_END()
 
+_TEST_START(TEST_positional_argument)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	char *s = NULL;
+	int i;
+	int j;
+	char *args[] = { "program", "--beta", "123", "456" };
+
+	ret |= cargo_add_option(cargo, "alpha", "The alpha", "i", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	printf("alpha = %d\n", j);
+	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert(j == 456, "Expected \"alpha\" to have value 456");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_positional_array_argument)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	char *s = NULL;
+	int i;
+	int j[3];
+	int j_expect[] = { 456, 789, 101112 };
+	size_t k;
+	size_t j_count = 0;
+	char *args[] = { "program", "--beta", "123", "456", "789", "101112" };
+
+	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#", &j, &j_count, 3);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	for (k = 0; k < j_count; k++)
+	{
+		printf("alpha = %d\n", j[k]);
+	}
+	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(j_count, 3, j, j_expect);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -3531,7 +3623,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_same_option_twice_string),
 	CARGO_ADD_TEST(TEST_parse_same_option_twice_with_unique),
 	CARGO_ADD_TEST(TEST_parse_same_option_twice_string_with_unique),
-	CARGO_ADD_TEST(TEST_highlight_args)
+	CARGO_ADD_TEST(TEST_highlight_args),
+	CARGO_ADD_TEST(TEST_positional_argument),
+	CARGO_ADD_TEST(TEST_positional_array_argument)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
