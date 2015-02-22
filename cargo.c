@@ -889,6 +889,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			{
 				if ((ctx->j == ctx->i) && !_cargo_zero_args_allowed(opt))
 				{
+					// TODO: Don't print this to stderr.
 					fprintf(stderr, "No argument specified for %s. "
 									"%d expected.\n",
 									name, 
@@ -3432,7 +3433,6 @@ _TEST_END()
 
 _TEST_START(TEST_parse_same_option_twice)
 {
-	// Here we make sure allocated values get freed on a failed parse.
 	int i;
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
@@ -3452,7 +3452,6 @@ _TEST_END()
 
 _TEST_START(TEST_parse_same_option_twice_string)
 {
-	// Here we make sure allocated values get freed on a failed parse.
 	char *s = NULL;
 	int i;
 	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
@@ -3472,7 +3471,6 @@ _TEST_END()
 
 _TEST_START(TEST_parse_same_option_twice_with_unique)
 {
-	// Here we make sure allocated values get freed on a failed parse.
 	int i;
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
@@ -3493,7 +3491,6 @@ _TEST_END()
 
 _TEST_START(TEST_parse_same_option_twice_string_with_unique)
 {
-	// Here we make sure allocated values get freed on a failed parse.
 	char *s = NULL;
 	int i;
 	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
@@ -3795,6 +3792,82 @@ _TEST_START_EX(TEST_autoclean_flag_off, 0)
 }
 _TEST_END_NODESTROY()
 
+_TEST_START(TEST_parse_zero_or_more_with_args)
+{
+	int *i;
+	int i_expect[] = { 1, 2 };
+	size_t i_count;
+	int j;
+	char *args[] = { "program", "--beta", "2", "--alpha", "1", "2" };
+
+	cargo_get_flags(cargo);
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert_array(i_count, 2, i, i_expect);
+
+	_TEST_CLEANUP();
+	// Auto cleanup enabled.
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_zero_or_more_without_args)
+{
+	int *i;
+	size_t i_count;
+	int j;
+	char *args[] = { "program", "--beta", "2", "--alpha" };
+
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(i == NULL, "Expected i to be NULL");
+	cargo_assert(i_count == 0, "Expected i count to be 0");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_zero_or_more_with_positional)
+{
+	int *pos;
+	int pos_expect[] = { 1, 2 };
+	size_t pos_count;
+	int *i;
+	int i_expect[] = { 3, 4 };
+	size_t i_count;
+	int *j;
+	int j_expect[] = { 5, 6 };
+	size_t j_count;
+	char *args[] = { "program", "1", "2", "--alpha", "3", "4", "--beta", "5", "6" };
+
+	cargo_get_flags(cargo);
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	ret |= cargo_add_option(cargo, "pos", "The positional", "[i]*", &pos, &pos_count);
+	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "[i]*", &j, &j_count);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert_array(pos_count, 2, pos, pos_expect);
+	cargo_assert_array(i_count, 2, i, i_expect);
+	cargo_assert_array(j_count, 2, j, j_expect);
+
+	_TEST_CLEANUP();
+	// Auto cleanup enabled.
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -3865,7 +3938,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_multiple_positional_array_argument2),
 	CARGO_ADD_TEST(TEST_multiple_positional_array_argument3),
 	CARGO_ADD_TEST(TEST_autoclean_flag),
-	CARGO_ADD_TEST(TEST_autoclean_flag_off)
+	CARGO_ADD_TEST(TEST_autoclean_flag_off),
+	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_args),
+	CARGO_ADD_TEST(TEST_parse_zero_or_more_without_args),
+	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_positional)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
