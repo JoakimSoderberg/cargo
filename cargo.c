@@ -165,6 +165,9 @@ int cargo_appendf(cargo_str_t *str, const char *fmt, ...)
 	return ret;
 }
 
+#define CARGO_NARGS_ONE_OR_MORE 	-1
+#define CARGO_NARGS_ZERO_OR_MORE	-2
+
 typedef enum cargo_type_e
 {
 	CARGO_BOOL = 0,

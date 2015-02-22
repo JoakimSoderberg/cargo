@@ -134,9 +134,6 @@ typedef enum cargo_flags_e
 	CARGO_AUTOCLEAN						= (1 << 0)
 } cargo_flags_t;
 
-#define CARGO_NARGS_ONE_OR_MORE 	-1
-#define CARGO_NARGS_ZERO_OR_MORE	-2
-
 //
 // Functions.
 //
