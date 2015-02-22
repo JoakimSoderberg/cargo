@@ -190,4 +190,8 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
 int cargo_fprint_args(FILE *f, int argc, char **argv, int start, size_t flags,
 					  size_t highlight_count, ...);
 
+// TODO: Provide wrapper for CommandLineToArgvW
+// http://stackoverflow.com/questions/13481058/commandlinetoargvw-equivalent-on-linux
+// http://linux.die.net/man/3/wordexp
+
 #endif // __CARGO_H__

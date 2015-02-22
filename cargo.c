@@ -14,6 +14,10 @@
 #include <unistd.h>
 #endif // _WIN32
 
+// TODO: Add support for option groups.
+// TODO: Add support for mutual exclusion groups: 
+// https://docs.python.org/3/library/argparse.html#mutual-exclusion
+
 #ifdef CARGO_DEBUG
 #define CARGODBG(level, fmt, ...)											\
 {																			\
@@ -1687,6 +1691,9 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 	return 0;
 }
 
+// TODO: Maybe have an cargo_parse_ex that takes flags as well...
+// Then we can for instance, either give error on unknown opts/args
+// or just ignore them.
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
 	int start;
@@ -1751,7 +1758,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		}
 		else
 		{
-			// TODO: Optional to fail on unknown options!
+			// TODO: Optional to fail on unknown options and arguments!
 			if (_cargo_is_prefix(ctx, argv[ctx->i][0]))
 			{
 				CARGODBG(2, "    Unknown option: %s\n", argv[ctx->i]);
