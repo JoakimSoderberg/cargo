@@ -107,7 +107,6 @@ const char *cargo_get_version();
 
 typedef struct cargo_s *cargo_t;
 
-// TODO: Keep these as enums?
 typedef enum cargo_format_e
 {
 	CARGO_FORMAT_RAW_HELP				= (1 << 0),
@@ -130,12 +129,19 @@ typedef enum cargo_option_flags_e
 	CARGO_OPT_UNIQUE					= (1 << 0)
 } cargo_option_flags_t;
 
+typedef enum cargo_flags_e
+{
+	CARGO_AUTOCLEAN						= (1 << 0)
+} cargo_flags_t;
+
 #define CARGO_NARGS_ONE_OR_MORE 	-1
 #define CARGO_NARGS_NONE_OR_MORE	-2 // TODO: Remove this?
 
 //
 // Functions.
 //
+
+int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags);
 
 int cargo_init(cargo_t *ctx, const char *progname);
 
