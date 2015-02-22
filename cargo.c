@@ -448,6 +448,7 @@ static int _cargo_add(cargo_t ctx,
 	CARGODBG(2, "   alloc = %d\n", o->alloc);
 	CARGODBG(2, "   lenstr = %lu\n", lenstr);
 	CARGODBG(2, "   nargs = %d\n", nargs);
+	CARGODBG(2, "   positional = %d\n", o->positional);
 	CARGODBG(2, "   \n"); 
 
 	return 0;
@@ -465,7 +466,7 @@ static int _cargo_get_positional(cargo_t ctx, size_t *opt_i)
 	{
 		opt = &ctx->options[i];
 
-		if (opt->positional && (opt->num_eaten < opt->nargs))
+		if (opt->positional && (opt->num_eaten != opt->nargs))
 		{
 			*opt_i = i;
 			return 0;
@@ -2233,7 +2234,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	int array = 0;
 	assert(ctx);
 
-	CARGODBG(2, "ADD OPTION VARIADIC\n");
+	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
 
 	if (!(tmp = strdup(optnames)))
 	{
@@ -3575,58 +3576,9 @@ _TEST_START(TEST_positional_array_argument)
 	_TEST_CLEANUP();
 }
 _TEST_END()
-/*
-static int _RUN_POSITIONAL_TEST(cargo_t cargo,
-				)
-{
-	int ret = 0;
-
-	size_t k;
-	int i;
-	int j[3];
-	int j_expect[] = { 456, 789, 101112 };
-	size_t j_count = 0;
-	float m[3];
-	float m_expect[] = { 4.3, 2.3, 50.34 };
-	size_t m_count = 0;
-	char *args[] =
-	{
-		"program",
-		"--beta", "123",
-		"456", "789", "101112",
-		"4.3", "2.3", "50.34"
-	};
-
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
-							&j, &j_count, 3);
-	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", ".[f]#",
-							&m, &m_count, 3);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
-	cargo_assert(ret == 0, "Failed to add options");
-
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-
-	for (k = 0; k < j_count; k++)
-	{
-		printf("alpha = %d\n", j[k]);
-	}
-
-	for (k = 0; k < m_count; k++)
-	{
-		printf("mad = %f\n", m[k]);
-	}
-
-	cargo_assert(ret == 0, "Failed to parse positional argument");
-	cargo_assert_array(m_count, 3, m, m_expect);
-
-	_TEST_CLEANUP();
-
-	return ret;
-}*/
 
 _TEST_START(TEST_multiple_positional_array_argument)
 {
-	// Here we make sure allocated values get freed on a failed parse.
 	size_t k;
 	int i;
 	int j[3];
@@ -3663,6 +3615,7 @@ _TEST_START(TEST_multiple_positional_array_argument)
 	}
 
 	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(j_count, 3, j, j_expect);
 	cargo_assert_array(m_count, 3, m, m_expect);
 
 	_TEST_CLEANUP();
@@ -3671,7 +3624,7 @@ _TEST_END()
 
 _TEST_START(TEST_multiple_positional_array_argument2)
 {
-	// Here we make sure allocated values get freed on a failed parse.
+	// Shuffle the order of arguments
 	size_t k;
 	int i;
 	int j[3];
@@ -3708,9 +3661,59 @@ _TEST_START(TEST_multiple_positional_array_argument2)
 	}
 
 	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(j_count, 3, j, j_expect);
+	cargo_assert(m, "m is NULL");
 	cargo_assert_array(m_count, 3, m, m_expect);
 
 	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_multiple_positional_array_argument3)
+{
+	size_t k;
+	int i;
+	int j[3];
+	int j_expect[] = { 456, 789, 101112 };
+	size_t j_count = 0;
+	float *m = NULL;
+	float m_expect[] = { 4.3, 2.3, 50.34, 0.99 };
+	size_t m_count = 0;
+	char *args[] =
+	{
+		"program",
+		"456", "789", "101112",
+		"--beta", "123",
+		"4.3", "2.3", "50.34", "0.99"
+	};
+
+	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+							&j, &j_count, 3);
+	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", "[f]+",
+							&m, &m_count);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	printf("j_count = %lu\n", j_count);
+	for (k = 0; k < j_count; k++)
+	{
+		printf("alpha = %d\n", j[k]);
+	}
+
+	printf("m_count = %lu\n", m_count);
+	for (k = 0; k < m_count; k++)
+	{
+		printf("mad = %f\n", m[k]);
+	}
+
+	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(j_count, 3, j, j_expect);
+	cargo_assert_array(m_count, 4, m, m_expect);
+
+	_TEST_CLEANUP();
+	if (m) free(m);
 }
 _TEST_END()
 
@@ -3781,7 +3784,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_positional_argument),
 	CARGO_ADD_TEST(TEST_positional_array_argument),
 	CARGO_ADD_TEST(TEST_multiple_positional_array_argument),
-	CARGO_ADD_TEST(TEST_multiple_positional_array_argument2)
+	CARGO_ADD_TEST(TEST_multiple_positional_array_argument2),
+	CARGO_ADD_TEST(TEST_multiple_positional_array_argument3)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
