@@ -36,42 +36,6 @@
 #define CARGODBGI(level, fmt, ...)
 #endif
 
-#ifdef _WIN32
-#define CARGO_COLOR_BLACK			""
-#define CARGO_COLOR_RED				""
-#define CARGO_COLOR_GREEN			""
-#define CARGO_COLOR_YELLOW			""
-#define CARGO_COLOR_BLUE			""
-#define CARGO_COLOR_MAGENTA			""
-#define CARGO_COLOR_CYAN			""
-#define CARGO_COLOR_GRAY			""
-#define CARGO_COLOR_DARK_GRAY		""
-#define CARGO_COLOR_LIGHT_RED		""
-#define CARGO_COLOR_LIGHT_GREEN		""
-#define CARGO_COLOR_LIGHT_BLUE		""
-#define CARGO_COLOR_LIGHT_MAGNETA	""
-#define CARGO_COLOR_LIGHT_CYAN		""
-#define CARGO_COLOR_WHITE			""
-#define CARGO_COLOR_RESET			""
-#else
-#define CARGO_COLOR_BLACK			"\x1b[22;30m"
-#define CARGO_COLOR_RED				"\x1b[22;31m"
-#define CARGO_COLOR_GREEN			"\x1b[22;32m"
-#define CARGO_COLOR_YELLOW			"\x1b[22;33m"
-#define CARGO_COLOR_BLUE			"\x1b[22;34m"
-#define CARGO_COLOR_MAGENTA			"\x1b[22;35m"
-#define CARGO_COLOR_CYAN			"\x1b[22;36m"
-#define CARGO_COLOR_GRAY			"\x1b[22;37m"
-#define CARGO_COLOR_DARK_GRAY		"\x1b[01;30m"
-#define CARGO_COLOR_LIGHT_RED		"\x1b[01;31m"
-#define CARGO_COLOR_LIGHT_GREEN		"\x1b[01;32m"
-#define CARGO_COLOR_LIGHT_BLUE		"\x1b[01;34m"
-#define CARGO_COLOR_LIGHT_MAGNETA	"\x1b[01;35m"
-#define CARGO_COLOR_LIGHT_CYAN		"\x1b[01;36m"
-#define CARGO_COLOR_WHITE			"\x1b[01;37m"
-#define CARGO_COLOR_RESET			"\x1b[0m"
-#endif
-
 #ifndef va_copy
   #ifdef __va_copy
     #define va_copy __va_copy
@@ -142,7 +106,7 @@ int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 	va_end(ap);
 	return r;
 }
-#endif
+#endif // CARGO_HELPER
 
 char *cargo_strndup(const char *s, size_t n)
 {
