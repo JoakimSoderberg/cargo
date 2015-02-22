@@ -234,6 +234,7 @@ typedef struct cargo_opt_s
 	size_t max_target_count;
 	int array;
 	int parsed;
+	size_t flags;
 } cargo_opt_t;
 
 typedef struct cargo_s
@@ -345,7 +346,8 @@ static int _cargo_add(cargo_t ctx,
 				int nargs,
 				cargo_type_t type,
 				const char *description,
-				int alloc)
+				int alloc,
+				size_t flags)
 {
 	size_t opt_len;
 	cargo_opt_t *o = NULL;
@@ -448,6 +450,7 @@ static int _cargo_add(cargo_t ctx,
 	o->target_count = target_count;
 	o->lenstr = lenstr;
 	o->array = (nargs > 1) || (nargs == CARGO_NARGS_ONE_OR_MORE);
+	o->flags = flags;
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -505,6 +508,77 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	}
 
 	return NULL;
+}
+
+static void _cargo_free_str_list(char ***s, size_t *count)
+{
+	size_t i;
+
+	if (!s || !*s)
+		goto done;
+
+	// Only free elements if we have a count.
+	if (count)
+	{
+		for (i = 0; i < *count; i++)
+		{
+			free((*s)[i]);
+			(*s)[i] = NULL;
+		}
+	}
+
+	free(*s);
+	*s = NULL;
+done:
+	if (count)
+		*count = 0;
+}
+
+static void _cargo_cleanup_option_value(cargo_opt_t *opt)
+{
+	assert(opt);
+
+	opt->target_idx = 0;
+	opt->parsed = 0;
+	CARGODBG(3, "Cleanup option target: %s\n", opt->name[0]);
+
+	if (opt->alloc)
+	{
+		if (opt->target && *opt->target)
+		{
+			if (opt->array)
+			{
+				if (opt->type == CARGO_STRING)
+				{
+					_cargo_free_str_list((char ***)&opt->target, opt->target_count);
+				}
+				else
+				{
+					free(*opt->target);
+					*opt->target = NULL;
+				}
+			}
+		}
+	}
+	else
+	{
+		if (opt->target && opt->target_count)
+			memset(opt->target, 0, _cargo_get_type_size(opt->type) * (*opt->target_count));
+	}
+
+	if (opt->target_count)
+		*opt->target_count = 0;
+}
+
+static void _cargo_cleanup_option_values(cargo_t ctx)
+{
+	size_t i;
+	assert(ctx);
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		_cargo_cleanup_option_value(&ctx->options[i]);
+	}
 }
 
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
@@ -689,6 +763,38 @@ static int _cargo_zero_args_allowed(cargo_opt_t *opt)
 		|| (opt->type == CARGO_BOOL);
 }
 
+static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const char *name)
+{
+	if (opt->parsed)
+	{
+		// TODO: Don't printf directly here.
+		// TODO: Pass global flags here for color.
+
+		if (opt->flags & CARGO_OPT_UNIQUE)
+		{
+			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+							2, // Number of highlights.
+							opt->parsed, "^"CARGO_COLOR_GREEN,
+							ctx->i, "~"CARGO_COLOR_RED);
+			fprintf(stderr, " Error: %s was already specified before.\n", name);
+			return -1;
+		}
+		else
+		{
+			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+							2, // Number of highlights.
+							opt->parsed, "^"CARGO_COLOR_DARK_GRAY,
+							ctx->i, "~"CARGO_COLOR_YELLOW);
+			fprintf(stderr, " Warning: %s was already specified before, "
+							"the latter value will be used.\n", name);
+
+			_cargo_cleanup_option_value(opt);
+		}
+	}
+
+	return 0;
+}
+
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
@@ -700,14 +806,10 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	CARGODBG(2, "argc: %d\n", argc);
 	CARGODBG(2, "i: %d\n", ctx->i);
 	CARGODBG(2, "start: %d\n", start);
+	CARGODBG(2, "parsed: %d\n", opt->parsed);
 
-	if (opt->parsed)
+	if (_cargo_check_if_already_parsed(ctx, opt, name))
 	{
-		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
-						2, // Number of highlights.
-						opt->parsed, "^"CARGO_COLOR_GREEN,
-						ctx->i, "~"CARGO_COLOR_RED);
-		fprintf(stderr, "%s was already specified before.\n", name);
 		return -1;
 	}
 	
@@ -957,30 +1059,6 @@ fail:
 	return ret;
 }
 
-static void _cargo_free_str_list(char ***s, size_t *count)
-{
-	size_t i;
-
-	if (!s || !*s)
-		goto done;
-
-	// Only free elements if we have a count.
-	if (count)
-	{
-		for (i = 0; i < *count; i++)
-		{
-			free((*s)[i]);
-			(*s)[i] = NULL;
-		}
-	}
-
-	free(*s);
-	*s = NULL;
-done:
-	if (count)
-		*count = 0;
-}
-
 static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 {
 	char **ss;
@@ -1097,7 +1175,7 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
 		if (_cargo_add(ctx, "--help", (void **)&ctx->help,
-			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0))
+			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0, 0))
 		{
 			return;
 		}
@@ -1278,48 +1356,6 @@ fail:
 	_cargo_free_str_list(&desc_lines, &line_count);
 
 	return ret;
-}
-
-void _cargo_cleanup_option_values(cargo_t ctx)
-{
-	size_t i;
-	cargo_opt_t *opt = NULL;
-	assert(ctx);
-
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		opt = &ctx->options[i];
-		opt->target_idx = 0;
-		opt->parsed = 0;
-		CARGODBG(3, "Cleanup option target: %s\n", opt->name[0]);
-
-		if (opt->alloc)
-		{
-			if (opt->target && *opt->target)
-			{
-				if (opt->array)
-				{
-					if (opt->type == CARGO_STRING)
-					{
-						_cargo_free_str_list((char ***)&opt->target, opt->target_count);
-					}
-					else
-					{
-						free(*opt->target);
-						*opt->target = NULL;
-					}
-				}
-			}
-		}
-		else
-		{
-			if (opt->target && opt->target_count)
-				memset(opt->target, 0, _cargo_get_type_size(opt->type) * (*opt->target_count));
-		}
-
-		if (opt->target_count)
-			*opt->target_count = 0;
-	}
 }
 
 // -----------------------------------------------------------------------------
@@ -2060,80 +2096,6 @@ int cargo_print_usage(cargo_t ctx)
 // TODO: Add cargo_print_short_usage(cargo_t ctx)
 // program [-h] [-s]  
 
-// ARRAYS:
-// -------
-// 4 required
-// float *flist;
-// size_t fcount;
-// cargo_add_option(cargo, "-s --sum", CARGO_ALLOC, "[f4]", &flist, &fcount);
-//
-// 0 or up to 4.
-// float flist[4];
-// size_t fcount;
-// cargo_add_option(cargo, "-s --sum", CARGO_STATIC, "[f0-4]", flist, &fcount);
-//
-// 2 or more
-// float *flist;
-// size_t fcount;
-// cargo_add_option(cargo, "-s --sum", CARGO_ALLOC, "![f2+]", &flist, &fcount);
-//
-// Multiple items (4 required dcount = number read)
-// int d[4];
-// size_t dcount;
-// cargo_add_option(cargo, "-e --errors", CARGO_STATIC, "i i i i #",
-//					&d[0], &d[1], &d[2], &d[3], &dcount);
-//
-// Flag:
-// int all;
-// cargo_add_option("-a --all", CARGO_STATIC, "b", &all);
-// 
-// String (optional argument)
-// char laddr[256];
-// cargo_add_option("-l --listen", CARGO_STATIC, "s?",
-// 					laddr, sizeof(laddr));
-//
-// char *laddr;
-// cargo_add_option("-l --listen", CARGO_ALLOC, "=s?:", &laddr, "example.com");
-//
-// =s?     Allocate optional string    const char *s;    &s
-// =s      Allocate string             const char *s;    &s
-// s10     Static string size 10 bytes char s[10];       &s
-// s#      Static string size # bytes  char s[10];       &s, 10
-// f       Required float              float f;          &f
-// f?:     Required float              float f;          &f, 0.3
-// f?      Optional float              float f;          &f
-// f4      4 required                  float f1;         &f1, &f2, &f3, &f4
-//                                     float f2;
-//                                     float f3;
-//                                     float f4;
-// [f4+]   4 or more static            float f[20];      &f, &fc, max,
-//                                     size_t fc;
-//                                     size_t max = 20;
-// [s10,4]    4  static strings           char strs[4][10]; &strs, &count,
-//          with buflen of 10.         size_t count;
-// [s10,4] 4 static strings            char strs[4][10]; &strs, &count, max
-//          with buflen of 10.         size_t count;
-//                                     size_t max = 4;
-// [s#,4]   4 static strings           char strs[4][10]; &strs, &count, lenstr, max
-//          with buflen of #.          size_t count;
-//          Specify lenstr via var     size_t lenstr = 10;
-//                                     size_t max = 4;
-// =[s+]   Alloc 1 or more strings
-// =[s4]   4 alloc strings             char *strs;       &strs, &count
-//                                     size_t count;
-// =[s,4]  4 alloc strings             char *strs;       &strs, &count
-//                                     size_t count;
-// =[f+]  4 or more allocated.        float *f;         &f, &fc      
-//                                     size_t fc:
-// =[f*]   None or more allocated.     float *f;         &f, &fc
-//                                     size_t fc;
-// [f*]    None or more static.        float f[40];      &f, &fc, max
-//                                     size_t fc;
-//                                     size_t max = 40;
-// f_      Validate function           float f;          &f, valf
-//                                     validate_f valf;
-// =[s#]
-
 typedef struct cargo_fmt_token_s
 {
 	int column;
@@ -2386,22 +2348,19 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		ret = -1; goto fail;
 	}
 
-	if (!(flags & CARGO_FLAG_VALIDATE_ONLY))
+	if ((ret = _cargo_add(ctx, optname_list[0],
+					target, target_count, lenstr,
+					nargs, type, description,
+					s.alloc, flags)))
 	{
-		if ((ret = _cargo_add(ctx, optname_list[0],
-						target, target_count, lenstr,
-						nargs, type, description,
-						s.alloc)))
-		{
-			goto fail;
-		}
+		goto fail;
+	}
 
-		for (i = 1; i < optcount; i++)
+	for (i = 1; i < optcount; i++)
+	{
+		if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
 		{
-			if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
-			{
-				ret = -1; goto fail;
-			}
+			ret = -1; goto fail;
 		}
 	}
 
@@ -2425,6 +2384,20 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	return cargo_add_optionv_ex(ctx, 0, optnames, description, fmt, ap);
 }
 
+int cargo_add_option_ex(cargo_t ctx, size_t flags, const char *optnames,
+						const char *description, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+	assert(ctx);
+
+	va_start(ap, fmt);
+	ret = cargo_add_optionv_ex(ctx, flags, optnames, description, fmt, ap);
+	va_end(ap);
+
+	return ret;
+}
+
 int cargo_add_option(cargo_t ctx, const char *optnames,
 					 const char *description, const char *fmt, ...)
 {
@@ -2437,6 +2410,11 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 	va_end(ap);
 
 	return ret;
+}
+
+const char *cargo_get_version()
+{
+	return CARGO_VERSION_STR;
 }
 
 // -----------------------------------------------------------------------------
@@ -3005,6 +2983,7 @@ _TEST_START(TEST_get_usage)
 	usage = cargo_get_usage(cargo, NULL, NULL);
 	cargo_assert(usage != NULL, "Failed to get allocated usage");
 	printf("%s\n", usage);
+	printf("Cargo v%s\n", cargo_get_version());
 
 	_TEST_CLEANUP();
 	free(usage);
@@ -3383,9 +3362,9 @@ _TEST_START(TEST_parse_same_option_twice)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret != 0, "Succesfully parsed missing value");
 	printf("--alpha == %d\n", i);
-	cargo_assert(i == 1, "Expected --alpha to have value 1");
+	cargo_assert(ret == 0, "Failed to parsed duplicate option without unique");
+	cargo_assert(i == 2, "Expected --alpha to have value 2");
 
 	_TEST_CLEANUP();
 }
@@ -3394,18 +3373,63 @@ _TEST_END()
 _TEST_START(TEST_parse_same_option_twice_string)
 {
 	// Here we make sure allocated values get freed on a failed parse.
-	char *s;
+	char *s = NULL;
 	int i;
-	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha" "2" };
+	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
 
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
 	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret != 0, "Succesfully parsed missing value");
+	cargo_assert(ret == 0, "Failed to parsed duplicate option without unique");
+	cargo_assert(!strcmp(s, "def"), "Expected --alpha to have value \"def\"");
 
 	_TEST_CLEANUP();
+	if (s) free(s);
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_same_option_twice_with_unique)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	int i;
+	int j;
+	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_UNIQUE,
+								"--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	printf("--alpha == %d\n", i);
+	cargo_assert(ret != 0, "Succesfully parsed duplicate option");
+	cargo_assert(i == 1, "Expected --alpha to have value 1");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_same_option_twice_string_with_unique)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	char *s = NULL;
+	int i;
+	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_UNIQUE,
+							"--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	printf("--alpha = %s\n", s);
+	cargo_assert(ret != 0, "Succesfully parsed duplicate option");
+	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+
+	_TEST_CLEANUP();
+	if (s) free(s);
 }
 _TEST_END()
 
@@ -3523,6 +3547,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_missing_array_value),
 	CARGO_ADD_TEST(TEST_parse_missing_array_value_ensure_free),
 	CARGO_ADD_TEST(TEST_parse_same_option_twice),
+	CARGO_ADD_TEST(TEST_parse_same_option_twice_string),
+	CARGO_ADD_TEST(TEST_parse_same_option_twice_with_unique),
+	CARGO_ADD_TEST(TEST_parse_same_option_twice_string_with_unique),
 	CARGO_ADD_TEST(TEST_highlight_args)
 };
 
@@ -3556,7 +3583,8 @@ static int _test_find_test_index(const char *name)
 static int _tests_print_usage(const char *progname)
 {
 	_test_print_names();
-	fprintf(stderr, "\nUsage: %s [--shortlist] [test_num ...] [test_name ...]\n\n", progname);
+	fprintf(stderr, "\nCargo v%s\n", cargo_get_version());
+	fprintf(stderr, "Usage: %s [--shortlist] [test_num ...] [test_name ...]\n\n", progname);
 	fprintf(stderr, "  --shortlist  Don't list test that were not run (must be first argument).\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "  Use test_num = -1 or all tests\n");
