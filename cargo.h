@@ -131,7 +131,9 @@ typedef enum cargo_option_flags_e
 
 typedef enum cargo_flags_e
 {
-	CARGO_AUTOCLEAN						= (1 << 0)
+	CARGO_AUTOCLEAN						= (1 << 0),
+	CARGO_NOERR_OUTPUT					= (1 << 1),
+	CARGO_NOCOLOR 						= (1 << 2)
 } cargo_flags_t;
 
 //
@@ -143,6 +145,10 @@ int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags);
 int cargo_init(cargo_t *ctx, const char *progname);
 
 void cargo_destroy(cargo_t *ctx);
+
+void cargo_set_flags(cargo_t ctx, cargo_flags_t flags);
+
+cargo_flags_t cargo_get_flags(cargo_t ctx);
 
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap);

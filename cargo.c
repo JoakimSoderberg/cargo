@@ -1498,6 +1498,19 @@ void cargo_destroy(cargo_t *ctx)
 	}
 }
 
+void cargo_set_flags(cargo_t ctx, cargo_flags_t flags)
+{
+	assert(ctx);
+	// TODO: Hmm, are there flags we should only be allowed to set in init?
+	ctx->flags = flags;
+}
+
+cargo_flags_t cargo_get_flags(cargo_t ctx)
+{
+	assert(ctx);
+	return ctx->flags;
+}
+
 void cargo_set_option_count_hint(cargo_t ctx, size_t option_count)
 {
 	assert(ctx);
