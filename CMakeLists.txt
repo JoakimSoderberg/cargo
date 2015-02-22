@@ -97,7 +97,7 @@ if (CARGO_TEST)
 
 	foreach (CARGO_LINE ${TEST_LINES})
 		string(REGEX MATCH
-				"TEST_[a-z_]+"
+				"TEST_[a-z0-9_]+"
 				TEST_NAME
 				"${CARGO_LINE}")
 

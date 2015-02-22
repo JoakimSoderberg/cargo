@@ -818,7 +818,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	CARGODBG(2, "start: %d\n", start);
 	CARGODBG(2, "parsed: %d\n", opt->parsed);
 
-	if (_cargo_check_if_already_parsed(ctx, opt, name))
+	if (!opt->positional
+		&& _cargo_check_if_already_parsed(ctx, opt, name))
 	{
 		return -1;
 	}
@@ -913,6 +914,12 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 	// Number of arguments eaten.
 	opt->num_eaten = (ctx->j - start);
+
+	if (!opt->positional)
+	{
+		opt->num_eaten++;
+	}
+
 	CARGODBG(2, "_cargo_parse_option ate %d\n", opt->num_eaten);
 	return opt->num_eaten;
 }
@@ -1734,7 +1741,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
 
-	for (ctx->i = start_index; ctx->i < argc; ctx->i++)
+	for (ctx->i = start_index; ctx->i < argc; )
 	{
 		arg = argv[ctx->i];
 		start = ctx->i;
@@ -1764,6 +1771,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 				CARGODBG(2, "    Unknown option: %s\n", argv[ctx->i]);
 				ctx->unknown_opts[ctx->unknown_opts_count] = argv[ctx->i];
 				ctx->unknown_opts_count++;
+				ctx->i++;
 			}
 			else
 			{
@@ -1782,12 +1790,15 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 								_cargo_type_map[opt->type], name);
 						goto fail;
 					}
+
+					ctx->i += opt_arg_count;
 				}
 				else
 				{
 					CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
 					ctx->args[ctx->arg_count] = argv[ctx->i];
 					ctx->arg_count++;
+					ctx->i++;
 				}
 			}
 		}
@@ -1795,11 +1806,11 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		#if CARGO_DEBUG
 		{
 			int k = 0;
-			int ate = (ctx->i - start) + 1;
+			int ate = opt_arg_count;
 
-			CARGODBG(2, "    Ate %d args: ", ate);
+			CARGODBG(2, "    Ate %d args: ", opt_arg_count);
 
-			for (k = start; k < (start + ate ); k++)
+			for (k = start; k < (start + opt_arg_count); k++)
 			{
 				CARGODBGI(2, "\"%s\" ", argv[k]);
 			}
@@ -3543,11 +3554,10 @@ _TEST_END()
 _TEST_START(TEST_positional_array_argument)
 {
 	// Here we make sure allocated values get freed on a failed parse.
-	char *s = NULL;
+	size_t k;
 	int i;
 	int j[3];
 	int j_expect[] = { 456, 789, 101112 };
-	size_t k;
 	size_t j_count = 0;
 	char *args[] = { "program", "--beta", "123", "456", "789", "101112" };
 
@@ -3562,6 +3572,96 @@ _TEST_START(TEST_positional_array_argument)
 	}
 	cargo_assert(ret == 0, "Failed to parse positional argument");
 	cargo_assert_array(j_count, 3, j, j_expect);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_multiple_positional_array_argument)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	size_t k;
+	int i;
+	int j[3];
+	int j_expect[] = { 456, 789, 101112 };
+	size_t j_count = 0;
+	float m[3];
+	float m_expect[] = { 4.3, 2.3, 50.34 };
+	size_t m_count = 0;
+	char *args[] =
+	{
+		"program",
+		"--beta", "123",
+		"456", "789", "101112",
+		"4.3", "2.3", "50.34"
+	};
+
+	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+							&j, &j_count, 3);
+	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", ".[f]#",
+							&m, &m_count, 3);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	for (k = 0; k < j_count; k++)
+	{
+		printf("alpha = %d\n", j[k]);
+	}
+
+	for (k = 0; k < m_count; k++)
+	{
+		printf("mad = %f\n", m[k]);
+	}
+
+	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(m_count, 3, m, m_expect);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_multiple_positional_array_argument2)
+{
+	// Here we make sure allocated values get freed on a failed parse.
+	size_t k;
+	int i;
+	int j[3];
+	int j_expect[] = { 456, 789, 101112 };
+	size_t j_count = 0;
+	float m[3];
+	float m_expect[] = { 4.3, 2.3, 50.34 };
+	size_t m_count = 0;
+	char *args[] =
+	{
+		"program",
+		"456", "789", "101112",
+		"--beta", "123",
+		"4.3", "2.3", "50.34"
+	};
+
+	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+							&j, &j_count, 3);
+	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", ".[f]#",
+							&m, &m_count, 3);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	for (k = 0; k < j_count; k++)
+	{
+		printf("alpha = %d\n", j[k]);
+	}
+
+	for (k = 0; k < m_count; k++)
+	{
+		printf("mad = %f\n", m[k]);
+	}
+
+	cargo_assert(ret == 0, "Failed to parse positional argument");
+	cargo_assert_array(m_count, 3, m, m_expect);
 
 	_TEST_CLEANUP();
 }
@@ -3632,7 +3732,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_same_option_twice_string_with_unique),
 	CARGO_ADD_TEST(TEST_highlight_args),
 	CARGO_ADD_TEST(TEST_positional_argument),
-	CARGO_ADD_TEST(TEST_positional_array_argument)
+	CARGO_ADD_TEST(TEST_positional_array_argument),
+	CARGO_ADD_TEST(TEST_multiple_positional_array_argument),
+	CARGO_ADD_TEST(TEST_multiple_positional_array_argument2)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
