@@ -421,7 +421,9 @@ static int _cargo_add(cargo_t ctx,
 	o->description = description;
 	o->target_count = target_count;
 	o->lenstr = lenstr;
-	o->array = (nargs > 1) || (nargs == CARGO_NARGS_ONE_OR_MORE);
+	o->array = (nargs > 1)
+			|| (nargs == CARGO_NARGS_ONE_OR_MORE)
+			|| (nargs == CARGO_NARGS_ZERO_OR_MORE);
 	o->flags = flags;
 
 	// By default "nargs" is the max number of arguments the option
@@ -453,6 +455,7 @@ static int _cargo_add(cargo_t ctx,
 	CARGODBG(2, "   lenstr = %lu\n", lenstr);
 	CARGODBG(2, "   nargs = %d\n", nargs);
 	CARGODBG(2, "   positional = %d\n", o->positional);
+	CARGODBG(2, "   array = %d\n", o->array);
 	CARGODBG(2, "   \n"); 
 
 	return 0;
