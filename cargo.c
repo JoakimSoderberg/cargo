@@ -167,6 +167,7 @@ int cargo_appendf(cargo_str_t *str, const char *fmt, ...)
 
 #define CARGO_NARGS_ONE_OR_MORE 	-1
 #define CARGO_NARGS_ZERO_OR_MORE	-2
+#define CARGO_NARGS_ZERO_OR_ONE		-3
 
 typedef enum cargo_type_e
 {
@@ -258,7 +259,8 @@ static int _cargo_nargs_is_valid(int nargs)
 {
 	return (nargs >= 0) 
 		|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
-		|| (nargs == CARGO_NARGS_ONE_OR_MORE);
+		|| (nargs == CARGO_NARGS_ONE_OR_MORE)
+		|| (nargs == CARGO_NARGS_ZERO_OR_ONE);
 }
 
 static int _cargo_starts_with_prefix(cargo_t ctx, const char *arg)
@@ -410,10 +412,6 @@ static int _cargo_add(cargo_t ctx,
 	o = &ctx->options[ctx->opt_count];
 	ctx->opt_count++;
 
-	// Check if the option has a prefix
-	// (if not it's positional).
-	o->positional = !_cargo_is_prefix(ctx, opt[0]);
-
 	o->name[o->name_count++] = optcpy;
 	o->nargs = nargs;
 	o->target = target;
@@ -423,8 +421,21 @@ static int _cargo_add(cargo_t ctx,
 	o->lenstr = lenstr;
 	o->array = (nargs > 1)
 			|| (nargs == CARGO_NARGS_ONE_OR_MORE)
-			|| (nargs == CARGO_NARGS_ZERO_OR_MORE);
+			|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
+			|| (nargs == CARGO_NARGS_ZERO_OR_ONE);
 	o->flags = flags;
+
+	// Check if the option has a prefix
+	// (if not it's positional).
+	o->positional = !_cargo_is_prefix(ctx, opt[0]);
+
+	if (o->positional
+		&& (nargs != CARGO_NARGS_ZERO_OR_MORE)
+		&& (nargs != CARGO_NARGS_ZERO_OR_ONE))
+	{
+		CARGODBG(2, "Positional argument %s required by default\n", o->name[0]);
+		o->flags |= CARGO_OPT_REQUIRED;
+	}
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse. 
@@ -782,6 +793,7 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 static int _cargo_zero_args_allowed(cargo_opt_t *opt)
 {
 	return (opt->nargs == CARGO_NARGS_ZERO_OR_MORE)
+		|| (opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
 		|| (opt->type == CARGO_BOOL);
 }
 
@@ -2448,6 +2460,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		{
 			case '*': nargs = CARGO_NARGS_ZERO_OR_MORE; break;
 			case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+			case '?': nargs = CARGO_NARGS_ZERO_OR_ONE; break;
 			case '#': nargs = va_arg(ap, int); break;
 			default:
 			{
