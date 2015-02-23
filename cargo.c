@@ -813,6 +813,9 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			fprintf(stderr, " Warning: %s was already specified before, "
 							"the latter value will be used.\n", name);
 
+			// TODO: Should we always do this? Say --abc takes a list of integers.
+			// --abc 1 2 3 ... or why not --abc 1 --def 5 --abc 2 3
+			// (probably a bad idea :D)
 			_cargo_cleanup_option_value(opt);
 		}
 	}
@@ -1390,6 +1393,59 @@ fail:
 	_cargo_free_str_list(&desc_lines, &line_count);
 
 	return ret;
+}
+
+static int _cargo_print_options(cargo_t ctx, int show_positional,
+								cargo_str_t *str, char **namebufs,
+								int max_name_len)
+{
+	#define NAME_PADDING 2
+	size_t i;
+
+	// Option names + descriptions.
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		// Is the option name so long we need a new line before the description?
+		int option_causes_newline = (int)strlen(namebufs[i]) > max_name_len;
+
+		if ((show_positional && !ctx->options[i].positional)
+		 || (!show_positional && ctx->options[i].positional))
+		{
+			continue;
+		}
+
+		// Print the option names.
+		// "  --ducks [DUCKS ...]  "
+		if (cargo_appendf(str, "%*s%-*s%s",
+				NAME_PADDING, " ",
+				max_name_len, namebufs[i],
+				(option_causes_newline ? "\n" : "")) < 0)
+		{
+			return -1;
+		}
+
+		// Option description.
+		if ((ctx->format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+			|| (strlen(ctx->options[i].description) < ctx->max_width))
+		{
+			if (cargo_appendf(str, "%*s%s\n",
+				NAME_PADDING, "", ctx->options[i].description) < 0)
+			{
+				return -1;
+			}
+		}
+		else
+		{
+			// Add line breaks to fit the width we want.
+			if (_cargo_fit_optnames_and_description(ctx, str, i,
+					NAME_PADDING, option_causes_newline, max_name_len))
+			{
+				return -1;
+			}
+		}
+	}
+
+	return 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -1990,10 +2046,12 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	int usagelen = 0;
 	int namelen;
 	int max_name_len = 0;
+	size_t positional_count = 0;
+	size_t option_count = 0;
+	cargo_opt_t *opt = NULL;
 	cargo_str_t str;
 	assert(ctx);
 	#define MAX_OPT_NAME_LEN 40
-	#define NAME_PADDING 2
 
 	if (buf && !buf_size)
 	{
@@ -2018,13 +2076,24 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
+		opt = &ctx->options[i];
+
 		if (!(namebufs[i] = malloc(ctx->max_width)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
 		}
 
-		namelen = _cargo_get_option_name_str(ctx, &ctx->options[i], 
+		if (opt->positional)
+		{
+			positional_count++;
+		}
+		else
+		{
+			option_count++;
+		}
+
+		namelen = _cargo_get_option_name_str(ctx, opt,
 											namebufs[i], ctx->max_width);
 
 		if (namelen < 0)
@@ -2040,7 +2109,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 			max_name_len = namelen;
 		}
 
-		usagelen += namelen + strlen(ctx->options[i].description);
+		usagelen += namelen + strlen(opt->description);
 	}
 
 	if (ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
@@ -2097,45 +2166,24 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 		if (cargo_appendf(&str, "%s\nn", ctx->description) < 0) goto fail;
 	}
 
-	if (cargo_appendf(&str,  "Optional arguments:\n") < 0) goto fail;
-
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
 		max_name_len, ctx->max_width);
 
-	// Option names + descriptions.
-	for (i = 0; i < ctx->opt_count; i++)
+	if (positional_count > 0)
 	{
-		// Is the option name so long we need a new line before the description?
-		int option_causes_newline = (int)strlen(namebufs[i]) > max_name_len;
-
-		// Print the option names.
-		// "  --ducks [DUCKS ...]  "
-		if (cargo_appendf(&str, "%*s%-*s%s",
-				NAME_PADDING, " ",
-				max_name_len, namebufs[i],
-				(option_causes_newline ? "\n" : "")) < 0)
+		if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
+		if (_cargo_print_options(ctx, 1, &str, namebufs, max_name_len))
 		{
 			goto fail;
 		}
+	}
 
-		// Option description.
-		if ((ctx->format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
-			|| (strlen(ctx->options[i].description) < ctx->max_width))
+	if (option_count > 0)
+	{
+		if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
+		if (_cargo_print_options(ctx, 0, &str, namebufs, max_name_len))
 		{
-			if (cargo_appendf(&str, "%*s%s\n",
-				NAME_PADDING, "", ctx->options[i].description) < 0)
-			{
-				goto fail;
-			}
-		}
-		else
-		{
-			// Add line breaks to fit the width we want.
-			if (_cargo_fit_optnames_and_description(ctx, &str, i,
-					NAME_PADDING, option_causes_newline, max_name_len))
-			{
-				goto fail;
-			}
+			goto fail;
 		}
 	}
 
@@ -3068,9 +3116,11 @@ _TEST_END()
 #define _ADD_TEST_USAGE_OPTIONS() 										\
 do 																		\
 {																		\
+	int k;																\
 	int i;																\
 	float f;															\
 	int b;																\
+	ret |= cargo_add_option(cargo, "pos", "Positional arg", "i", &k);	\
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);	\
 	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);		\
 	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);	\
