@@ -168,7 +168,7 @@ typedef struct cargo_astr_s
 
 int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 {
-	int ret;
+	int ret = 0;
 	va_list apc;
 	assert(str);
 	assert(str->s);
@@ -178,12 +178,12 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 		if (str->l == 0)
 		{
 			str->l = CARGO_ASTR_DEFAULT_SIZE;
-			str->offset = 0;
 		}
 
+		str->offset = 0;
 		CARGODBG(4, "Initial alloc %lu\n", str->l);
 
-		if (!(*str->s = malloc(str->l)))
+		if (!(*str->s = calloc(1, str->l)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return -1;
@@ -1083,9 +1083,14 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 	int j = 0;
 	int i = 0;
 	char metavarname[20];
-	cargo_str_t str = { buf, bufsize, 0 };
+	cargo_str_t str;
 	assert(ctx);
 	assert(opt);
+
+	memset(&str, 0, sizeof(str));
+	memset(buf, 0, sizeof(buf));
+	str.s = buf;
+	str.l = bufsize;
 
 	while (_cargo_is_prefix(ctx, opt->name[0][i]))
 	{
@@ -1124,7 +1129,11 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	int ret = 0;
 	size_t i;
 	char **sorted_names = NULL;
-	cargo_str_t str = { namebuf, buf_size, 0 };
+	cargo_str_t str;
+
+	memset(&str, 0, sizeof(str));
+	str.s = namebuf;
+	str.l = buf_size;
 
 	CARGODBG(3, "Sorting %lu option names:\n", opt->name_count);
 
@@ -1578,7 +1587,11 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	}
 	else
 	{
-		_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf));
+		if (_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf)))
+		{
+			CARGODBG(1, "Failed to generate metavar\n");
+			return -1;
+		}
 		metavar = metavarbuf;
 	}
 
@@ -2254,7 +2267,6 @@ char *cargo_get_short_usage(cargo_t ctx)
 
 	_cargo_add_help_if_missing(ctx);
 
-	b = NULL;
 	memset(&str, 0, sizeof(str));
 	str.s = &b;
 
@@ -2268,7 +2280,7 @@ char *cargo_get_short_usage(cargo_t ctx)
 	_cargo_get_short_option_usages(ctx, &str, indent, 1);
 
 	// Reallocate the memory used for the string so it's too big.
-	if (!(b = realloc(b, str.offset)))
+	if (!(b = realloc(b, str.offset + 1)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return NULL;
