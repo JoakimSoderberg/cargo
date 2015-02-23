@@ -185,7 +185,7 @@ int cargo_fprint_usage(FILE *f, cargo_t ctx);
 
 int cargo_print_usage(cargo_t ctx);
 
-char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size);
+char *cargo_get_usage(cargo_t ctx);
 
 char *cargo_get_short_usage(cargo_t ctx);
 

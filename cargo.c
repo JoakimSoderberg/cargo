@@ -1611,13 +1611,12 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 										size_t indent,
 										int is_positional)
 {
+	size_t i;
 	int ret;
 	cargo_astr_t opt_str;
 	char *opt_s = NULL;
 	assert(ctx);
 	assert(str);
-
-	size_t i;
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
@@ -2279,7 +2278,7 @@ char *cargo_get_short_usage(cargo_t ctx)
 }
 
 // TODO: Get rid of buf, buf_size... simplify api!
-char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
+char *cargo_get_usage(cargo_t ctx)
 {
 	char *ret = NULL;
 	size_t i;
@@ -2295,12 +2294,6 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	cargo_str_t str;
 	assert(ctx);
 	#define MAX_OPT_NAME_LEN 40
-
-	if (buf && !buf_size)
-	{
-		CARGODBG(1, "cargo_get_usage: buf requires buf_size\n");
-		return NULL;
-	}
 
 	if (!(short_usage = cargo_get_short_usage(ctx)))
 	{
@@ -2375,35 +2368,11 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	// TODO: Let's be more strict here and use the exact padding instead.
 	usagelen = (int)(usagelen * 2.5);
 
-	// Make sure we where given a buffer that is large enough.
-	if (buf_size)
+	// Allocate the final buffer.
+	if (!(b = malloc(usagelen)))
 	{
-		if ((int)(*buf_size) < usagelen)
-		{
-			CARGODBG(1, "buf_size = %lu too small, must be %d\n",
-					*buf_size, usagelen);
-
-			*buf_size = usagelen;
-			goto fail;
-		}
-
-		if (!buf)
-		{
-			*buf_size = usagelen;
-			CARGODBG(1, "Got no buf, only returning buf_size %lu\n", *buf_size);
-			goto fail;
-		}
-
-		b = buf;
-	}
-	else
-	{
-		// Allocate the final buffer.
-		if (!(b = malloc(usagelen)))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			goto fail;
-		}
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
 	}
 
 	str.s = b;
@@ -2418,7 +2387,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	}
 
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
-		max_name_len, ctx->max_width);
+			max_name_len, ctx->max_width);
 
 	if (positional_count > 0)
 	{
@@ -2449,7 +2418,7 @@ fail:
 	// A real failure!
 	if (!ret)
 	{
-		if (!buf && !buf_size && b)
+		if (b)
 		{
 			free(b);
 		}
@@ -2474,7 +2443,7 @@ int cargo_fprint_usage(FILE *f, cargo_t ctx)
 	char *buf;
 	assert(ctx);
 
-	if (!(buf = cargo_get_usage(ctx, NULL, NULL)))
+	if (!(buf = cargo_get_usage(ctx)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return -1;
@@ -2488,7 +2457,7 @@ int cargo_fprint_usage(FILE *f, cargo_t ctx)
 
 int cargo_print_usage(cargo_t ctx)
 {
-	return cargo_fprint_usage(stdout, ctx);	
+	return cargo_fprint_usage(stderr, ctx);
 }
 
 // TODO: Add cargo_print_short_usage(cargo_t ctx)
@@ -3302,7 +3271,7 @@ _TEST_START(TEST_get_usage_settings)
 	for (j = 0; j < sizeof(tus) / sizeof(tus[0]); j++)
 	{
 		cargo_set_format(cargo, tus[j].fmt);
-		usage = cargo_get_usage(cargo, NULL, NULL);
+		usage = cargo_get_usage(cargo);
 		cargo_assert(usage != NULL, "Got null usage");
 		printf("\n\n");
 
@@ -3336,7 +3305,7 @@ _TEST_START(TEST_autohelp_default)
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
 
 	// Default is to automatically add --help option.
-	usage = cargo_get_usage(cargo, NULL, NULL);
+	usage = cargo_get_usage(cargo);
 	cargo_assert(usage != NULL, "Got NULL usage");
 	printf("-------------------------------------\n");
 	printf("%s", usage);
@@ -3357,7 +3326,7 @@ _TEST_START(TEST_autohelp_off)
 	cargo_set_auto_help(cargo, 0);
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
 
-	usage = cargo_get_usage(cargo, NULL, NULL);
+	usage = cargo_get_usage(cargo);
 	cargo_assert(usage != NULL, "Got NULL usage");
 	printf("-------------------------------------\n");
 	printf("%s", usage);
@@ -3391,69 +3360,13 @@ _TEST_START(TEST_get_usage)
 	char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo, NULL, NULL);
+	usage = cargo_get_usage(cargo);
 	cargo_assert(usage != NULL, "Failed to get allocated usage");
 	printf("%s\n", usage);
 	printf("Cargo v%s\n", cargo_get_version());
 
 	_TEST_CLEANUP();
 	free(usage);
-}
-_TEST_END()
-
-_TEST_START(TEST_get_usage_missing_arg)
-{
-	char buf[1024];
-	char *usage = NULL;
-
-	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo, buf, NULL);
-	cargo_assert(usage == NULL, "Expected NULL usage on missing buf_size arg");
-
-	_TEST_CLEANUP();
-}
-_TEST_END()
-
-_TEST_START(TEST_get_usage_size_only)
-{
-	size_t buf_size = 1024;
-	char *usage = NULL;
-
-	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo, NULL, &buf_size);
-	cargo_assert(usage == NULL, "Expected NULL usage on buf_size only");
-
-	_TEST_CLEANUP();
-}
-_TEST_END()
-
-_TEST_START(TEST_get_usage_fixed)
-{
-	char buf[1024];
-	size_t buf_size = 1024;
-	char *usage = NULL;
-
-	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo, buf, &buf_size);
-	cargo_assert(usage != NULL, "Buffer size large enough but got NULL");
-	cargo_assert(usage == buf, "Did not get buf pointer back from call");
-	printf("%s\n", usage);
-
-	_TEST_CLEANUP();
-}
-_TEST_END()
-
-_TEST_START(TEST_get_usage_fixed_too_small)
-{
-	char buf[4];
-	size_t buf_size = 4;
-	char *usage = NULL;
-
-	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo, buf, &buf_size);
-	cargo_assert(usage == NULL, "Buffer size too small but got non-null buf");
-
-	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -4279,10 +4192,6 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_autohelp_default),
 	CARGO_ADD_TEST(TEST_autohelp_off),
 	CARGO_ADD_TEST(TEST_get_usage),
-	CARGO_ADD_TEST(TEST_get_usage_missing_arg),
-	CARGO_ADD_TEST(TEST_get_usage_size_only),
-	CARGO_ADD_TEST(TEST_get_usage_fixed),
-	CARGO_ADD_TEST(TEST_get_usage_fixed_too_small),
 	CARGO_ADD_TEST(TEST_misspelled_argument),
 	CARGO_ADD_TEST(TEST_max_option_count),
 	CARGO_ADD_TEST(TEST_add_duplicate_option),
