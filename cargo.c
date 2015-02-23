@@ -1088,7 +1088,7 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 	assert(opt);
 
 	memset(&str, 0, sizeof(str));
-	memset(buf, 0, sizeof(buf));
+	memset(buf, 0, bufsize);
 	str.s = buf;
 	str.l = bufsize;
 
