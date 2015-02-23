@@ -847,13 +847,14 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	CARGODBG(2, "i: %d\n", ctx->i);
 	CARGODBG(2, "start: %d\n", start);
 	CARGODBG(2, "parsed: %d\n", opt->parsed);
+	CARGODBG(2, "positional: %d\n", opt->positional);
 
 	if (!opt->positional
 		&& _cargo_check_if_already_parsed(ctx, opt, name))
 	{
 		return -1;
 	}
-	
+
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
 		(opt->nargs == CARGO_NARGS_ZERO_OR_MORE))
@@ -1066,6 +1067,9 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	// Print the option names.
 	for (i = 0; i < opt->name_count; i++)
 	{
+		if (opt->positional)
+			continue;
+
 		if (cargo_appendf(&str, "%s%s", 
 			sorted_names[i],
 			(i + 1 != opt->name_count) ? ", " : "") < 0)
@@ -3129,11 +3133,13 @@ _TEST_END()
 #define _ADD_TEST_USAGE_OPTIONS() 										\
 do 																		\
 {																		\
-	int k;																\
+	int *k;																\
+	size_t k_count;														\
 	int i;																\
 	float f;															\
 	int b;																\
-	ret |= cargo_add_option(cargo, "pos", "Positional arg", "i", &k);	\
+	ret |= cargo_add_option(cargo, "pos", "Positional arg", "[i]+",		\
+							&k, &k_count);								\
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);	\
 	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);		\
 	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);	\
