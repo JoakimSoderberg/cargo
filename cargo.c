@@ -136,6 +136,7 @@ typedef struct cargo_str_s
 	char *s;
 	size_t l;
 	size_t offset;
+	size_t diff;
 } cargo_str_t;
 
 int cargo_vappendf(cargo_str_t *str, const char *format, va_list ap)
@@ -143,10 +144,82 @@ int cargo_vappendf(cargo_str_t *str, const char *format, va_list ap)
 	int ret;
 	assert(str);
 
+	str->diff = (str->l - str->offset);
+
 	if ((ret = cargo_vsnprintf(&str->s[str->offset],
-			(str->l - str->offset), format, ap)) < 0)
+			str->diff, format, ap)) < 0)
 	{
 		return -1;
+	}
+
+	str->offset += ret;
+
+	return ret;
+}
+
+#define CARGO_ASTR_DEFAULT_SIZE 256
+typedef struct cargo_astr_s
+{
+	char **s;
+	size_t l;
+	size_t offset;
+	size_t diff;
+} cargo_astr_t;
+
+int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
+{
+	int ret;
+	va_list apc;
+	assert(str);
+	assert(str->s);
+
+	if (!(*str->s))
+	{
+		if (str->l == 0)
+		{
+			str->l = CARGO_ASTR_DEFAULT_SIZE;
+			str->offset = 0;
+		}
+
+		CARGODBG(4, "Initial alloc %lu\n", str->l);
+
+		if (!(*str->s = malloc(str->l)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+
+	while (1)
+	{
+		// We must copy the va_list otherwise it will be
+		// out of sync on a realloc.
+		va_copy(apc, ap);
+
+		str->diff = (str->l - str->offset);
+
+		if ((ret = cargo_vsnprintf(&(*str->s)[str->offset],
+				str->diff, format, apc)) < 0)
+		{
+			CARGODBG(1, "Formatting error\n");
+			return -1;
+		}
+
+		if ((size_t)ret >= str->diff)
+		{
+			str->l *= 2;
+			CARGODBG(4, "Realloc %lu\n", str->l);
+
+			if (!(*str->s = realloc(*str->s, str->l)))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				return -1;
+			}
+
+			continue;
+		}
+
+		break;
 	}
 
 	str->offset += ret;
@@ -161,6 +234,17 @@ int cargo_appendf(cargo_str_t *str, const char *fmt, ...)
 	assert(str);
 	va_start(ap, fmt);
 	ret = cargo_vappendf(str, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
+int cargo_aappendf(cargo_astr_t *str, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+	assert(str);
+	va_start(ap, fmt);
+	ret = cargo_avappendf(str, fmt, ap);
 	va_end(ap);
 	return ret;
 }
@@ -1464,6 +1548,62 @@ static int _cargo_print_options(cargo_t ctx, int show_positional,
 	return 0;
 }
 
+static void _cargo_get_short_option_usage(cargo_t ctx,
+										cargo_opt_t *opt,
+										cargo_astr_t *str,
+										int is_positional)
+{
+	int is_req;
+	char metavarbuf[256];
+	const char *metavar = NULL;
+	assert(ctx);
+	assert(opt);
+	assert(str);
+
+	// Positional arguments.
+	if (is_positional && !opt->positional)
+	{
+		return;
+	}
+
+	// Options.
+	if (!is_positional && opt->positional)
+	{
+		return;
+	}
+
+	if (opt->metavar)
+	{
+		metavar = opt->metavar;
+	}
+	else
+	{
+		_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf));
+		metavar = metavarbuf;
+	}
+
+	is_req = (opt->flags & CARGO_OPT_REQUIRED);
+
+	cargo_aappendf(str, " ");
+
+	if (!is_req)
+	{
+		cargo_aappendf(str, "[");
+	}
+
+	if (!opt->positional)
+	{
+		cargo_aappendf(str, "%s ", opt->name[0]);
+	}
+
+	cargo_aappendf(str, "%s", metavar);
+
+	if (!is_req)
+	{
+		cargo_aappendf(str, "]");
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2053,6 +2193,45 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	return 0;
 }
 
+char *cargo_get_short_usage(cargo_t ctx)
+{
+	size_t i;
+	char *b = NULL;
+	size_t out_size = 0;
+	cargo_astr_t str;
+	assert(ctx);
+
+	_cargo_add_help_if_missing(ctx);
+
+	b = NULL;
+	str.s = &b;
+	str.l = 0;
+	str.offset = 0;
+
+	cargo_aappendf(&str, "Usage: %s", ctx->progname);
+
+	// Options.
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		_cargo_get_short_option_usage(ctx, &ctx->options[i], &str, 0);
+	}
+
+	// Positional arguments at the end.
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		_cargo_get_short_option_usage(ctx, &ctx->options[i], &str, 1);
+	}
+
+	if (!(b = realloc(b, str.offset)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return NULL;
+	}
+
+	return b;
+}
+
+// TODO: Get rid of buf, buf_size... simplify api!
 char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 {
 	char *ret = NULL;
@@ -2064,6 +2243,7 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	int max_name_len = 0;
 	size_t positional_count = 0;
 	size_t option_count = 0;
+	char *short_usage = NULL;
 	cargo_opt_t *opt = NULL;
 	cargo_str_t str;
 	assert(ctx);
@@ -2075,7 +2255,11 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 		return NULL;
 	}
 
-	_cargo_add_help_if_missing(ctx);
+	if (!(short_usage = cargo_get_short_usage(ctx)))
+	{
+		CARGODBG(1, "Failed to get short usage\n");
+		return NULL;
+	}
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -2138,6 +2322,8 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 		usagelen += strlen(ctx->epilog);
 	}
 
+	usagelen += strlen(short_usage);
+
 	// Add some extra to fit padding.
 	// TODO: Let's be more strict here and use the exact padding instead.
 	usagelen = (int)(usagelen * 2.5);
@@ -2176,6 +2362,8 @@ char *cargo_get_usage(cargo_t ctx, char *buf, size_t *buf_size)
 	str.s = b;
 	str.l = usagelen;
 	str.offset = 0;
+
+	cargo_appendf(&str, "%s\n", short_usage);
 
 	if(ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
@@ -2224,6 +2412,11 @@ fail:
 		// We don't want to zero ctx->opt_count.
 		size_t opt_count = ctx->opt_count;
 		_cargo_free_str_list(&namebufs, &opt_count);
+	}
+
+	if (short_usage)
+	{
+		free(short_usage);
 	}
 
 	return ret;
