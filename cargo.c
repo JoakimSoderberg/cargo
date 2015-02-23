@@ -3907,6 +3907,25 @@ _TEST_START(TEST_required_option_missing)
 }
 _TEST_END()
 
+_TEST_START(TEST_required_option)
+{
+	int i;
+	int j;
+	char *args[] = { "program", "--beta", "123", "456", "--alpha", "789" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_REQUIRED,
+							"--alpha", "The alpha", "i", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed with existing required option");
+	cargo_assert(j == 789, "Expected j == 789");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -3981,7 +4000,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_args),
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_without_args),
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_positional),
-	CARGO_ADD_TEST(TEST_required_option_missing)
+	CARGO_ADD_TEST(TEST_required_option_missing),
+	CARGO_ADD_TEST(TEST_required_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
