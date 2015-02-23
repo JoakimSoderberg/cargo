@@ -737,11 +737,14 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	// (Don't include bool here, since val will be NULL in that case).
 	if ((opt->type != CARGO_BOOL) && (end == val))
 	{
+		size_t fprint_flags =
+			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
+
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
 
 		// TODO: Dont use fprintf here.
-		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, fprint_flags,
 						1, ctx->i, "~"CARGO_COLOR_RED);
 		fprintf(stderr, "Cannot parse \"%s\" as %s for option %s\n",
 				val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
@@ -786,12 +789,14 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 {
 	if (opt->parsed)
 	{
+		size_t fprint_flags =
+			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 		// TODO: Don't printf directly here.
-		// TODO: Pass global flags here for color.
 
 		if (opt->flags & CARGO_OPT_UNIQUE)
 		{
-			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
+			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start,
+							fprint_flags,
 							2, // Number of highlights.
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
@@ -800,8 +805,9 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		}
 		else
 		{
-			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, 0,
-							2, // Number of highlights.
+			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start,
+							fprint_flags,
+							2,
 							opt->parsed, "^"CARGO_COLOR_DARK_GRAY,
 							ctx->i, "~"CARGO_COLOR_YELLOW);
 			fprintf(stderr, " Warning: %s was already specified before, "
@@ -1737,6 +1743,7 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 // or just ignore them.
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
+	size_t i;
 	int start = 0;
 	int opt_arg_count = 0;
 	char *arg = NULL;
@@ -1853,10 +1860,21 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		#endif // CARGO_DEBUG
 	}
 
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
+		{
+			CARGODBG(1, "Missing required option %s\n", opt->name[0]);
+			fprintf(stderr, "Missing required option %s\n", opt->name[0]);
+			goto fail;
+		}
+	}
+
 	if (ctx->unknown_opts_count > 0)
 	{
-		size_t i;
-		const char *suggestion;
+		const char *suggestion = NULL;
 		// TODO: Don't print to stderr here, instead enable getting as a string.
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		fprintf(stderr, "Unknown options:\n");
@@ -3871,6 +3889,24 @@ _TEST_START(TEST_parse_zero_or_more_with_positional)
 }
 _TEST_END()
 
+_TEST_START(TEST_required_option_missing)
+{
+	int i;
+	int j;
+	char *args[] = { "program", "--beta", "123", "456" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_REQUIRED,
+							"--alpha", "The alpha", "i", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succeeded with missing required option");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -3944,7 +3980,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_autoclean_flag_off),
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_args),
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_without_args),
-	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_positional)
+	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_positional),
+	CARGO_ADD_TEST(TEST_required_option_missing)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
