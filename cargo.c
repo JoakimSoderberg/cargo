@@ -1548,7 +1548,7 @@ static int _cargo_print_options(cargo_t ctx, int show_positional,
 	return 0;
 }
 
-static void _cargo_get_short_option_usage(cargo_t ctx,
+static int _cargo_get_short_option_usage(cargo_t ctx,
 										cargo_opt_t *opt,
 										cargo_astr_t *str,
 										int is_positional)
@@ -1563,13 +1563,13 @@ static void _cargo_get_short_option_usage(cargo_t ctx,
 	// Positional arguments.
 	if (is_positional && !opt->positional)
 	{
-		return;
+		return 1;
 	}
 
 	// Options.
 	if (!is_positional && opt->positional)
 	{
-		return;
+		return 1;
 	}
 
 	if (opt->metavar)
@@ -1602,6 +1602,56 @@ static void _cargo_get_short_option_usage(cargo_t ctx,
 	{
 		cargo_aappendf(str, "]");
 	}
+
+	return 0;
+}
+
+static int _cargo_get_short_option_usages(cargo_t ctx,
+										cargo_astr_t *str,
+										size_t indent,
+										int is_positional)
+{
+	int ret;
+	cargo_astr_t opt_str;
+	char *opt_s = NULL;
+	assert(ctx);
+	assert(str);
+
+	size_t i;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		memset(&opt_str, 0, sizeof(opt_str));
+		opt_str.s = &opt_s;
+
+		if ((ret = _cargo_get_short_option_usage(ctx,
+								&ctx->options[i],
+								&opt_str, is_positional)) < 0)
+		{
+			CARGODBG(1, "Failed to get option usage\n");
+			return -1;
+		}
+
+		if (ret == 1)
+		{
+			continue;
+		}
+
+		// Does the option fit on this line?
+		if ((str->offset + opt_str.offset) >= ctx->max_width)
+		{
+			cargo_aappendf(str, "\n%*s", indent, " ");
+		}
+
+		if (opt_s)
+		{
+			cargo_aappendf(str, "%s", opt_s);
+			free(opt_s);
+			opt_s = NULL;
+		}
+	}
+
+	return 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -2198,30 +2248,27 @@ char *cargo_get_short_usage(cargo_t ctx)
 	size_t i;
 	char *b = NULL;
 	size_t out_size = 0;
+	size_t indent = 0;
+	int need_indent = 0;
 	cargo_astr_t str;
 	assert(ctx);
 
 	_cargo_add_help_if_missing(ctx);
 
 	b = NULL;
+	memset(&str, 0, sizeof(str));
 	str.s = &b;
-	str.l = 0;
-	str.offset = 0;
 
 	cargo_aappendf(&str, "Usage: %s", ctx->progname);
+	indent = str.offset;
 
 	// Options.
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		_cargo_get_short_option_usage(ctx, &ctx->options[i], &str, 0);
-	}
+	_cargo_get_short_option_usages(ctx, &str, indent, 0);
 
 	// Positional arguments at the end.
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		_cargo_get_short_option_usage(ctx, &ctx->options[i], &str, 1);
-	}
+	_cargo_get_short_option_usages(ctx, &str, indent, 1);
 
+	// Reallocate the memory used for the string so it's too big.
 	if (!(b = realloc(b, str.offset)))
 	{
 		CARGODBG(1, "Out of memory!\n");
