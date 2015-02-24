@@ -138,6 +138,13 @@ typedef enum cargo_flags_e
 } cargo_flags_t;
 
 //
+// Callback types.
+//
+
+typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv);
+
+//
 // Functions.
 //
 
