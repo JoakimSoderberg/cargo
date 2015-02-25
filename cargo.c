@@ -1763,7 +1763,6 @@ typedef struct cargo_fmt_scanner_s
 
 static char _cargo_fmt_token(cargo_fmt_scanner_t *s)
 {
-	CARGODBG(4, "TOKEN: '%c'\n", s->token.token);
 	return s->token.token;
 }
 
@@ -1808,7 +1807,6 @@ static void _cargo_fmt_next_token(cargo_fmt_scanner_t *s)
 
 static void _cargo_fmt_prev_token(cargo_fmt_scanner_t *s)
 {
-	CARGODBG(4, "PREV TOKEN\n");
 	s->next_token = s->token;
 	s->token = s->prev_token;
 	s->fmt = &s->start[s->token.column];
@@ -2663,7 +2661,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	if (_cargo_fmt_token(&s) == '[')
 	{
-		CARGODBG(4, "   [ ARRAY\n");
+		CARGODBG(4, "   [\n");
 		o->array = 1;
 		_cargo_fmt_next_token(&s);
 	}
@@ -2677,8 +2675,10 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			CARGODBG(4, "Custom callback\n");
 			if (!o->alloc)
 			{
-				CARGODBG(1, "Static '.' is not allowed for a custom callback");
-				goto fail;
+				CARGODBG(1, "WARNING! Static '.' is ignored for a custom "
+							"callback the memory for the arguments is "
+							"allocated internally.");
+				o->alloc = 1;
 			}
 
 			o->type = CARGO_STRING;
