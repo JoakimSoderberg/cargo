@@ -48,6 +48,23 @@
   #endif
 #endif
 
+
+#define CARGO_MAX(a, b)			\
+({								\
+	__typeof__ (a) _a = (a);	\
+	__typeof__ (b) _b = (b);	\
+	(_a > _b) ? _a : _b;		\
+})
+
+#define CARGO_MIN(a, b)			\
+({								\
+	__typeof__ (a) _a = (a);	\
+	__typeof__ (b) _b = (b);	\
+	(_a < _b) ? _a : _b;		\
+})
+//#define CARGO_MIN(a, b) ((a) > (b) ? a : b)
+//#define CARGO_MAX(a, b) ((a) < (b) ? a : b)
+
 int cargo_get_console_width()
 {
 	#ifdef _WIN32
@@ -896,16 +913,14 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	{
 		args_to_look_for = (argc - start);
 
-		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) 
-			&& (args_to_look_for == 0))
+		switch (opt->nargs)
 		{
-			args_to_look_for = 1;
-		}
-
-		if ((opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
-			&& (args_to_look_for > 1))
-		{
-			args_to_look_for = 1;
+			case CARGO_NARGS_ONE_OR_MORE:
+				args_to_look_for = CARGO_MAX(args_to_look_for, 1);
+				break;
+			case CARGO_NARGS_ZERO_OR_ONE:
+				args_to_look_for = CARGO_MIN(args_to_look_for, 1);
+				break;
 		}
 	}
 	else
@@ -4518,7 +4533,7 @@ _TEST_END()
 _TEST_START(TEST_zero_or_more_without_arg)
 {
 	int i = 0;
-	int j = 0;
+	int j = 5;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 
 	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
@@ -4527,7 +4542,7 @@ _TEST_START(TEST_zero_or_more_without_arg)
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
-	cargo_assert(j == 0, "Expected j == 0");
+	cargo_assert(j == 5, "Expected j == 5");
 
 	_TEST_CLEANUP();
 }
