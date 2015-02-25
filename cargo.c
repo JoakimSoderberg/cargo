@@ -471,15 +471,6 @@ static int _cargo_validate_option_args(cargo_t ctx,
 		return -1;
 	}
 
-	if (!ctx->options)
-	{
-		if (!(ctx->options = calloc(ctx->max_opts, sizeof(cargo_opt_t))))
-		{
-			CARGODBG(1, "Out of memory\n");
-			return -1;
-		}
-	}
-
 	if (!_cargo_find_option_name(ctx, opt, NULL, NULL))
 	{
 		CARGODBG(1, "%s already exists\n", opt);
@@ -491,6 +482,15 @@ static int _cargo_validate_option_args(cargo_t ctx,
 
 static int _cargo_grow_options(cargo_t ctx)
 {
+	if (!ctx->options)
+	{
+		if (!(ctx->options = calloc(ctx->max_opts, sizeof(cargo_opt_t))))
+		{
+			CARGODBG(1, "Out of memory\n");
+			return -1;
+		}
+	}
+
 	if (ctx->opt_count >= ctx->max_opts)
 	{
 		cargo_opt_t *new_options = NULL;
@@ -2603,6 +2603,15 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	}
 	#endif // CARGO_DEBUG
 
+	if (_cargo_grow_options(ctx))
+	{
+		goto fail;
+	}
+
+	o = &ctx->options[ctx->opt_count];
+	memset(o, 0, sizeof(cargo_opt_t));
+	ctx->opt_count++;
+
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, optname_list[0], fmt);
 	_next_token(&s);
@@ -2777,14 +2786,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	if (_cargo_grow_options(ctx))
-	{
-		goto fail;
-	}
-
-	o = &ctx->options[ctx->opt_count];
-	ctx->opt_count++;
-
 	if (!(optname = strdup(optname_list[0])))
 	{
 		CARGODBG(1, "Out of memory\n");
@@ -2866,6 +2867,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	ret = 0;
 
 fail:
+	if (ret < 0)
+	{
+		ctx->opt_count--;
+	}
+
 	if (tmp)
 	{
 		free(tmp);
