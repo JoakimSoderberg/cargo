@@ -1815,6 +1815,76 @@ static void _cargo_fmt_prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
+static int _cargo_fmt_parse_custom(cargo_opt_t *o, va_list ap)
+{
+	assert(o);
+
+	CARGODBG(4, "Custom callback\n");
+
+	if (!o->alloc)
+	{
+		CARGODBG(1, "WARNING! Static '.' is ignored for a custom "
+					"callback the memory for the arguments is "
+					"allocated internally.");
+		o->alloc = 1;
+	}
+
+	o->type = CARGO_STRING;
+	o->custom = va_arg(ap, cargo_custom_cb_t);
+	o->custom_user = va_arg(ap, void *);
+
+	// Internal target.
+	o->target = (void **)&o->custom_target;
+	o->target_count = &o->custom_target_count;
+
+	o->lenstr = 0;
+	o->nargs = 1;
+
+	if (!o->custom)
+	{
+		CARGODBG(1, "Got NULL custom callback pointer\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int _cargo_fmt_parse_string(cargo_opt_t *o, cargo_fmt_scanner_t *s, va_list ap)
+{
+	assert(o);
+	assert(s);
+
+	o->type = CARGO_STRING;
+	o->target = (void *)va_arg(ap, char *);
+
+	CARGODBG(4, "Read string\n");
+	_cargo_fmt_next_token(s);
+
+	if (_cargo_fmt_token(s) == '#')
+	{
+		o->lenstr = (size_t)va_arg(ap, int);
+		CARGODBG(4, "String length: %lu\n", o->lenstr);
+
+		if (o->alloc)
+		{
+			CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
+				"string using # is only done on static strings.\n"
+				"    Are you sure you want this?\n",
+				o->name[0]);
+			CARGODBG(1, "      \"%s\"\n", s->start);
+			CARGODBG(1, "       %*s\n", s->column, "^");
+		}
+	}
+	else
+	{
+		// String size not fixed.
+		o->lenstr = 0;
+		_cargo_fmt_prev_token(s);
+	}
+
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2668,68 +2738,10 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	switch (_cargo_fmt_token(&s))
 	{
-		case 'c':
-		{
-			// Same as string, but the target is internal
-			// and will be passed to the user specified callback.
-			CARGODBG(4, "Custom callback\n");
-			if (!o->alloc)
-			{
-				CARGODBG(1, "WARNING! Static '.' is ignored for a custom "
-							"callback the memory for the arguments is "
-							"allocated internally.");
-				o->alloc = 1;
-			}
-
-			o->type = CARGO_STRING;
-			o->custom = va_arg(ap, cargo_custom_cb_t);
-			o->custom_user = va_arg(ap, void *);
-			
-			// Internal target.
-			o->target = (void **)&o->custom_target;
-			o->target_count = &o->custom_target_count;
-
-			o->lenstr = 0;
-			o->nargs = 1;
-
-			if (!o->custom)
-			{
-				CARGODBG(1, "Got NULL custom callback pointer\n");
-				goto fail;
-			}
-			break;
-		}
-		case 's':
-		{
-			o->type = CARGO_STRING;
-			o->target = (void *)va_arg(ap, char *);
-
-			CARGODBG(4, "Read string\n");
-			_cargo_fmt_next_token(&s);
-
-			if (_cargo_fmt_token(&s) == '#')
-			{
-				o->lenstr = (size_t)va_arg(ap, int);
-				CARGODBG(4, "String length: %lu\n", o->lenstr);
-
-				if (o->alloc)
-				{
-					CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
-						"string using # is only done on static strings.\n"
-						"    Are you sure you want this?\n",
-						optname);
-					CARGODBG(1, "      \"%s\"\n", s.start);
-					CARGODBG(1, "       %*s\n", s.column, "^");
-				}
-			}
-			else
-			{
-				// String size not fixed.
-				o->lenstr = 0;
-				_cargo_fmt_prev_token(&s);
-			}
-			break;
-		}
+		// Same as string, but the target is internal
+		// and will be passed to the user specified callback.
+		case 'c': if (_cargo_fmt_parse_custom(o, ap)) goto fail; break;
+		case 's': if (_cargo_fmt_parse_string(o, &s, ap)) goto fail; break;
 		case 'i': o->type = CARGO_INT;    o->target = (void *)va_arg(ap, void *); break;
 		case 'd': o->type = CARGO_DOUBLE; o->target = (void *)va_arg(ap, void *); break;
 		case 'b': o->type = CARGO_BOOL;   o->target = (void *)va_arg(ap, void *); break;
@@ -2762,8 +2774,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 		_cargo_fmt_next_token(&s);
 
-		CARGODBG(4, "Look for ']'\n");
-
 		if (_cargo_fmt_token(&s) != ']')
 		{
 			CARGODBG(1, "%s: Expected ']'\n", optname_list[0]);
@@ -2790,8 +2800,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 				goto fail;
 			}
 		}
-
-		CARGODBG(4, "  %s: nargs = %d\n", optname_list[0], o->nargs);
 	}
 	else
 	{
@@ -2824,16 +2832,8 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		o->flags |= CARGO_OPT_REQUIRED;
 	}
 
-	// By default "nargs" is the max number of arguments the option
-	// should parse.
-	if (o->nargs >= 0)
-	{
-		o->max_target_count = o->nargs;
-	}
-	else
-	{
-		o->max_target_count = (size_t)-1;
-	}
+	// By default "nargs" is the max number of arguments the option should parse.
+	o->max_target_count = (o->nargs >= 0) ? o->nargs : (size_t)(-1);
 
 	if (o->alloc)
 	{
@@ -2850,15 +2850,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	CARGODBG(2, " cargo_add %s:\n", optname);
-	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
-	CARGODBG(2, "   alloc = %d\n", o->alloc);
-	CARGODBG(2, "   lenstr = %lu\n", o->lenstr);
-	CARGODBG(2, "   nargs = %d\n", o->nargs);
-	CARGODBG(2, "   positional = %d\n", o->positional);
-	CARGODBG(2, "   array = %d\n", o->array);
-	CARGODBG(2, "   \n");
-
 	for (i = 1; i < optcount; i++)
 	{
 		if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
@@ -2866,6 +2857,15 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			goto fail;
 		}
 	}
+
+	CARGODBG(2, " Option %s:\n", optname);
+	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
+	CARGODBG(2, "   alloc = %d\n", o->alloc);
+	CARGODBG(2, "   lenstr = %lu\n", o->lenstr);
+	CARGODBG(2, "   nargs = %d\n", o->nargs);
+	CARGODBG(2, "   positional = %d\n", o->positional);
+	CARGODBG(2, "   array = %d\n", o->array);
+	CARGODBG(2, "   \n");
 
 	ret = 0;
 
