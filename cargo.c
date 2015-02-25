@@ -2533,7 +2533,54 @@ static void _prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
-int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
+static char **_cargo_split_and_verify_options(cargo_t ctx, const char *optnames, size_t *optcount)
+{
+	char **optname_list = NULL;
+	char *tmp = NULL;
+	size_t i;
+	assert(ctx);
+	assert(optcount);
+
+	if (!(tmp = strdup(optnames)))
+	{
+		return NULL;
+	}
+
+	if (!(optname_list = _cargo_split(tmp, " ", optcount))
+		|| (optcount <= 0))
+	{
+		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
+		goto fail;
+	}
+
+	#ifdef CARGO_DEBUG
+	CARGODBG(3, "Got %lu option names:\n", *optcount);
+	for (i = 0; i < *optcount; i++)
+	{
+		CARGODBG(3, " %s\n", optname_list[i]);
+	}
+	#endif // CARGO_DEBUG
+
+	if (!_cargo_find_option_name(ctx, optname_list[0], NULL, NULL))
+	{
+		CARGODBG(1, "%s already exists\n", optname_list[0]);
+		goto fail;
+	}
+
+	free(tmp);
+	return optname_list;
+
+fail:
+	if (tmp) free(tmp);
+	if (optname_list)
+	{
+		_cargo_free_str_list(&optname_list, optcount);
+	}
+
+	return NULL;
+}
+
+int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 					  const char *description, const char *fmt, va_list ap)
 {
 	size_t optcount = 0;
@@ -2551,30 +2598,10 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
 
 	// TODO: Break out into functions.
-	if (!(tmp = strdup(optnames)))
+	if (!(optname_list = _cargo_split_and_verify_options(ctx, optnames, &optcount)))
 	{
-		return -1;
-	}
-
-	if (!(optname_list = _cargo_split(tmp, " ", &optcount))
-		|| (optcount <= 0))
-	{
-		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
+		CARGODBG(1, "Failed to split option names \"%s\"\n", optnames);
 		goto fail;
-	}
-
-	#ifdef CARGO_DEBUG
-	CARGODBG(3, "Got %lu option names:\n", optcount);
-	for (i = 0; i < optcount; i++)
-	{
-		CARGODBG(3, " %s\n", optname_list[i]);
-	}
-	#endif // CARGO_DEBUG
-
-	if (!_cargo_find_option_name(ctx, optname_list[0], NULL, NULL))
-	{
-		CARGODBG(1, "%s already exists\n", optname_list[0]);
-		return -1;
 	}
 
 	if (_cargo_grow_options(ctx))
