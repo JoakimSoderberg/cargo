@@ -517,122 +517,6 @@ static int _cargo_grow_options(cargo_t ctx)
 	return 0;
 }
 
-// TODO: Merge this with add_option instead, this is becomnig bloated.
-static int _cargo_add(cargo_t ctx,
-				const char *opt,
-				void **target,
-				size_t *target_count,
-				size_t lenstr,
-				int nargs,
-				cargo_type_t type,
-				const char *description,
-				int alloc,
-				cargo_custom_cb_t custom,
-				void *custom_user,
-				size_t *custom_user_count,
-				size_t flags)
-{
-	size_t opt_len;
-	cargo_opt_t *o = NULL;
-	char *optcpy = NULL;
-
-	CARGODBG(2, "_cargo_add: %s\n", opt);
-
-	// TODO: Maybe change all these checks into asserts instead?
-	if (_cargo_validate_option_args(ctx,
-		opt, target, target_count, lenstr,
-		nargs, type, description, alloc,
-		custom, custom_user_count, custom_user_count,
-		flags))
-	{
-		return -1;
-	}
-
-	if (_cargo_grow_options(ctx))
-	{
-		return -1;
-	}
-
-	o = &ctx->options[ctx->opt_count];
-	ctx->opt_count++;
-
-	if (!(optcpy = strdup(opt)))
-	{
-		CARGODBG(1, "Out of memory\n");
-		return -1;
-	}
-
-	o->name[o->name_count++] = optcpy;
-
-	if (custom)
-	{
-		target = (void **)(&o->custom_target);
-		target_count = &o->custom_target_count;
-	}
-
-	o->nargs = nargs;
-	o->target = target;
-	o->type = type;
-	o->description = description;
-	o->target_count = target_count;
-	o->lenstr = lenstr;
-	o->custom = custom;
-	o->custom_user = custom_user;
-	o->custom_user_count = custom_user_count;
-
-	o->array = (nargs > 1)
-			|| (nargs == CARGO_NARGS_ONE_OR_MORE)
-			|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
-			|| (nargs == CARGO_NARGS_ZERO_OR_ONE);
-	o->flags = flags;
-
-	// Check if the option has a prefix
-	// (if not it's positional).
-	o->positional = !_cargo_is_prefix(ctx, opt[0]);
-
-	if (o->positional
-		&& (nargs != CARGO_NARGS_ZERO_OR_MORE)
-		&& (nargs != CARGO_NARGS_ZERO_OR_ONE))
-	{
-		CARGODBG(2, "Positional argument %s required by default\n", o->name[0]);
-		o->flags |= CARGO_OPT_REQUIRED;
-	}
-
-	// By default "nargs" is the max number of arguments the option
-	// should parse. 
-	if (nargs >= 0)
-	{
-		o->max_target_count = nargs;
-	}
-	else
-	{
-		o->max_target_count = (size_t)-1;
-	}
-
-	o->alloc = alloc;
-
-	if (alloc)
-	{
-		*(o->target) = NULL;
-	}
-
-	if (o->target_count)
-	{
-		*(o->target_count) = 0;
-	}
-
-	CARGODBG(2, " cargo_add %s:\n", opt);
-	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
-	CARGODBG(2, "   alloc = %d\n", o->alloc);
-	CARGODBG(2, "   lenstr = %lu\n", lenstr);
-	CARGODBG(2, "   nargs = %d\n", nargs);
-	CARGODBG(2, "   positional = %d\n", o->positional);
-	CARGODBG(2, "   array = %d\n", o->array);
-	CARGODBG(2, "   \n"); 
-
-	return 0;
-}
-
 static int _cargo_get_positional(cargo_t ctx, size_t *opt_i)
 {
 	size_t i;
@@ -1434,9 +1318,9 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 
 	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
-		if (_cargo_add(ctx, "--help", (void **)&ctx->help,
-			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0, 0, NULL, NULL, 0))
+		if (cargo_add_option(ctx, "--help", "Show this help", "b", &ctx->help))
 		{
+			CARGODBG(1, "Failed to add --help\n");
 			return;
 		}
 
@@ -2693,6 +2577,8 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
 	int array = 0;
+	cargo_opt_t *o = NULL;
+	char *optcpy = NULL;
 	assert(ctx);
 	// TODO: Maybe clean this up and consolidate with _cargo_add
 	// so that parsing is done directly into the cargo_opt_t struct instead.
@@ -2884,14 +2770,92 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	if ((ret = _cargo_add(ctx, optname_list[0],
-					target, target_count, lenstr,
-					nargs, type, description, s.alloc,
-					custom, custom_user, custom_user_count,
-					flags)))
+	if (_cargo_validate_option_args(ctx,
+		optname_list[0], target, target_count, lenstr,
+		nargs, type, description, s.alloc,
+		custom, custom_user, custom_user_count,
+		flags))
 	{
-		goto fail;
+		return -1;
 	}
+
+	if (_cargo_grow_options(ctx))
+	{
+		return -1;
+	}
+
+	o = &ctx->options[ctx->opt_count];
+	ctx->opt_count++;
+
+	if (!(optcpy = strdup(optname_list[0])))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return -1;
+	}
+
+	o->name[o->name_count++] = optcpy;
+
+	if (custom)
+	{
+		target = (void **)(&o->custom_target);
+		target_count = &o->custom_target_count;
+	}
+
+	o->nargs = nargs;
+	o->target = target;
+	o->type = type;
+	o->description = description;
+	o->target_count = target_count;
+	o->lenstr = lenstr;
+	o->custom = custom;
+	o->custom_user = custom_user;
+	o->custom_user_count = custom_user_count;
+	o->array = s.array;
+	o->flags = flags;
+
+	// Check if the option has a prefix
+	// (if not it's positional).
+	o->positional = !_cargo_is_prefix(ctx, optcpy[0]);
+
+	if (o->positional
+		&& (nargs != CARGO_NARGS_ZERO_OR_MORE)
+		&& (nargs != CARGO_NARGS_ZERO_OR_ONE))
+	{
+		CARGODBG(2, "Positional argument %s required by default\n", o->name[0]);
+		o->flags |= CARGO_OPT_REQUIRED;
+	}
+
+	// By default "nargs" is the max number of arguments the option
+	// should parse.
+	if (nargs >= 0)
+	{
+		o->max_target_count = nargs;
+	}
+	else
+	{
+		o->max_target_count = (size_t)-1;
+	}
+
+	o->alloc = s.alloc;
+
+	if (s.alloc)
+	{
+		*(o->target) = NULL;
+	}
+
+	if (o->target_count)
+	{
+		*(o->target_count) = 0;
+	}
+
+	CARGODBG(2, " cargo_add %s:\n", optcpy);
+	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
+	CARGODBG(2, "   alloc = %d\n", o->alloc);
+	CARGODBG(2, "   lenstr = %lu\n", lenstr);
+	CARGODBG(2, "   nargs = %d\n", nargs);
+	CARGODBG(2, "   positional = %d\n", o->positional);
+	CARGODBG(2, "   array = %d\n", o->array);
+	CARGODBG(2, "   \n");
 
 	for (i = 1; i < optcount; i++)
 	{
