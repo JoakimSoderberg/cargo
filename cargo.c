@@ -891,12 +891,19 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 	// Keep looking until the end of the argument list.
 	if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
-		(opt->nargs == CARGO_NARGS_ZERO_OR_MORE))
+		(opt->nargs == CARGO_NARGS_ZERO_OR_MORE) ||
+		(opt->nargs == CARGO_NARGS_ZERO_OR_ONE))
 	{
 		args_to_look_for = (argc - start);
 
 		if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) 
 			&& (args_to_look_for == 0))
+		{
+			args_to_look_for = 1;
+		}
+
+		if ((opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
+			&& (args_to_look_for > 1))
 		{
 			args_to_look_for = 1;
 		}
@@ -907,6 +914,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		args_to_look_for = (opt->nargs - opt->target_idx);
 	}
 
+	assert(args_to_look_for >= 0);
 	CARGODBG(3, "Looking for %d args\n", args_to_look_for);
 
 	// Look for arguments for this option.
@@ -2750,7 +2758,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		default:
 		{
 			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-					optname_list[0], _cargo_fmt_token(&s), s.column);
+					o->name[0], _cargo_fmt_token(&s), s.column);
 			CARGODBG(1, "      \"%s\"\n", fmt);
 			CARGODBG(1, "       %*s\n", s.column, "^");
 			goto fail;
@@ -2776,7 +2784,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 		if (_cargo_fmt_token(&s) != ']')
 		{
-			CARGODBG(1, "%s: Expected ']'\n", optname_list[0]);
+			CARGODBG(1, "%s: Expected ']'\n", o->name[0]);
 			CARGODBG(1, "      \"%s\"\n", fmt);
 			CARGODBG(1, "        %*s\n", s.column, "^");
 			goto fail;
@@ -2788,7 +2796,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		{
 			case '*': o->nargs = CARGO_NARGS_ZERO_OR_MORE; break;
 			case '+': o->nargs = CARGO_NARGS_ONE_OR_MORE;  break;
-			case '?': o->nargs = CARGO_NARGS_ZERO_OR_ONE; break;
 			case 'N': // Fall through. Python uses N so lets allow that...
 			case '#': o->nargs = va_arg(ap, int); break;
 			default:
@@ -2803,8 +2810,27 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	}
 	else
 	{
-		// BOOLs never have arguments.
-		o->nargs = (o->type == CARGO_BOOL) ? 0 : 1;
+		// Non-array.
+
+		if (o->type == CARGO_BOOL)
+		{
+			// BOOLs never have arguments.
+			o->nargs = 0;
+		}
+		else
+		{
+			_cargo_fmt_next_token(&s);
+
+			if (_cargo_fmt_token(&s) == '?')
+			{
+				o->nargs = CARGO_NARGS_ZERO_OR_ONE;
+			}
+			else
+			{
+				_cargo_fmt_prev_token(&s);
+				o->nargs = 1;
+			}
+		}
 
 		// Never allocate single values (unless it's a string).
 		o->alloc = (o->type != CARGO_STRING) ? 0 : o->alloc;
@@ -2812,7 +2838,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	if (!o->alloc && o->array && (o->nargs < 0))
 	{
-		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", optname_list[0]);
+		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", o->name[0]);
 		CARGODBG(1, "      \"%s\"\n", fmt);
 		CARGODBG(1, "       %*s\n", s.column, "^");
 		goto fail;
@@ -4471,6 +4497,42 @@ _TEST_START(TEST_custom_callback_array)
 }
 _TEST_END()
 
+_TEST_START(TEST_zero_or_more_with_arg)
+{
+	int i = 0;
+	int j = 0;
+	char *args[] = { "program", "--alpha", "789", "--beta", "123", "456" };
+
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed zero or more args parse");
+	cargo_assert(j == 789, "Expected j == 789");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_zero_or_more_without_arg)
+{
+	int i = 0;
+	int j = 0;
+	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed zero or more args parse");
+	cargo_assert(j == 0, "Expected j == 0");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -4545,7 +4607,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_required_option),
 	CARGO_ADD_TEST(TEST_custom_callback),
 	CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
-	CARGO_ADD_TEST(TEST_custom_callback_array)
+	CARGO_ADD_TEST(TEST_custom_callback_array),
+	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
+	CARGO_ADD_TEST(TEST_zero_or_more_without_arg)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
