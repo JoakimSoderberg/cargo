@@ -2468,7 +2468,6 @@ typedef struct cargo_fmt_token_s
 
 typedef struct cargo_fmt_scanner_s
 {
-	char *opt;
 	const char *fmt;
 	const char *start;
 	cargo_fmt_token_t prev_token;
@@ -2485,13 +2484,12 @@ static char _token(cargo_fmt_scanner_t *s)
 }
 
 static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s,
-									char *opt, const char *fmt)
+									const char *fmt)
 {
 	assert(s);
 	memset(s, 0, sizeof(cargo_fmt_scanner_t));
 
 	CARGODBG(2, "FMT scanner init: \"%s\"\n", fmt);
-	s->opt = opt;
 	s->fmt = fmt;
 	s->start = fmt;
 	s->column = 0;
@@ -2588,8 +2586,18 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	memset(o, 0, sizeof(cargo_opt_t));
 	ctx->opt_count++;
 
+	// TODO: Move this...
+	if (!(optname = strdup(optname_list[0])))
+	{
+		CARGODBG(1, "Out of memory\n");
+		goto fail;
+	}
+
+	o->name[o->name_count++] = optname;
+	o->description = description;
+
 	// Start parsing the format string.
-	_cargo_fmt_scanner_init(&s, optname_list[0], fmt);
+	_cargo_fmt_scanner_init(&s, fmt);
 	_next_token(&s);
 
 	// Get the first token.
@@ -2660,7 +2668,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 					CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
 						"string using # is only done on static strings.\n"
 						"    Are you sure you want this?\n",
-						s.opt);
+						optname);
 					CARGODBG(1, "      \"%s\"\n", s.start);
 					CARGODBG(1, "       %*s\n", s.column, "^");
 				}
@@ -2745,8 +2753,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		o->alloc = (o->type != CARGO_STRING) ? 0 : o->alloc;
 	}
 
-	CARGODBG(4, "Add option: nargs %d\n", o->nargs);
-
 	if (!o->alloc && o->array && (o->nargs < 0))
 	{
 		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", optname_list[0]);
@@ -2755,15 +2761,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	// TODO: Move this...
-	if (!(optname = strdup(optname_list[0])))
-	{
-		CARGODBG(1, "Out of memory\n");
-		goto fail;
-	}
-
-	o->name[o->name_count++] = optname;
-	o->description = description;
 	o->flags = flags;
 
 	// Check if the option has a prefix
