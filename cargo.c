@@ -1643,6 +1643,107 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	return 0;
 }
 
+static char **_cargo_split_and_verify_option_names(cargo_t ctx, const char *optnames, size_t *optcount)
+{
+	char **optname_list = NULL;
+	char *tmp = NULL;
+	size_t i;
+	assert(ctx);
+	assert(optcount);
+
+	if (!(tmp = strdup(optnames)))
+	{
+		return NULL;
+	}
+
+	if (!(optname_list = _cargo_split(tmp, " ", optcount))
+		|| (optcount <= 0))
+	{
+		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
+		goto fail;
+	}
+
+	#ifdef CARGO_DEBUG
+	CARGODBG(3, "Got %lu option names:\n", *optcount);
+	for (i = 0; i < *optcount; i++)
+	{
+		CARGODBG(3, " %s\n", optname_list[i]);
+	}
+	#endif // CARGO_DEBUG
+
+	if (!_cargo_find_option_name(ctx, optname_list[0], NULL, NULL))
+	{
+		CARGODBG(1, "%s already exists\n", optname_list[0]);
+		goto fail;
+	}
+
+	free(tmp);
+	return optname_list;
+
+fail:
+	if (tmp) free(tmp);
+	if (optname_list)
+	{
+		_cargo_free_str_list(&optname_list, optcount);
+	}
+
+	return NULL;
+}
+
+static cargo_opt_t *_cargo_option_init(cargo_t ctx,
+										const char *name,
+										const char *description)
+{
+	char *optname = NULL;
+	cargo_opt_t *o = NULL;
+	assert(ctx);
+
+	if (_cargo_grow_options(ctx))
+	{
+		return NULL;
+	}
+
+	o = &ctx->options[ctx->opt_count];
+	memset(o, 0, sizeof(cargo_opt_t));
+	ctx->opt_count++;
+
+	if (!(optname = strdup(name)))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return NULL;
+	}
+
+	o->name[o->name_count++] = optname;
+	o->description = description;
+
+	return o;
+}
+
+static void _cargo_option_destroy(cargo_opt_t *o)
+{
+	size_t j;
+
+	if (!o)
+	{
+		return;
+	}
+
+	for (j = 0; j < o->name_count; j++)
+	{
+		free(o->name[j]);
+		o->name[j] = NULL;
+	}
+
+	o->name_count = 0;
+
+	// Special case for custom callback target, it is allocated
+	// internally so we should always auto clean it.
+	if (o->custom)
+	{
+		_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -1740,20 +1841,7 @@ void cargo_destroy(cargo_t *ctx)
 			{
 				opt = &c->options[i];
 				CARGODBG(2, "Free opt: %s\n", opt->name[0]);
-
-				for (j = 0; j < c->options[i].name_count; j++)
-				{
-					free(opt->name[j]);
-				}
-
-				opt->name_count = 0;
-
-				// Special case for custom callback target, it is allocated
-				// internally so we should always auto clean it.
-				if (opt->custom)
-				{
-					_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
-				}
+				_cargo_option_destroy(opt);
 			}
 
 			free(c->options);
@@ -2533,53 +2621,6 @@ static void _prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
-static char **_cargo_split_and_verify_options(cargo_t ctx, const char *optnames, size_t *optcount)
-{
-	char **optname_list = NULL;
-	char *tmp = NULL;
-	size_t i;
-	assert(ctx);
-	assert(optcount);
-
-	if (!(tmp = strdup(optnames)))
-	{
-		return NULL;
-	}
-
-	if (!(optname_list = _cargo_split(tmp, " ", optcount))
-		|| (optcount <= 0))
-	{
-		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
-		goto fail;
-	}
-
-	#ifdef CARGO_DEBUG
-	CARGODBG(3, "Got %lu option names:\n", *optcount);
-	for (i = 0; i < *optcount; i++)
-	{
-		CARGODBG(3, " %s\n", optname_list[i]);
-	}
-	#endif // CARGO_DEBUG
-
-	if (!_cargo_find_option_name(ctx, optname_list[0], NULL, NULL))
-	{
-		CARGODBG(1, "%s already exists\n", optname_list[0]);
-		goto fail;
-	}
-
-	free(tmp);
-	return optname_list;
-
-fail:
-	if (tmp) free(tmp);
-	if (optname_list)
-	{
-		_cargo_free_str_list(&optname_list, optcount);
-	}
-
-	return NULL;
-}
-
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 					  const char *description, const char *fmt, va_list ap)
 {
@@ -2592,36 +2633,20 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	cargo_opt_t *o = NULL;
 	char *optname = NULL;
 	assert(ctx);
-	// TODO: Maybe clean this up and consolidate with _cargo_add
-	// so that parsing is done directly into the cargo_opt_t struct instead.
 
 	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
 
-	// TODO: Break out into functions.
-	if (!(optname_list = _cargo_split_and_verify_options(ctx, optnames, &optcount)))
+	if (!(optname_list = _cargo_split_and_verify_option_names(ctx, optnames, &optcount)))
 	{
 		CARGODBG(1, "Failed to split option names \"%s\"\n", optnames);
 		goto fail;
 	}
 
-	if (_cargo_grow_options(ctx))
+	if (!(o = _cargo_option_init(ctx, optname_list[0], description)))
 	{
+		CARGODBG(1, "Failed to init option\n");
 		goto fail;
 	}
-
-	o = &ctx->options[ctx->opt_count];
-	memset(o, 0, sizeof(cargo_opt_t));
-	ctx->opt_count++;
-
-	// TODO: Move this...
-	if (!(optname = strdup(optname_list[0])))
-	{
-		CARGODBG(1, "Out of memory\n");
-		goto fail;
-	}
-
-	o->name[o->name_count++] = optname;
-	o->description = description;
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, fmt);
@@ -2850,7 +2875,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 fail:
 	if (ret < 0)
 	{
-		ctx->opt_count--;
+		if (o)
+		{
+			_cargo_option_destroy(o);
+			ctx->opt_count--;
+		}
 	}
 
 	if (tmp)
