@@ -405,8 +405,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	return -1; 
 }
 
-// TODO: Merge this with add_option instead, this is becomnig bloated.
-static int _cargo_add(cargo_t ctx,
+static int _cargo_validate_option_args(cargo_t ctx,
 				const char *opt,
 				void **target,
 				size_t *target_count,
@@ -421,12 +420,6 @@ static int _cargo_add(cargo_t ctx,
 				size_t flags)
 {
 	size_t opt_len;
-	cargo_opt_t *o = NULL;
-	char *optcpy = NULL;
-
-	CARGODBG(2, "_cargo_add: %s\n", opt);
-
-	// TODO: Maybe change all these checks into asserts instead?
 
 	if (!opt)
 	{
@@ -494,6 +487,11 @@ static int _cargo_add(cargo_t ctx,
 		return -1;
 	}
 
+	return 0;
+}
+
+static int _cargo_grow_options(cargo_t ctx)
+{
 	if (ctx->opt_count >= ctx->max_opts)
 	{
 		cargo_opt_t *new_options = NULL;
@@ -516,14 +514,55 @@ static int _cargo_add(cargo_t ctx,
 				0, (ctx->max_opts - ctx->opt_count) * sizeof(cargo_opt_t));
 	}
 
+	return 0;
+}
+
+// TODO: Merge this with add_option instead, this is becomnig bloated.
+static int _cargo_add(cargo_t ctx,
+				const char *opt,
+				void **target,
+				size_t *target_count,
+				size_t lenstr,
+				int nargs,
+				cargo_type_t type,
+				const char *description,
+				int alloc,
+				cargo_custom_cb_t custom,
+				void *custom_user,
+				size_t *custom_user_count,
+				size_t flags)
+{
+	size_t opt_len;
+	cargo_opt_t *o = NULL;
+	char *optcpy = NULL;
+
+	CARGODBG(2, "_cargo_add: %s\n", opt);
+
+	// TODO: Maybe change all these checks into asserts instead?
+	if (_cargo_validate_option_args(ctx,
+		opt, target, target_count, lenstr,
+		nargs, type, description, alloc,
+		custom, custom_user_count, custom_user_count,
+		flags))
+	{
+		return -1;
+	}
+
+	if (_cargo_grow_options(ctx))
+	{
+		return -1;
+	}
+
+	o = &ctx->options[ctx->opt_count];
+	ctx->opt_count++;
+
 	if (!(optcpy = strdup(opt)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return -1;
 	}
 
-	o = &ctx->options[ctx->opt_count];
-	ctx->opt_count++;
+	o->name[o->name_count++] = optcpy;
 
 	if (custom)
 	{
@@ -531,7 +570,6 @@ static int _cargo_add(cargo_t ctx,
 		target_count = &o->custom_target_count;
 	}
 
-	o->name[o->name_count++] = optcpy;
 	o->nargs = nargs;
 	o->target = target;
 	o->type = type;
