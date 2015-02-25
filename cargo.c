@@ -405,75 +405,55 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	return -1; 
 }
 
-static int _cargo_validate_option_args(cargo_t ctx,
-				const char *opt,
-				void **target,
-				size_t *target_count,
-				size_t lenstr,
-				int nargs,
-				cargo_type_t type,
-				int alloc,
-				cargo_custom_cb_t custom,
-				void *custom_user,
-				size_t *custom_user_count,
-				size_t flags)
+static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 {
 	size_t opt_len;
+	char *name = o->name[0];
+	assert(ctx);
+	assert(o);
 
-	if (!opt)
-	{
-		CARGODBG(1, "Null option name\n");
-		return -1;
-	}
-
-	if ((opt_len = strlen(opt)) == 0)
+	if ((opt_len = strlen(name)) == 0)
 	{
 		CARGODBG(1, "%s", "Option name has length 0\n");
 		return -1;
 	}
 
-	if (!_cargo_nargs_is_valid(nargs))
+	if (!_cargo_nargs_is_valid(o->nargs))
 	{
-		CARGODBG(1, "%s: nargs is invalid %d\n", opt, nargs);
+		CARGODBG(1, "%s: nargs is invalid %d\n", name, o->nargs);
 		return -1;
 	}
 
-	if (custom)
+	if (o->custom)
 	{
-		if (type != CARGO_STRING)
+		if (o->type != CARGO_STRING)
 		{
-			CARGODBG(1, "%s: Custom callback must be of type string\n", opt);
+			CARGODBG(1, "%s: Custom callback must be of type string\n", name);
 			return -1;
 		}
 
-		if (!alloc)
+		if (!o->alloc)
 		{
-			CARGODBG(1, "%s: Custom callback cannot use static variable", opt);
+			CARGODBG(1, "%s: Custom callback cannot use static variable", name);
 			return -1;
 		}
 	}
 
-	if ((type != CARGO_STRING) && (nargs == 1) && alloc)
+	if ((o->type != CARGO_STRING) && (o->nargs == 1) && o->alloc)
 	{
-		CARGODBG(1, "%s: Cannot allocate for single nonstring value\n", opt);
+		CARGODBG(1, "%s: Cannot allocate for single nonstring value\n", name);
 		return -1;
 	}
 
-	if (!custom && !target)
+	if (!o->custom && !o->target)
 	{
-		CARGODBG(1, "%s: target NULL\n", opt);
+		CARGODBG(1, "%s: target NULL\n", name);
 		return -1;
 	}
 
-	if (!custom && !target_count && (nargs > 1))
+	if (!o->custom && !o->target_count && (o->nargs > 1))
 	{
-		CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", opt);
-		return -1;
-	}
-
-	if (!_cargo_find_option_name(ctx, opt, NULL, NULL))
-	{
-		CARGODBG(1, "%s already exists\n", opt);
+		CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", name);
 		return -1;
 	}
 
@@ -2572,6 +2552,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
 
+	// TODO: Break out into functions.
 	if (!(tmp = strdup(optnames)))
 	{
 		return -1;
@@ -2591,6 +2572,12 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		CARGODBG(3, " %s\n", optname_list[i]);
 	}
 	#endif // CARGO_DEBUG
+
+	if (!_cargo_find_option_name(ctx, optname_list[0], NULL, NULL))
+	{
+		CARGODBG(1, "%s already exists\n", optname_list[0]);
+		return -1;
+	}
 
 	if (_cargo_grow_options(ctx))
 	{
@@ -2768,15 +2755,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	if (_cargo_validate_option_args(ctx,
-		optname_list[0], o->target, o->target_count, o->lenstr,
-		o->nargs, o->type, o->alloc,
-		o->custom, o->custom_user, o->custom_user_count,
-		flags))
-	{
-		goto fail;
-	}
-
 	// TODO: Move this...
 	if (!(optname = strdup(optname_list[0])))
 	{
@@ -2790,7 +2768,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	// Check if the option has a prefix
 	// (if not it's positional).
-	o->positional = !_cargo_is_prefix(ctx, optname[0]);
+	o->positional = !_cargo_is_prefix(ctx, o->name[0][0]);
 
 	if (o->positional
 		&& (o->nargs != CARGO_NARGS_ZERO_OR_MORE)
@@ -2819,6 +2797,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	if (o->target_count)
 	{
 		*(o->target_count) = 0;
+	}
+
+	if (_cargo_validate_option_args(ctx, o))
+	{
+		goto fail;
 	}
 
 	CARGODBG(2, " cargo_add %s:\n", optname);
