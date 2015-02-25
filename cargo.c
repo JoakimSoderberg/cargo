@@ -1744,6 +1744,79 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	}
 }
 
+typedef struct cargo_fmt_token_s
+{
+	int column;
+	char token;
+} cargo_fmt_token_t;
+
+typedef struct cargo_fmt_scanner_s
+{
+	const char *fmt;
+	const char *start;
+	cargo_fmt_token_t prev_token;
+	cargo_fmt_token_t token;
+	cargo_fmt_token_t next_token;
+
+	int column;
+} cargo_fmt_scanner_t;
+
+static char _cargo_fmt_token(cargo_fmt_scanner_t *s)
+{
+	CARGODBG(4, "TOKEN: '%c'\n", s->token.token);
+	return s->token.token;
+}
+
+static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s,
+									const char *fmt)
+{
+	assert(s);
+	memset(s, 0, sizeof(cargo_fmt_scanner_t));
+
+	CARGODBG(2, "FMT scanner init: \"%s\"\n", fmt);
+	s->fmt = fmt;
+	s->start = fmt;
+	s->column = 0;
+
+	s->token.token = *fmt;
+}
+
+static void _cargo_fmt_next_token(cargo_fmt_scanner_t *s)
+{
+	const char *fmt;
+
+	CARGODBG(4, "\"%s\"\n", s->start);
+	CARGODBG(4, " %*s\n", s->token.column, "^");
+
+	s->prev_token = s->token;
+
+	s->column++;
+
+	fmt = s->fmt;
+	while ((*fmt == ' ') || (*fmt == '\t'))
+	{
+		s->column++;
+		fmt++;
+	}
+
+	s->token.token = *fmt;
+	s->token.column = s->column;
+
+	fmt++;
+	s->fmt = fmt;
+}
+
+static void _cargo_fmt_prev_token(cargo_fmt_scanner_t *s)
+{
+	CARGODBG(4, "PREV TOKEN\n");
+	s->next_token = s->token;
+	s->token = s->prev_token;
+	s->fmt = &s->start[s->token.column];
+
+	CARGODBG(4, "\"%s\"\n", s->start);
+	CARGODBG(4, " %*s\n", s->token.column, "^");
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2545,82 +2618,6 @@ int cargo_print_usage(cargo_t ctx)
 	return cargo_fprint_usage(stderr, ctx);
 }
 
-// TODO: Add cargo_print_short_usage(cargo_t ctx)
-// program [-h] [-s]  
-
-typedef struct cargo_fmt_token_s
-{
-	int column;
-	char token;
-} cargo_fmt_token_t;
-
-typedef struct cargo_fmt_scanner_s
-{
-	const char *fmt;
-	const char *start;
-	cargo_fmt_token_t prev_token;
-	cargo_fmt_token_t token;
-	cargo_fmt_token_t next_token;
-
-	int column;
-} cargo_fmt_scanner_t;
-
-static char _token(cargo_fmt_scanner_t *s)
-{
-	CARGODBG(4, "TOKEN: '%c'\n", s->token.token);
-	return s->token.token;
-}
-
-static void _cargo_fmt_scanner_init(cargo_fmt_scanner_t *s,
-									const char *fmt)
-{
-	assert(s);
-	memset(s, 0, sizeof(cargo_fmt_scanner_t));
-
-	CARGODBG(2, "FMT scanner init: \"%s\"\n", fmt);
-	s->fmt = fmt;
-	s->start = fmt;
-	s->column = 0;
-
-	s->token.token = *fmt;
-}
-
-static void _next_token(cargo_fmt_scanner_t *s)
-{
-	const char *fmt;
-
-	CARGODBG(4, "\"%s\"\n", s->start);
-	CARGODBG(4, " %*s\n", s->token.column, "^");
-
-	s->prev_token = s->token;
-
-	s->column++;
-
-	fmt = s->fmt;
-	while ((*fmt == ' ') || (*fmt == '\t'))
-	{
-		s->column++;
-		fmt++;
-	}
-
-	s->token.token = *fmt;
-	s->token.column = s->column;
-
-	fmt++;
-	s->fmt = fmt;
-}
-
-static void _prev_token(cargo_fmt_scanner_t *s)
-{
-	CARGODBG(4, "PREV TOKEN\n");
-	s->next_token = s->token;
-	s->token = s->prev_token;
-	s->fmt = &s->start[s->token.column];
-
-	CARGODBG(4, "\"%s\"\n", s->start);
-	CARGODBG(4, " %*s\n", s->token.column, "^");
-}
-
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 					  const char *description, const char *fmt, va_list ap)
 {
@@ -2650,28 +2647,28 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, fmt);
-	_next_token(&s);
+	_cargo_fmt_next_token(&s);
 
 	// Get the first token.
-	if (_token(&s) == '.')
+	if (_cargo_fmt_token(&s) == '.')
 	{
 		CARGODBG(2, "Static\n");
 		o->alloc = 0;
-		_next_token(&s);
+		_cargo_fmt_next_token(&s);
 	}
 	else
 	{
 		o->alloc = 1;
 	}
 
-	if (_token(&s) == '[')
+	if (_cargo_fmt_token(&s) == '[')
 	{
 		CARGODBG(4, "   [ ARRAY\n");
 		o->array = 1;
-		_next_token(&s);
+		_cargo_fmt_next_token(&s);
 	}
 
-	switch (_token(&s))
+	switch (_cargo_fmt_token(&s))
 	{
 		case 'c':
 		{
@@ -2708,9 +2705,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			o->target = (void *)va_arg(ap, char *);
 
 			CARGODBG(4, "Read string\n");
-			_next_token(&s);
+			_cargo_fmt_next_token(&s);
 
-			if (_token(&s) == '#')
+			if (_cargo_fmt_token(&s) == '#')
 			{
 				o->lenstr = (size_t)va_arg(ap, int);
 				CARGODBG(4, "String length: %lu\n", o->lenstr);
@@ -2729,7 +2726,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			{
 				// String size not fixed.
 				o->lenstr = 0;
-				_prev_token(&s);
+				_cargo_fmt_prev_token(&s);
 			}
 			break;
 		}
@@ -2741,7 +2738,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		default:
 		{
 			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-					optname_list[0], _token(&s), s.column);
+					optname_list[0], _cargo_fmt_token(&s), s.column);
 			CARGODBG(1, "      \"%s\"\n", fmt);
 			CARGODBG(1, "       %*s\n", s.column, "^");
 			goto fail;
@@ -2763,11 +2760,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			*o->target_count = 0;
 		}
 
-		_next_token(&s);
+		_cargo_fmt_next_token(&s);
 
 		CARGODBG(4, "Look for ']'\n");
 
-		if (_token(&s) != ']')
+		if (_cargo_fmt_token(&s) != ']')
 		{
 			CARGODBG(1, "%s: Expected ']'\n", optname_list[0]);
 			CARGODBG(1, "      \"%s\"\n", fmt);
@@ -2775,9 +2772,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			goto fail;
 		}
 
-		_next_token(&s);
+		_cargo_fmt_next_token(&s);
 
-		switch (_token(&s))
+		switch (_cargo_fmt_token(&s))
 		{
 			case '*': o->nargs = CARGO_NARGS_ZERO_OR_MORE; break;
 			case '+': o->nargs = CARGO_NARGS_ONE_OR_MORE;  break;
@@ -2787,7 +2784,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			default:
 			{
 				CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-						optname_list[0], _token(&s), s.column);
+						optname_list[0], _cargo_fmt_token(&s), s.column);
 				CARGODBG(1, "      \"%s\"\n", fmt);
 				CARGODBG(1, "       %*s\n", s.column, "^");
 				goto fail;
