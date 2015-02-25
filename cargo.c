@@ -2576,7 +2576,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	size_t *custom_user_count = NULL;
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
-	int array = 0;
 	cargo_opt_t *o = NULL;
 	char *optcpy = NULL;
 	assert(ctx);
@@ -2776,12 +2775,12 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		custom, custom_user, custom_user_count,
 		flags))
 	{
-		return -1;
+		goto fail;
 	}
 
 	if (_cargo_grow_options(ctx))
 	{
-		return -1;
+		goto fail;
 	}
 
 	o = &ctx->options[ctx->opt_count];
@@ -2790,7 +2789,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	if (!(optcpy = strdup(optname_list[0])))
 	{
 		CARGODBG(1, "Out of memory\n");
-		return -1;
+		goto fail;
 	}
 
 	o->name[o->name_count++] = optcpy;
