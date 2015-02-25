@@ -412,7 +412,6 @@ static int _cargo_validate_option_args(cargo_t ctx,
 				size_t lenstr,
 				int nargs,
 				cargo_type_t type,
-				const char *description,
 				int alloc,
 				cargo_custom_cb_t custom,
 				void *custom_user,
@@ -2498,8 +2497,16 @@ typedef struct cargo_fmt_scanner_s
 
 	int column;
 
+	cargo_type_t type;
+	void *target;
+	size_t *target_count;
 	int array;
 	int alloc;
+	size_t lenstr;
+	int nargs;
+	cargo_custom_cb_t custom;
+	void *custom_user;
+	size_t *custom_user_count;
 } cargo_fmt_scanner_t;
 
 static char _token(cargo_fmt_scanner_t *s)
@@ -2564,20 +2571,12 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 {
 	size_t optcount = 0;
 	char **optname_list = NULL;
-	cargo_type_t type;
-	void *target = NULL;
-	size_t *target_count = NULL;
 	int ret = -1;
 	char *tmp = NULL;
-	size_t lenstr = 0;
-	int nargs = 0;
-	cargo_custom_cb_t custom = NULL;
-	void *custom_user = NULL;
-	size_t *custom_user_count = NULL;
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
 	cargo_opt_t *o = NULL;
-	char *optcpy = NULL;
+	char *optname = NULL;
 	assert(ctx);
 	// TODO: Maybe clean this up and consolidate with _cargo_add
 	// so that parsing is done directly into the cargo_opt_t struct instead.
@@ -2596,13 +2595,13 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
+	#ifdef CARGO_DEBUG
 	CARGODBG(3, "Got %lu option names:\n", optcount);
-	#ifdef CARGODBG
 	for (i = 0; i < optcount; i++)
 	{
 		CARGODBG(3, " %s\n", optname_list[i]);
 	}
-	#endif
+	#endif // CARGO_DEBUG
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, optname_list[0], fmt);
@@ -2640,11 +2639,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 				goto fail;
 			}
 
-			type = CARGO_STRING;
-			custom = va_arg(ap, cargo_custom_cb_t);
-			custom_user = va_arg(ap, void *);
+			s.type = CARGO_STRING;
+			s.custom = va_arg(ap, cargo_custom_cb_t);
+			s.custom_user = va_arg(ap, void *);
 
-			if (!custom)
+			if (!s.custom)
 			{
 				CARGODBG(1, "Got NULL custom callback pointer\n");
 				goto fail;
@@ -2652,22 +2651,22 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 			// Note The target will be set in _cargo_add and will be
 			// internal to the cargo_opt_t struct.
-			lenstr = 0;
-			nargs = 1;
+			s.lenstr = 0;
+			s.nargs = 1;
 			break;
 		}
 		case 's':
 		{
-			type = CARGO_STRING;
-			target = (void *)va_arg(ap, char *);
+			s.type = CARGO_STRING;
+			s.target = (void *)va_arg(ap, char *);
 
 			CARGODBG(4, "Read string\n");
 			_next_token(&s);
 
 			if (_token(&s) == '#')
 			{
-				lenstr = (size_t)va_arg(ap, int);
-				CARGODBG(4, "String length: %lu\n", lenstr);
+				s.lenstr = (size_t)va_arg(ap, int);
+				CARGODBG(4, "String length: %lu\n", s.lenstr);
 
 				if (s.alloc)
 				{
@@ -2682,16 +2681,16 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			else
 			{
 				// String size not fixed.
-				lenstr = 0;
+				s.lenstr = 0;
 				_prev_token(&s);
 			}
 			break;
 		}
-		case 'i': type = CARGO_INT;    target = (void *)va_arg(ap, void *); break;
-		case 'd': type = CARGO_DOUBLE; target = (void *)va_arg(ap, void *); break;
-		case 'b': type = CARGO_BOOL;   target = (void *)va_arg(ap, void *); break;
-		case 'u': type = CARGO_UINT;   target = (void *)va_arg(ap, void *); break;
-		case 'f': type = CARGO_FLOAT;  target = (void *)va_arg(ap, void *); break;
+		case 'i': s.type = CARGO_INT;    s.target = (void *)va_arg(ap, void *); break;
+		case 'd': s.type = CARGO_DOUBLE; s.target = (void *)va_arg(ap, void *); break;
+		case 'b': s.type = CARGO_BOOL;   s.target = (void *)va_arg(ap, void *); break;
+		case 'u': s.type = CARGO_UINT;   s.target = (void *)va_arg(ap, void *); break;
+		case 'f': s.type = CARGO_FLOAT;  s.target = (void *)va_arg(ap, void *); break;
 		default:
 		{
 			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
@@ -2707,14 +2706,14 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		// Custom callbacks uses an internal target and count.
 		// However we still return the count in a separate
 		// user specified value for arrays.
-		if (custom)
+		if (s.custom)
 		{
-			custom_user_count = va_arg(ap, size_t *);
+			s.custom_user_count = va_arg(ap, size_t *);
 		}
 		else
 		{
-			target_count = va_arg(ap, size_t *);
-			*target_count = 0;
+			s.target_count = va_arg(ap, size_t *);
+			*s.target_count = 0;
 		}
 
 		_next_token(&s);
@@ -2733,11 +2732,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 		switch (_token(&s))
 		{
-			case '*': nargs = CARGO_NARGS_ZERO_OR_MORE; break;
-			case '+': nargs = CARGO_NARGS_ONE_OR_MORE;  break;
-			case '?': nargs = CARGO_NARGS_ZERO_OR_ONE; break;
+			case '*': s.nargs = CARGO_NARGS_ZERO_OR_MORE; break;
+			case '+': s.nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+			case '?': s.nargs = CARGO_NARGS_ZERO_OR_ONE; break;
 			case 'N': // Fall through. Python uses N so lets allow that...
-			case '#': nargs = va_arg(ap, int); break;
+			case '#': s.nargs = va_arg(ap, int); break;
 			default:
 			{
 				CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
@@ -2748,20 +2747,20 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			}
 		}
 
-		CARGODBG(4, "  %s: nargs = %d\n", optname_list[0], nargs);
+		CARGODBG(4, "  %s: nargs = %d\n", optname_list[0], s.nargs);
 	}
 	else
 	{
 		// BOOLs never have arguments.
-		nargs = (type == CARGO_BOOL) ? 0 : 1;
+		s.nargs = (s.type == CARGO_BOOL) ? 0 : 1;
 
 		// Never allocate single values (unless it's a string).
-		s.alloc = (type != CARGO_STRING) ? 0 : s.alloc;
+		s.alloc = (s.type != CARGO_STRING) ? 0 : s.alloc;
 	}
 
-	CARGODBG(4, "Add option: nargs %d\n", nargs);
+	CARGODBG(4, "Add option: nargs %d\n", s.nargs);
 
-	if (!s.alloc && s.array && (nargs < 0))
+	if (!s.alloc && s.array && (s.nargs < 0))
 	{
 		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", optname_list[0]);
 		CARGODBG(1, "      \"%s\"\n", fmt);
@@ -2770,9 +2769,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	}
 
 	if (_cargo_validate_option_args(ctx,
-		optname_list[0], target, target_count, lenstr,
-		nargs, type, description, s.alloc,
-		custom, custom_user, custom_user_count,
+		optname_list[0], s.target, s.target_count, s.lenstr,
+		s.nargs, s.type, s.alloc,
+		s.custom, s.custom_user, s.custom_user_count,
 		flags))
 	{
 		goto fail;
@@ -2786,39 +2785,39 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	o = &ctx->options[ctx->opt_count];
 	ctx->opt_count++;
 
-	if (!(optcpy = strdup(optname_list[0])))
+	if (!(optname = strdup(optname_list[0])))
 	{
 		CARGODBG(1, "Out of memory\n");
 		goto fail;
 	}
 
-	o->name[o->name_count++] = optcpy;
+	o->name[o->name_count++] = optname;
 
-	if (custom)
+	if (s.custom)
 	{
-		target = (void **)(&o->custom_target);
-		target_count = &o->custom_target_count;
+		s.target = (void **)(&o->custom_target);
+		s.target_count = &o->custom_target_count;
 	}
 
-	o->nargs = nargs;
-	o->target = target;
-	o->type = type;
+	o->nargs = s.nargs;
+	o->target = s.target;
+	o->type = s.type;
 	o->description = description;
-	o->target_count = target_count;
-	o->lenstr = lenstr;
-	o->custom = custom;
-	o->custom_user = custom_user;
-	o->custom_user_count = custom_user_count;
+	o->target_count = s.target_count;
+	o->lenstr = s.lenstr;
+	o->custom = s.custom;
+	o->custom_user = s.custom_user;
+	o->custom_user_count = s.custom_user_count;
 	o->array = s.array;
 	o->flags = flags;
 
 	// Check if the option has a prefix
 	// (if not it's positional).
-	o->positional = !_cargo_is_prefix(ctx, optcpy[0]);
+	o->positional = !_cargo_is_prefix(ctx, optname[0]);
 
 	if (o->positional
-		&& (nargs != CARGO_NARGS_ZERO_OR_MORE)
-		&& (nargs != CARGO_NARGS_ZERO_OR_ONE))
+		&& (s.nargs != CARGO_NARGS_ZERO_OR_MORE)
+		&& (s.nargs != CARGO_NARGS_ZERO_OR_ONE))
 	{
 		CARGODBG(2, "Positional argument %s required by default\n", o->name[0]);
 		o->flags |= CARGO_OPT_REQUIRED;
@@ -2826,9 +2825,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	// By default "nargs" is the max number of arguments the option
 	// should parse.
-	if (nargs >= 0)
+	if (s.nargs >= 0)
 	{
-		o->max_target_count = nargs;
+		o->max_target_count = s.nargs;
 	}
 	else
 	{
@@ -2847,11 +2846,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		*(o->target_count) = 0;
 	}
 
-	CARGODBG(2, " cargo_add %s:\n", optcpy);
+	CARGODBG(2, " cargo_add %s:\n", optname);
 	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
 	CARGODBG(2, "   alloc = %d\n", o->alloc);
-	CARGODBG(2, "   lenstr = %lu\n", lenstr);
-	CARGODBG(2, "   nargs = %d\n", nargs);
+	CARGODBG(2, "   lenstr = %lu\n", s.lenstr);
+	CARGODBG(2, "   nargs = %d\n", s.nargs);
 	CARGODBG(2, "   positional = %d\n", o->positional);
 	CARGODBG(2, "   array = %d\n", o->array);
 	CARGODBG(2, "   \n");
