@@ -286,8 +286,10 @@ typedef struct cargo_opt_s
 
 	cargo_custom_cb_t custom;
 	void *custom_user;
-	char **custom_target;
-	size_t custom_count;
+	size_t *custom_user_count;
+
+	char **custom_target;		// Internal storage for args passed to callback
+	size_t custom_target_count;
 
 	void **target;
 	size_t target_idx;
@@ -403,6 +405,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	return -1; 
 }
 
+// TODO: Merge this with add_option instead, this is becomnig bloated.
 static int _cargo_add(cargo_t ctx,
 				const char *opt,
 				void **target,
@@ -414,6 +417,7 @@ static int _cargo_add(cargo_t ctx,
 				int alloc,
 				cargo_custom_cb_t custom,
 				void *custom_user,
+				size_t *custom_user_count,
 				size_t flags)
 {
 	size_t opt_len;
@@ -521,11 +525,10 @@ static int _cargo_add(cargo_t ctx,
 	o = &ctx->options[ctx->opt_count];
 	ctx->opt_count++;
 
-	// TODO: Why doesn't this work?
 	if (custom)
 	{
 		target = (void **)(&o->custom_target);
-		target_count = &o->custom_count;
+		target_count = &o->custom_target_count;
 	}
 
 	o->name[o->name_count++] = optcpy;
@@ -537,6 +540,8 @@ static int _cargo_add(cargo_t ctx,
 	o->lenstr = lenstr;
 	o->custom = custom;
 	o->custom_user = custom_user;
+	o->custom_user_count = custom_user_count;
+
 	o->array = (nargs > 1)
 			|| (nargs == CARGO_NARGS_ONE_OR_MORE)
 			|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
@@ -673,7 +678,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 
 	if (opt->custom)
 	{
-		_cargo_free_str_list(&opt->custom_target, &opt->custom_count);
+		_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
 	}
 
 	if (opt->alloc)
@@ -1086,8 +1091,18 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	if (opt->custom)
 	{
 		int custom_eaten = 0;
+
+		// Set the value of the return count for the caller as well:
+		// ... "[c]#", callback_func, &data, &data_count, DATA_COUNT);
+		//                                   ^^^^^^^^^^^
+		if (opt->custom_user_count)
+		{
+			CARGODBG(3, "Set custom user count: %lu\n", opt->custom_target_count);
+			*opt->custom_user_count = opt->custom_target_count;
+		}
+
 		custom_eaten = opt->custom(ctx, opt->custom_user, opt->name[0],
-									opt->custom_count, opt->custom_target);
+									opt->custom_target_count, opt->custom_target);
 
 		if (custom_eaten < 0)
 		{
@@ -1382,7 +1397,7 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
 		if (_cargo_add(ctx, "--help", (void **)&ctx->help,
-			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0, 0, NULL, 0))
+			NULL, 0, 0, CARGO_BOOL, "Show this help.", 0, 0, NULL, NULL, 0))
 		{
 			return;
 		}
@@ -1836,7 +1851,7 @@ void cargo_destroy(cargo_t *ctx)
 				// internally so we should always auto clean it.
 				if (opt->custom)
 				{
-					_cargo_free_str_list(&opt->custom_target, &opt->custom_count);
+					_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
 				}
 			}
 
@@ -2636,6 +2651,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	int nargs = 0;
 	cargo_custom_cb_t custom = NULL;
 	void *custom_user = NULL;
+	size_t *custom_user_count = NULL;
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
 	int array = 0;
@@ -2694,7 +2710,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		{
 			// Same as string, but the target is internal
 			// and will be passed to the user specified callback.
-			CARGODBGI(4, "Custom callback, ");
+			CARGODBG(4, "Custom callback\n");
 			if (!s.alloc)
 			{
 				CARGODBG(1, "Static '.' is not allowed for a custom callback");
@@ -2765,8 +2781,14 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	if (s.array)
 	{
-		// Custom callbacks uses an internal target
-		if (!custom)
+		// Custom callbacks uses an internal target and count.
+		// However we still return the count in a separate
+		// user specified value for arrays.
+		if (custom)
+		{
+			custom_user_count = va_arg(ap, size_t *);
+		}
+		else
 		{
 			target_count = va_arg(ap, size_t *);
 			*target_count = 0;
@@ -2826,8 +2848,9 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	if ((ret = _cargo_add(ctx, optname_list[0],
 					target, target_count, lenstr,
-					nargs, type, description,
-					s.alloc, custom, custom_user, flags)))
+					nargs, type, description, s.alloc,
+					custom, custom_user, custom_user_count,
+					flags)))
 	{
 		goto fail;
 	}
@@ -4280,7 +4303,7 @@ static int _test_cb(cargo_t ctx, void *user, const char *optname,
 			return -1;
 		}
 
-		return 0;
+		return 1; // We ate 1 argument.
 	}
 
 	return -1;
@@ -4304,6 +4327,134 @@ _TEST_START(TEST_custom_callback)
 	cargo_assert(data.height == 64, "Height expected to be 128");
 
 	_TEST_CLEANUP();
+}
+_TEST_END()
+
+static int _test_cb_fixed_array(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv)
+{
+	int i;
+	assert(ctx);
+	assert(user);
+
+	_test_data_t *u = (_test_data_t *)user;
+	memset(u, 0, sizeof(_test_data_t));
+
+	for (i = 0; i < argc; i++)
+	{
+		if (sscanf(argv[i], "%dx%d", &u[i].width, &u[i].height) != 2)
+		{
+			return -1;
+		}
+	}
+
+	return i;
+}
+
+_TEST_START(TEST_custom_callback_fixed_array)
+{
+	int i;
+	int j;
+	#define DATA_COUNT 5
+	_test_data_t data[DATA_COUNT];
+	size_t data_count = 0;
+	_test_data_t data_expect[] =
+	{
+		{ 128, 64 },
+		{ 32, 16 },
+		{ 24, 32 },
+		{ 32, 32 },
+		{ 24, 24 }
+	};
+	char *args[] = { "program", "--alpha", "128x64", "32x16", "24x32", "32x32", "24x24" };
+
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "[c]#",
+							_test_cb_fixed_array, &data, &data_count, DATA_COUNT);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	cargo_assert(data_count == DATA_COUNT, "Expected data_count == DATA_COUNT");
+
+	for (i = 0; i < data_count; i++)
+	{
+		printf("%dx%d == %dx%d\n",
+			data[i].width, data[i].height,
+			data_expect[i].width, data_expect[i].height);
+		cargo_assert(data[i].width == data_expect[i].width, "Unexpected width");
+		cargo_assert(data[i].height == data_expect[i].height, "Unexpected height");
+	}
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv)
+{
+	int i;
+	assert(ctx);
+	assert(user);
+	_test_data_t **u = (_test_data_t **)user;
+	_test_data_t *data;
+
+	if (!(*u = calloc(argc, sizeof(_test_data_t))))
+	{
+		return -1;
+	}
+
+	data = *u;
+
+	for (i = 0; i < argc; i++)
+	{
+		if (sscanf(argv[i], "%dx%d", &data[i].width, &data[i].height) != 2)
+		{
+			return -1;
+		}
+	}
+
+	return i; // How many arguments we ate.
+}
+
+_TEST_START(TEST_custom_callback_array)
+{
+	int i;
+	int j;
+	_test_data_t *data = NULL;
+	size_t data_count = 0;
+	_test_data_t data_expect[] =
+	{
+		{ 128, 64 },
+		{ 32, 16 },
+		{ 24, 32 },
+		{ 32, 32 },
+		{ 24, 24 }
+	};
+	char *args[] = { "program", "--alpha", "128x64", "32x16", "24x32", "32x32", "24x24" };
+
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "[c]*",
+							_test_cb_array, &data, &data_count, DATA_COUNT);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	cargo_assert(data_count == 5, "Expected data_count == 5");
+
+	for (i = 0; i < data_count; i++)
+	{
+		printf("%dx%d == %dx%d\n",
+			data[i].width, data[i].height,
+			data_expect[i].width, data_expect[i].height);
+		cargo_assert(data[i].width == data_expect[i].width, "Unexpected width");
+		cargo_assert(data[i].height == data_expect[i].height, "Unexpected height");
+	}
+
+	_TEST_CLEANUP();
+	if (data) free(data);
 }
 _TEST_END()
 
@@ -4379,7 +4530,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_zero_or_more_with_positional),
 	CARGO_ADD_TEST(TEST_required_option_missing),
 	CARGO_ADD_TEST(TEST_required_option),
-	CARGO_ADD_TEST(TEST_custom_callback)
+	CARGO_ADD_TEST(TEST_custom_callback),
+	CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
+	CARGO_ADD_TEST(TEST_custom_callback_array)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
