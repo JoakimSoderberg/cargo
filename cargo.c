@@ -320,6 +320,18 @@ typedef struct cargo_opt_s
 	int num_eaten;
 } cargo_opt_t;
 
+typedef struct cargo_group_s
+{
+	const char *name;
+	const char *title;
+	const char *description;
+	size_t flags;
+
+	cargo_opt_t *options;
+	size_t opt_count;
+	size_t max_opt_count;
+} cargo_group_t;
+
 typedef struct cargo_s
 {
 	const char *progname;
@@ -337,6 +349,10 @@ typedef struct cargo_s
 
 	int add_help;
 	int help;
+
+	cargo_group_t *groups;
+	size_t group_count;
+	size_t max_groups;
 
 	cargo_opt_t *options;
 	size_t opt_count;
@@ -477,37 +493,38 @@ static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 	return 0;
 }
 
-static int _cargo_grow_options(cargo_t ctx)
+static int _cargo_grow_options(cargo_opt_t **options,
+								size_t *opt_count, size_t *max_opts)
 {
-	if (!ctx->options)
+	assert(options);
+	assert(opt_count);
+	assert(max_opts);
+
+	if (!*options)
 	{
-		if (!(ctx->options = calloc(ctx->max_opts, sizeof(cargo_opt_t))))
+		if (!((*options) = calloc(*max_opts, sizeof(cargo_opt_t))))
 		{
 			CARGODBG(1, "Out of memory\n");
 			return -1;
 		}
 	}
 
-	if (ctx->opt_count >= ctx->max_opts)
+	if (*opt_count >= *max_opts)
 	{
 		cargo_opt_t *new_options = NULL;
 		CARGODBG(2, "Option count (%lu) >= Max option count (%lu)\n",
-			ctx->opt_count, ctx->max_opts);
+			*opt_count, *max_opts);
 
-		ctx->max_opts *= 2;
+		(*max_opts) *= 2;
 
-		if (!(new_options = realloc(ctx->options,
-									 ctx->max_opts * sizeof(cargo_opt_t))))
+		if (!(new_options = realloc(*options,
+									(*max_opts) * sizeof(cargo_opt_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return -1;
 		}
 
-		ctx->options = new_options;
-
-		// The options struct is assumed to be zeroed.
-		memset(&ctx->options[ctx->opt_count],
-				0, (ctx->max_opts - ctx->opt_count) * sizeof(cargo_opt_t));
+		*options = new_options;
 	}
 
 	return 0;
@@ -1226,11 +1243,13 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 		return NULL;
 
 	p = scpy;
+	p += strspn(p, splitchars);
 
 	*count = 1;
 
 	while (*p)
 	{
+		// Look for a split character.
 		for (i = 0; i < (int)splitlen; i++)
 		{
 			if (*p == splitchars[i])
@@ -1239,7 +1258,10 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 				break;
 			}
 		}
-		p++;
+
+		// Consume all duplicates so we don't get
+		// a bunch of empty strings.
+		p += strspn(p, splitchars) + 1;
 	}
 
 	if (!(ss = calloc(*count, sizeof(char *))))
@@ -1249,6 +1271,8 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	i = 0;
 	while (p)
 	{
+		p += strspn(p, splitchars);
+
 		if (!(ss[i] = strdup(p)))
 		{
 			goto fail;
@@ -1721,7 +1745,7 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 	cargo_opt_t *o = NULL;
 	assert(ctx);
 
-	if (_cargo_grow_options(ctx))
+	if (_cargo_grow_options(&ctx->options, &ctx->opt_count, &ctx->max_opts))
 	{
 		return NULL;
 	}
@@ -2304,6 +2328,13 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		CARGODBG(3, "argv[%d] = %s\n", ctx->i, arg);
 		CARGODBG(3, "  Look for opt matching %s:\n", arg);
 
+		// TODO: Add support for a "--" option which forces all
+		// options specified after it to be parsed as positional arguments
+		// and not options. Say there's a file named "-thefile".
+
+		// TODO: Add support for abbreviated prefix matching so that
+		// --ar will match --arne unless it's ambigous with some other option.
+
 		if ((name = _cargo_check_options(ctx, &opt, argc, argv, ctx->i)))
 		{
 			// We found an option, parse any arguments it might have.
@@ -2709,6 +2740,93 @@ int cargo_print_usage(cargo_t ctx)
 	return cargo_fprint_usage(stderr, ctx);
 }
 
+static int _cargo_get_option_group_name(cargo_t ctx,
+										const char *optnames,
+										char **grpname)
+{
+	int len = 0;
+	char *end = NULL;
+	assert(ctx);
+	assert(grpname);
+
+	*grpname = NULL;
+
+	// Skip any whitespace.
+	len += strspn(optnames, " \t");
+	optnames += len;
+
+	if (*optnames != '<')
+	{
+		return 0;
+	}
+
+	if (!(end = strchr(optnames, '>')))
+	{
+		CARGODBG(1, "Missing '>' to terminate group name\n");
+		return -1;
+	}
+
+	len += (end - optnames);
+
+	if (!(*grpname = cargo_strndup(&optnames[1], len - 1)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return -1;
+	}
+
+	return len + 1;
+}
+
+int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
+					const char *title, const char *description)
+{
+	cargo_group_t *grp = NULL;
+	assert(ctx);
+	assert(name);
+
+	if (!ctx->groups)
+	{
+		ctx->max_groups = 4;
+
+		if (!(ctx->groups = calloc(ctx->max_groups, sizeof(cargo_group_t))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+	else if (ctx->group_count >= ctx->max_groups)
+	{
+		ctx->max_groups *= 2;
+
+		if (!(ctx->groups = realloc(ctx->groups,
+			sizeof(cargo_group_t) * ctx->max_groups)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+
+	grp = &ctx->groups[ctx->group_count];
+	memset(grp, 0, sizeof(cargo_group_t));
+
+	grp->name = name;
+	grp->title = title,
+	grp->description = description;
+
+	grp->flags = flags;
+	grp->max_opt_count = 8;
+
+	if (_cargo_grow_options(&grp->options, &grp->opt_count, &grp->max_opt_count))
+	{
+		CARGODBG(1, "Failed to grow group options list\n");
+		return -1;
+	}
+
+	ctx->group_count++;
+
+	return 0;
+}
+
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 					  const char *description, const char *fmt, va_list ap)
 {
@@ -2720,9 +2838,20 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	cargo_fmt_scanner_t s;
 	cargo_opt_t *o = NULL;
 	char *optname = NULL;
+	char *grpname = NULL;
+	int grp_i = 0;
 	assert(ctx);
 
 	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
+
+	if ((grp_i = _cargo_get_option_group_name(ctx, optnames, &grpname)) < 0)
+	{
+		CARGODBG(1, "Failed to parse group name");
+	}
+
+	CARGODBG(1, " Group %d: %s\n\"%s\"\n\"%s\"\n",
+		grp_i, grpname, optnames, (char *) (optnames + grp_i));
+	optnames += grp_i;
 
 	if (!(optname_list = _cargo_split_and_verify_option_names(ctx, optnames, &optcount)))
 	{
@@ -3665,7 +3794,7 @@ _TEST_START(TEST_cargo_split)
 	
 	char *in[] =
 	{
-		"abc def ghi",
+		" abc def   ghi",
 		"abc",
 		NULL
 	};
@@ -4548,6 +4677,26 @@ _TEST_START(TEST_zero_or_more_without_arg)
 }
 _TEST_END()
 
+_TEST_START(TEST_group)
+{
+	int i = 0;
+	int j = 0;
+	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+
+	ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
+	cargo_assert(ret == 0, "Failed to add group");
+
+	ret |= cargo_add_option(cargo, "   <group1> --alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, "<group1> --beta -b", "The beta", "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed zero or more args parse");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
@@ -4624,7 +4773,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
 	CARGO_ADD_TEST(TEST_custom_callback_array),
 	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
-	CARGO_ADD_TEST(TEST_zero_or_more_without_arg)
+	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
+	CARGO_ADD_TEST(TEST_group)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
