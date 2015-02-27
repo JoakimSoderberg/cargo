@@ -320,6 +320,8 @@ typedef struct cargo_opt_s
 	int num_eaten;
 } cargo_opt_t;
 
+#define CARGO_DEFAULT_MAX_GROUPS 4
+
 typedef struct cargo_group_s
 {
 	const char *name;
@@ -327,7 +329,7 @@ typedef struct cargo_group_s
 	const char *description;
 	size_t flags;
 
-	cargo_opt_t *options;
+	cargo_opt_t **options;
 	size_t opt_count;
 	size_t max_opt_count;
 } cargo_group_t;
@@ -411,7 +413,7 @@ static char _cargo_is_prefix(cargo_t ctx, char c)
 }
 
 static int _cargo_find_option_name(cargo_t ctx, const char *name, 
-									int *opt_i, int *name_i)
+									size_t *opt_i, size_t *name_i)
 {
 	size_t i;
 	size_t j;
@@ -1932,6 +1934,94 @@ static int _cargo_fmt_parse_string(cargo_opt_t *o, cargo_fmt_scanner_t *s, va_li
 	return 0;
 }
 
+static int _cargo_get_option_group_name(cargo_t ctx,
+										const char *optnames,
+										char **grpname)
+{
+	int len = 0;
+	char *end = NULL;
+	assert(ctx);
+	assert(grpname);
+
+	*grpname = NULL;
+
+	// Skip any whitespace.
+	len += strspn(optnames, " \t");
+	optnames += len;
+
+	if (*optnames != '<')
+	{
+		return 0;
+	}
+
+	if (!(end = strchr(optnames, '>')))
+	{
+		CARGODBG(1, "Missing '>' to terminate group name\n");
+		return -1;
+	}
+
+	len += (end - optnames);
+
+	if (!(*grpname = cargo_strndup(&optnames[1], len - 1)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return -1;
+	}
+
+	return len + 1;
+}
+
+static void _cargo_group_destroy(cargo_group_t *g)
+{
+	if (!g)
+	{
+		return;
+	}
+
+	if (g->options)
+	{
+		free(g->options);
+		g->options = NULL;
+	}
+}
+
+static void _cargo_groups_destroy(cargo_t ctx)
+{
+	size_t i;
+	assert(ctx);
+
+	if (ctx->groups)
+	{
+		for (i = 0; i < ctx->group_count; i++)
+		{
+			_cargo_group_destroy(&ctx->groups[i]);
+		}
+
+		free(ctx->groups);
+		ctx->groups = NULL;
+	}
+}
+
+static cargo_group_t *_cargo_find_group(cargo_t ctx, const char *name)
+{
+	size_t i;
+	cargo_group_t *g;
+	assert(ctx);
+	assert(name);
+
+	for (i = 0; i < ctx->group_count; i++)
+	{
+		g = &ctx->groups[i];
+
+		if (!strcmp(g->name, name))
+		{
+			return g;
+		}
+	}
+
+	return NULL;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2035,6 +2125,8 @@ void cargo_destroy(cargo_t *ctx)
 			free(c->options);
 			c->options = NULL;
 		}
+
+		_cargo_groups_destroy(c);
 
 		_cargo_free_str_list(&c->args, NULL);
 		_cargo_free_str_list(&c->unknown_opts, NULL);
@@ -2471,8 +2563,8 @@ char **cargo_get_args(cargo_t ctx, size_t *argc)
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 {
-	int opt_i;
-	int name_i;
+	size_t opt_i;
+	size_t name_i;
 	cargo_opt_t *opt;
 	assert(ctx);
 
@@ -2507,8 +2599,8 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 {
-	int opt_i;
-	int name_i;
+	size_t opt_i;
+	size_t name_i;
 	cargo_opt_t *opt;
 	assert(ctx);
 
@@ -2740,53 +2832,17 @@ int cargo_print_usage(cargo_t ctx)
 	return cargo_fprint_usage(stderr, ctx);
 }
 
-static int _cargo_get_option_group_name(cargo_t ctx,
-										const char *optnames,
-										char **grpname)
-{
-	int len = 0;
-	char *end = NULL;
-	assert(ctx);
-	assert(grpname);
-
-	*grpname = NULL;
-
-	// Skip any whitespace.
-	len += strspn(optnames, " \t");
-	optnames += len;
-
-	if (*optnames != '<')
-	{
-		return 0;
-	}
-
-	if (!(end = strchr(optnames, '>')))
-	{
-		CARGODBG(1, "Missing '>' to terminate group name\n");
-		return -1;
-	}
-
-	len += (end - optnames);
-
-	if (!(*grpname = cargo_strndup(&optnames[1], len - 1)))
-	{
-		CARGODBG(1, "Out of memory!\n");
-		return -1;
-	}
-
-	return len + 1;
-}
-
 int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 					const char *title, const char *description)
 {
+	int ret = -1;
 	cargo_group_t *grp = NULL;
 	assert(ctx);
 	assert(name);
 
 	if (!ctx->groups)
 	{
-		ctx->max_groups = 4;
+		ctx->max_groups = CARGO_DEFAULT_MAX_GROUPS;
 
 		if (!(ctx->groups = calloc(ctx->max_groups, sizeof(cargo_group_t))))
 		{
@@ -2802,7 +2858,7 @@ int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 			sizeof(cargo_group_t) * ctx->max_groups)))
 		{
 			CARGODBG(1, "Out of memory!\n");
-			return -1;
+			goto fail;
 		}
 	}
 
@@ -2816,13 +2872,54 @@ int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 	grp->flags = flags;
 	grp->max_opt_count = 8;
 
-	if (_cargo_grow_options(&grp->options, &grp->opt_count, &grp->max_opt_count))
+	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
 	{
-		CARGODBG(1, "Failed to grow group options list\n");
-		return -1;
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
 	}
 
 	ctx->group_count++;
+
+	ret = 0;
+fail:
+	return ret;
+}
+
+int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
+{
+	size_t opt_i;
+	cargo_group_t *g = NULL;
+	cargo_opt_t *o = NULL;
+	assert(ctx);
+	assert(group);
+	assert(opt);
+
+	if (!(g = _cargo_find_group(ctx, group)))
+	{
+		CARGODBG(1, "No such group \"%s\"\n", group);
+		return -1;
+	}
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
+	{
+		CARGODBG(1, "No such option \"%s\"\n", opt);
+		return -1;
+	}
+
+	if (g->opt_count >= g->max_opt_count)
+	{
+		g->max_opt_count *= 2;
+
+		if (!(g->options = realloc(g->options,
+				g->max_opt_count * sizeof(cargo_opt_t *))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+
+	g->options[g->opt_count] = o;
+	g->opt_count++;
 
 	return 0;
 }
