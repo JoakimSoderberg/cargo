@@ -1934,7 +1934,7 @@ static int _cargo_fmt_parse_string(cargo_opt_t *o, cargo_fmt_scanner_t *s, va_li
 	return 0;
 }
 
-static int _cargo_get_option_group_name(cargo_t ctx,
+static const char *_cargo_get_option_group_name(cargo_t ctx,
 										const char *optnames,
 										char **grpname)
 {
@@ -1946,29 +1946,32 @@ static int _cargo_get_option_group_name(cargo_t ctx,
 	*grpname = NULL;
 
 	// Skip any whitespace.
-	len += strspn(optnames, " \t");
-	optnames += len;
+	optnames += strspn(optnames, " \t");
 
 	if (*optnames != '<')
 	{
-		return 0;
+		return optnames;
 	}
 
 	if (!(end = strchr(optnames, '>')))
 	{
 		CARGODBG(1, "Missing '>' to terminate group name\n");
-		return -1;
+		return NULL;
 	}
 
-	len += (end - optnames);
+	end--;
 
-	if (!(*grpname = cargo_strndup(&optnames[1], len - 1)))
+	len = (end - optnames);
+
+	if (!(*grpname = cargo_strndup(&optnames[1], len)))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		return -1;
+		return NULL;
 	}
 
-	return len + 1;
+	optnames += len + 2;
+
+	return optnames;
 }
 
 static void _cargo_group_destroy(cargo_group_t *g)
@@ -2939,16 +2942,15 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	int grp_i = 0;
 	assert(ctx);
 
-	CARGODBG(2, "-------- Add option %s, %s --------\n", optnames, fmt);
+	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
 
-	if ((grp_i = _cargo_get_option_group_name(ctx, optnames, &grpname)) < 0)
+	if ((optnames = _cargo_get_option_group_name(ctx, optnames, &grpname)) < 0)
 	{
 		CARGODBG(1, "Failed to parse group name");
 	}
 
-	CARGODBG(1, " Group %d: %s\n\"%s\"\n\"%s\"\n",
-		grp_i, grpname, optnames, (char *) (optnames + grp_i));
-	optnames += grp_i;
+	CARGODBG(2, " Group: %s\n\"%s\"\n",
+		grpname, optnames);
 
 	if (!(optname_list = _cargo_split_and_verify_option_names(ctx, optnames, &optcount)))
 	{
@@ -2960,6 +2962,15 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	{
 		CARGODBG(1, "Failed to init option\n");
 		goto fail;
+	}
+
+	if (grpname)
+	{
+		if (cargo_group_add_option(ctx, grpname, o->name[0]))
+		{
+			CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
+			goto fail;
+		}
 	}
 
 	// Start parsing the format string.
@@ -3144,6 +3155,11 @@ fail:
 			_cargo_option_destroy(o);
 			ctx->opt_count--;
 		}
+	}
+
+	if (grpname)
+	{
+		free(grpname);
 	}
 
 	if (tmp)
