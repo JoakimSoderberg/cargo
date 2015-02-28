@@ -1596,7 +1596,7 @@ static int _cargo_print_options(cargo_t ctx,
 		{
 			// Add line breaks to fit the width we want.
 			if (_cargo_fit_optnames_and_description(ctx, str, i,
-					NAME_PADDING, option_causes_newline, max_name_len))
+					indent + NAME_PADDING, option_causes_newline, max_name_len))
 			{
 				goto fail;
 			}
@@ -4872,7 +4872,14 @@ _TEST_START(TEST_group)
 	cargo_assert(ret == 0, "Failed to add group");
 
 	ret |= cargo_add_option(cargo, "   <group1> --alpha", "The alpha", "i?", &j);
-	ret |= cargo_add_option(cargo, "<group1> --beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, "<group1> --beta -b",
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"
+		" eiusmod tempor incididunt ut labore et dolore magna aliqua. "
+		"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "
+		"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
+		"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
+		"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
+		"culpa qui officia deserunt mollit anim id est laborum.", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
