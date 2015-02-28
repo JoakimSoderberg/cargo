@@ -824,6 +824,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	// (Don't include bool here, since val will be NULL in that case).
 	if ((opt->type != CARGO_BOOL) && (end == val))
 	{
+		// TODO: Make helper function instead.
 		size_t fprint_flags =
 			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 
@@ -2180,6 +2181,86 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	return 0;
 }
 
+static void _cargo_print_mutex_group(cargo_group_t *g)
+{
+	size_t i;
+	assert(g);
+
+	for (i = 0; i < g->opt_count; i++)
+	{
+		fprintf(stderr, "%s%s", g->options[i]->name[0],
+				(i < (g->opt_count - 1)) ? ", " : "\n");
+	}
+}
+
+static int _cargo_check_mutex_groups(cargo_t ctx)
+{
+	int ret = -1;
+	size_t i = 0;
+	size_t j = 0;
+	cargo_highlight_t *parse_highlights = NULL;
+	size_t parsed_count = 0;
+	cargo_group_t *g = NULL;
+	assert(ctx);
+
+	CARGODBG(2, "Check mutex %lu groups\n", ctx->mutex_group_count);
+
+	for (i = 0; i < ctx->mutex_group_count; i++)
+	{
+		g = &ctx->mutex_groups[i];
+		parsed_count = 0;
+
+		if (!(parse_highlights = calloc(g->opt_count,
+									sizeof(cargo_highlight_t))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+
+		for (j = 0; j < g->opt_count; j++)
+		{
+			if (g->options[j]->parsed)
+			{
+				parse_highlights[parsed_count].i = j + ctx->start;
+				parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
+				parsed_count++;
+			}
+		}
+
+		if (parsed_count > 1)
+		{
+			char *s;
+			size_t fprint_flags =
+				(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
+
+			if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
+				fprint_flags, parsed_count, parse_highlights)))
+			{
+				CARGODBG(1, "Out of memory\n");
+				goto fail;
+			}
+
+			fprintf(stderr, "%s\n", s);
+			free(s);
+
+			fprintf(stderr, "Only one of these variables allowed at the same time:\n");
+			_cargo_print_mutex_group(g);
+			goto fail;
+		}
+		else if ((parsed_count == 0)
+				&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
+		{
+			fprintf(stderr, "One of these variables is required:\n");
+			_cargo_print_mutex_group(g);
+			goto fail;
+		}
+	}
+
+	ret = 0;
+fail:
+	return ret;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2347,19 +2428,9 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 	ctx->format = format;
 }
 
-typedef struct cargo_highlight_s
-{
-	int i;				// Index of highlight in argv.
-	char *c;			// Highlight character (followed by color).
-	int indent; 		// Indent position for highlight in relation
-						// to previous highlight.
-	int total_indent;	// Total indentation since start of string.
-	int highlight_len;	// Length of the highlight.
-
-} cargo_highlight_t;
-
-char *cargo_get_fprint_args_by_list(int argc, char **argv, int start, size_t flags,
-							size_t highlight_count, cargo_highlight_t *highlights)
+char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count,
+							cargo_highlight_t *highlights)
 {
 	char *ret = NULL;
 	int i;
@@ -2369,6 +2440,10 @@ char *cargo_get_fprint_args_by_list(int argc, char **argv, int start, size_t fla
 	cargo_str_t str;
 	char *out = NULL;
 	size_t out_size = 0;
+
+	// TODO: If the buffer we return is bigger than the console width, 
+	// try to show only the relevant parts. If we get a line break
+	// the indentation and highlight gets completely screwed.
 
 	// Get buffer size and highlight data.
 	for (i = start, j = 0; i < argc; i++)
@@ -2474,7 +2549,6 @@ char *cargo_get_fprint_args_by_list(int argc, char **argv, int start, size_t fla
 	ret = out;
 
 fail:
-	//if (highlights) free(highlights);
 	if (!ret) free(out);
 
 	return ret;
@@ -2485,32 +2559,24 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
 {
 	char *ret = NULL;
 	int i;
-	int j;
-	int global_indent = 0;
-	size_t arglen = 0;
 	cargo_highlight_t *highlights = NULL;
-	cargo_str_t str;
-	char *out = NULL;
-	size_t out_size = 0;
 
 	// Create a list of indices to highlight from the va_args.
+	if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
 	{
-		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
-		{
-			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
-					highlight_count);
-			goto fail;
-		}
-
-		for (i = 0; i < (int)highlight_count; i++)
-		{
-			highlights[i].i = va_arg(ap, int);
-			highlights[i].c = va_arg(ap, char *);
-		}
+		CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
+				highlight_count);
+		goto fail;
 	}
 
-	ret = cargo_get_fprint_args_by_list(argc, argv, start, flags,
-										highlight_count, highlights);
+	for (i = 0; i < (int)highlight_count; i++)
+	{
+		highlights[i].i = va_arg(ap, int);
+		highlights[i].c = va_arg(ap, char *);
+	}
+
+	ret = cargo_get_fprintl_args(argc, argv, start, flags,
+								highlight_count, highlights);
 
 fail:
 	if (highlights) free(highlights);
@@ -2548,54 +2614,19 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 	return 0;
 }
 
-static void _cargo_print_mutex_group(cargo_group_t *g)
+int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
+							size_t flags, size_t highlight_count,
+							cargo_highlight_t *highlights)
 {
-	size_t i;
-	assert(g);
-
-	for (i = 0; i < g->opt_count; i++)
+	char *ret;
+	if (!(ret = cargo_get_fprintl_args(argc, argv, start, flags,
+								highlight_count, highlights)))
 	{
-		fprintf(stderr, "%s%s", g->options[i]->name[0],
-				(i < (g->opt_count - 1)) ? ", " : "\n");
-	}
-}
-
-static int _cargo_check_mutex_groups(cargo_t ctx)
-{
-	size_t i = 0;
-	size_t j = 0;
-	size_t parsed_count = 0;
-	cargo_group_t *g = NULL;
-	assert(ctx);
-
-	CARGODBG(2, "Check mutex %lu groups\n", ctx->mutex_group_count);
-
-	for (i = 0; i < ctx->mutex_group_count; i++)
-	{
-		g = &ctx->mutex_groups[i];
-		parsed_count = 0;
-
-		for (j = 0; j < g->opt_count; j++)
-		{
-			if (g->options[j]->parsed)
-			{
-				parsed_count++;
-			}
-		}
-
-		if (parsed_count > 1)
-		{
-			fprintf(stderr, "Only one of these variables allowed at the same time:\n");
-			_cargo_print_mutex_group(g);
-			return -1;
-		}
-		// TODO: Fix this.
-		/*else if ((parsed_count == 0) && (g->flags & CARGO_OPT_REQUIRED))
-		{
-
-		}*/
+		return -1;
 	}
 
+	fprintf(f, "%s\n", ret);
+	free(ret);
 	return 0;
 }
 
@@ -4398,7 +4429,9 @@ _TEST_START(TEST_highlight_args)
 						1, // Start index.
 						0, // flags
 						3, // Highlight count.
-						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+						1, "^"CARGO_COLOR_RED,
+						3, "~"CARGO_COLOR_GREEN,
+						4, "-");
 	cargo_assert(e == 0, "Failed call cargo_fprint_args");
 
 	printf("With highlight & args:\n");
@@ -4409,7 +4442,9 @@ _TEST_START(TEST_highlight_args)
 						1, // Start index.
 						CARGO_FPRINT_NOCOLOR, // flags
 						3, // Highlight count.
-						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
+						1, "^"CARGO_COLOR_RED,
+						3, "~"CARGO_COLOR_GREEN,
+						4, "-");
 	cargo_assert(e == 0, "Failed call cargo_fprint_args");
 
 	printf("With highlight & no args:\n");
