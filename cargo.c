@@ -2347,45 +2347,28 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 	ctx->format = format;
 }
 
-char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
-							size_t highlight_count, va_list ap)
+typedef struct cargo_highlight_s
 {
-	typedef struct cargo_highlight_s
-	{
-		int i;				// Index of highlight in argv.
-		char *c;			// Highlight character (followed by color).
-		int indent; 		// Indent position for highlight in relation
-							// to previous highlight.
-		int total_indent;	// Total indentation since start of string.
-		int highlight_len;	// Length of the highlight.
+	int i;				// Index of highlight in argv.
+	char *c;			// Highlight character (followed by color).
+	int indent; 		// Indent position for highlight in relation
+						// to previous highlight.
+	int total_indent;	// Total indentation since start of string.
+	int highlight_len;	// Length of the highlight.
 
-	} cargo_highlight_t;
+} cargo_highlight_t;
 
+char *cargo_get_fprint_args_by_list(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, cargo_highlight_t *highlights)
+{
 	char *ret = NULL;
 	int i;
 	int j;
 	int global_indent = 0;
 	size_t arglen = 0;
-	cargo_highlight_t *highlights = NULL;
 	cargo_str_t str;
 	char *out = NULL;
 	size_t out_size = 0;
-
-	// Create a list of indices to highlight from the va_args.
-	{
-		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
-		{
-			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
-					highlight_count);
-			goto fail;
-		}
-
-		for (i = 0; i < (int)highlight_count; i++)
-		{
-			highlights[i].i = va_arg(ap, int);
-			highlights[i].c = va_arg(ap, char *);
-		}
-	}
 
 	// Get buffer size and highlight data.
 	for (i = start, j = 0; i < argc; i++)
@@ -2491,8 +2474,46 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
 	ret = out;
 
 fail:
-	if (highlights) free(highlights);
+	//if (highlights) free(highlights);
 	if (!ret) free(out);
+
+	return ret;
+}
+
+char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
+							size_t highlight_count, va_list ap)
+{
+	char *ret = NULL;
+	int i;
+	int j;
+	int global_indent = 0;
+	size_t arglen = 0;
+	cargo_highlight_t *highlights = NULL;
+	cargo_str_t str;
+	char *out = NULL;
+	size_t out_size = 0;
+
+	// Create a list of indices to highlight from the va_args.
+	{
+		if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
+		{
+			CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
+					highlight_count);
+			goto fail;
+		}
+
+		for (i = 0; i < (int)highlight_count; i++)
+		{
+			highlights[i].i = va_arg(ap, int);
+			highlights[i].c = va_arg(ap, char *);
+		}
+	}
+
+	ret = cargo_get_fprint_args_by_list(argc, argv, start, flags,
+										highlight_count, highlights);
+
+fail:
+	if (highlights) free(highlights);
 
 	return ret;
 }
