@@ -111,11 +111,6 @@ typedef struct cargo_highlight_s
 {
 	int i;				// Index of highlight in argv.
 	char *c;			// Highlight character (followed by color).
-	int indent; 		// Indent position for highlight in relation
-						// to previous highlight.
-	int total_indent;	// Total indentation since start of string.
-	int highlight_len;	// Length of the highlight.
-
 } cargo_highlight_t;
 
 typedef enum cargo_format_e
@@ -230,7 +225,7 @@ char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
 
 char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 							size_t highlight_count,
-							cargo_highlight_t *highlights);
+							const cargo_highlight_t *highlights);
 
 char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
 							size_t highlight_count, va_list ap);
@@ -240,7 +235,7 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start, size_t flags,
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 							size_t flags, size_t highlight_count,
-							cargo_highlight_t *highlights);
+							const cargo_highlight_t *highlights);
 
 // TODO: Provide wrapper for CommandLineToArgvW
 // http://stackoverflow.com/questions/13481058/commandlinetoargvw-equivalent-on-linux

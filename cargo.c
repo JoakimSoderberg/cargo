@@ -2428,9 +2428,20 @@ void cargo_set_format(cargo_t ctx, cargo_format_t format)
 	ctx->format = format;
 }
 
+typedef struct cargo_phighlight_s
+{
+	int i;				// Index of highlight in argv.
+	char *c;			// Highlight character (followed by color).
+	int indent; 		// Indent position for highlight in relation
+						// to previous highlight.
+	int total_indent;	// Total indentation since start of string.
+	int highlight_len;	// Length of the highlight.
+
+} cargo_phighlight_t;
+
 char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 							size_t highlight_count,
-							cargo_highlight_t *highlights)
+							const cargo_highlight_t *highlights_in)
 {
 	char *ret = NULL;
 	int i;
@@ -2440,10 +2451,24 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 	cargo_str_t str;
 	char *out = NULL;
 	size_t out_size = 0;
+	cargo_phighlight_t *highlights = NULL;
+	assert(highlights_in);
 
 	// TODO: If the buffer we return is bigger than the console width, 
 	// try to show only the relevant parts. If we get a line break
 	// the indentation and highlight gets completely screwed.
+
+	if (!(highlights = calloc(highlight_count, sizeof(cargo_phighlight_t))))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return NULL;
+	}
+
+	for (i = 0; i < highlight_count; i++)
+	{
+		highlights[i].i = highlights_in[i].i;
+		highlights[i].c = highlights_in[i].c;
+	}
 
 	// Get buffer size and highlight data.
 	for (i = start, j = 0; i < argc; i++)
@@ -2452,7 +2477,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 
 		if (j < highlight_count)
 		{
-			cargo_highlight_t *h = &highlights[j];
+			cargo_phighlight_t *h = &highlights[j];
 			if (h->i == i)
 			{
 				h->highlight_len = (int)arglen;
@@ -2461,7 +2486,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 				// We want to indent in relation to the previous indentation.
 				if (j > 0)
 				{
-					cargo_highlight_t *hprev = &highlights[j - 1];
+					cargo_phighlight_t *hprev = &highlights[j - 1];
 					h->indent = h->total_indent
 							  - (hprev->total_indent + hprev->highlight_len);
 				}
@@ -2506,7 +2531,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 	{
 		for (i = 0; i < highlight_count; i++)
 		{
-			cargo_highlight_t *h = &highlights[i];
+			cargo_phighlight_t *h = &highlights[i];
 			char *highlvec;
 			int has_color = strlen(h->c) > 1;
 
@@ -2550,6 +2575,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 
 fail:
 	if (!ret) free(out);
+	free(highlights);
 
 	return ret;
 }
@@ -2616,7 +2642,7 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 							size_t flags, size_t highlight_count,
-							cargo_highlight_t *highlights)
+							const cargo_highlight_t *highlights)
 {
 	char *ret;
 	if (!(ret = cargo_get_fprintl_args(argc, argv, start, flags,
