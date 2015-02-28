@@ -290,6 +290,8 @@ static const char *_cargo_type_map[] =
 	"string"
 };
 
+typedef struct cargo_group_s cargo_group_t;
+
 typedef struct cargo_opt_s
 {
 	char *name[CARGO_NAME_COUNT];
@@ -300,6 +302,8 @@ typedef struct cargo_opt_s
 	cargo_type_t type;
 	int nargs;
 	int alloc;
+
+	cargo_group_t *group;
 
 	cargo_custom_cb_t custom;
 	void *custom_user;
@@ -321,8 +325,9 @@ typedef struct cargo_opt_s
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
+#define CARGO_DEFAULT_MAX_GROUP_OPTS 8
 
-typedef struct cargo_group_s
+struct cargo_group_s
 {
 	const char *name;
 	const char *title;
@@ -332,7 +337,7 @@ typedef struct cargo_group_s
 	cargo_opt_t **options;
 	size_t opt_count;
 	size_t max_opt_count;
-} cargo_group_t;
+};
 
 typedef struct cargo_s
 {
@@ -418,9 +423,6 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	size_t i;
 	size_t j;
 	cargo_opt_t *opt;
-
-	if (!_cargo_starts_with_prefix(ctx, name))
-		return -1;
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
@@ -1149,6 +1151,8 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	size_t i;
 	char **sorted_names = NULL;
 	cargo_str_t str;
+	assert(ctx);
+	assert(opt);
 
 	memset(&str, 0, sizeof(str));
 	str.s = namebuf;
@@ -1530,21 +1534,40 @@ fail:
 	return ret;
 }
 
-static int _cargo_print_options(cargo_t ctx, int show_positional,
-								cargo_str_t *str, char **namebufs,
+static int _cargo_print_options(cargo_t ctx, 
+								cargo_opt_t **opts, size_t opt_count,
+								int show_positional, cargo_str_t *str,
 								int max_name_len)
 {
 	#define NAME_PADDING 2
-	size_t i;
+	size_t i = 0;
+	cargo_opt_t *opt = NULL;
+	int option_causes_newline = 0;
+	size_t namelen = 0;
+	char *name = NULL;
+	int ret = -1;
+	assert(str);
+	assert(ctx);
+
+	if (!(name = malloc(ctx->max_width)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return -1;
+	}
 
 	// Option names + descriptions.
-	for (i = 0; i < ctx->opt_count; i++)
+	for (i = 0; i < opt_count; i++)
 	{
-		// Is the option name so long we need a new line before the description?
-		int option_causes_newline = (int)strlen(namebufs[i]) > max_name_len;
+		opt = opts[i];
 
-		if ((show_positional && !ctx->options[i].positional)
-		 || (!show_positional && ctx->options[i].positional))
+		namelen = _cargo_get_option_name_str(ctx, opt,
+											name, ctx->max_width);
+
+		// Is the option name so long we need a new line before the description?
+		option_causes_newline = (int)strlen(name) > max_name_len;
+
+		if ((show_positional && !opt->positional)
+		 || (!show_positional && opt->positional))
 		{
 			continue;
 		}
@@ -1553,20 +1576,20 @@ static int _cargo_print_options(cargo_t ctx, int show_positional,
 		// "  --ducks [DUCKS ...]  "
 		if (cargo_appendf(str, "%*s%-*s%s",
 				NAME_PADDING, " ",
-				max_name_len, namebufs[i],
+				max_name_len, name,
 				(option_causes_newline ? "\n" : "")) < 0)
 		{
-			return -1;
+			goto fail;
 		}
 
 		// Option description.
 		if ((ctx->format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
-			|| (strlen(ctx->options[i].description) < ctx->max_width))
+			|| (strlen(opt->description) < ctx->max_width))
 		{
 			if (cargo_appendf(str, "%*s%s\n",
-				NAME_PADDING, "", ctx->options[i].description) < 0)
+				NAME_PADDING, "", opt->description) < 0)
 			{
-				return -1;
+				goto fail;
 			}
 		}
 		else
@@ -1575,12 +1598,20 @@ static int _cargo_print_options(cargo_t ctx, int show_positional,
 			if (_cargo_fit_optnames_and_description(ctx, str, i,
 					NAME_PADDING, option_causes_newline, max_name_len))
 			{
-				return -1;
+				goto fail;
 			}
 		}
 	}
 
-	return 0;
+	ret = 0;
+
+fail:
+	if (name)
+	{
+		free(name);
+	}
+
+	return ret;
 }
 
 static int _cargo_get_short_option_usage(cargo_t ctx,
@@ -2087,6 +2118,9 @@ int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags)
 	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
+
+	// Add the default group.
+	cargo_add_group(c, 0, "", "", "");
 
 	return 0;
 }
@@ -2658,7 +2692,7 @@ char *cargo_get_usage(cargo_t ctx)
 	char *ret = NULL;
 	size_t i;
 	char *b = NULL;
-	char **namebufs = NULL;
+	char *name = NULL;
 	int usagelen = 0;
 	int namelen;
 	int max_name_len = 0;
@@ -2666,6 +2700,7 @@ char *cargo_get_usage(cargo_t ctx)
 	size_t option_count = 0;
 	char *short_usage = NULL;
 	cargo_opt_t *opt = NULL;
+	cargo_group_t *grp = NULL;
 	cargo_str_t str;
 	assert(ctx);
 	#define MAX_OPT_NAME_LEN 40
@@ -2683,21 +2718,15 @@ char *cargo_get_usage(cargo_t ctx)
 	//   --longer_option_b  Another description...
 	// ^-------------------^
 	// What should the above width be.
-	if (!(namebufs = calloc(ctx->opt_count, sizeof(char *))))
+	if (!(name = malloc(ctx->max_width)))
 	{
-		CARGODBG(1, "Out of memory allocating %lu options!\n", ctx->opt_count);
+		CARGODBG(1, "Out of memory!\n");
 		return NULL;
 	}
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		opt = &ctx->options[i];
-
-		if (!(namebufs[i] = malloc(ctx->max_width)))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			goto fail;
-		}
 
 		if (opt->positional)
 		{
@@ -2709,7 +2738,7 @@ char *cargo_get_usage(cargo_t ctx)
 		}
 
 		namelen = _cargo_get_option_name_str(ctx, opt,
-											namebufs[i], ctx->max_width);
+											name, ctx->max_width);
 
 		if (namelen < 0)
 		{
@@ -2727,6 +2756,7 @@ char *cargo_get_usage(cargo_t ctx)
 		usagelen += namelen + strlen(opt->description);
 	}
 
+	// TODO: Don't "guess" the length like this, use cargo_aapendf instead!
 	if (ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
 		usagelen += strlen(ctx->description);
@@ -2764,21 +2794,32 @@ char *cargo_get_usage(cargo_t ctx)
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
 			max_name_len, ctx->max_width);
 
-	if (positional_count > 0)
+	for (i = 0; i < ctx->group_count; i++)
 	{
-		if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
-		if (_cargo_print_options(ctx, 1, &str, namebufs, max_name_len))
-		{
-			goto fail;
-		}
-	}
+		grp = &ctx->groups[i];
 
-	if (option_count > 0)
-	{
-		if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
-		if (_cargo_print_options(ctx, 0, &str, namebufs, max_name_len))
+		// The group name is always set, default group is simply "".
+		if (strlen(grp->name)) cargo_appendf(&str, "%s:\n", grp->title);
+		if (grp->description) cargo_appendf(&str, "%s\n", grp->description);
+
+		if (positional_count > 0)
 		{
-			goto fail;
+			if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
+			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
+									1, &str, max_name_len))
+			{
+				goto fail;
+			}
+		}
+
+		if (option_count > 0)
+		{
+			if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
+			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
+									0, &str, max_name_len))
+			{
+				goto fail;
+			}
 		}
 	}
 
@@ -2799,10 +2840,9 @@ fail:
 		}
 	}
 
+	if (name)
 	{
-		// We don't want to zero ctx->opt_count.
-		size_t opt_count = ctx->opt_count;
-		_cargo_free_str_list(&namebufs, &opt_count);
+		free(name);
 	}
 
 	if (short_usage)
@@ -2873,7 +2913,7 @@ int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 	grp->description = description;
 
 	grp->flags = flags;
-	grp->max_opt_count = 8;
+	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
 
 	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
 	{
@@ -2909,6 +2949,8 @@ int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 		return -1;
 	}
 
+	o = &ctx->options[opt_i];
+
 	if (g->opt_count >= g->max_opt_count)
 	{
 		g->max_opt_count *= 2;
@@ -2922,6 +2964,7 @@ int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 	}
 
 	g->options[g->opt_count] = o;
+	o->group = g;
 	g->opt_count++;
 
 	return 0;
@@ -2944,13 +2987,23 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
 
-	if ((optnames = _cargo_get_option_group_name(ctx, optnames, &grpname)) < 0)
+	if (!(optnames = _cargo_get_option_group_name(ctx, optnames, &grpname)))
 	{
-		CARGODBG(1, "Failed to parse group name");
+		CARGODBG(1, "Failed to parse group name\n");
+		return -1;
 	}
 
-	CARGODBG(2, " Group: %s\n\"%s\"\n",
-		grpname, optnames);
+	// Default group.
+	if (!grpname)
+	{
+		if (!(grpname = strdup("")))
+		{
+			CARGODBG(1, "Out of memory\n");
+			return -1;
+		}
+	}
+
+	CARGODBG(2, " Group: %s\n\"%s\"\n", grpname, optnames);
 
 	if (!(optname_list = _cargo_split_and_verify_option_names(ctx, optnames, &optcount)))
 	{
@@ -3002,11 +3055,11 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		// and will be passed to the user specified callback.
 		case 'c': if (_cargo_fmt_parse_custom(o, ap)) goto fail; break;
 		case 's': if (_cargo_fmt_parse_string(o, &s, ap)) goto fail; break;
-		case 'i': o->type = CARGO_INT;    o->target = (void *)va_arg(ap, void *); break;
-		case 'd': o->type = CARGO_DOUBLE; o->target = (void *)va_arg(ap, void *); break;
-		case 'b': o->type = CARGO_BOOL;   o->target = (void *)va_arg(ap, void *); break;
-		case 'u': o->type = CARGO_UINT;   o->target = (void *)va_arg(ap, void *); break;
-		case 'f': o->type = CARGO_FLOAT;  o->target = (void *)va_arg(ap, void *); break;
+		case 'i': o->type = CARGO_INT;    o->target = va_arg(ap, void *); break;
+		case 'd': o->type = CARGO_DOUBLE; o->target = va_arg(ap, void *); break;
+		case 'b': o->type = CARGO_BOOL;   o->target = va_arg(ap, void *); break;
+		case 'u': o->type = CARGO_UINT;   o->target = va_arg(ap, void *); break;
+		case 'f': o->type = CARGO_FLOAT;  o->target = va_arg(ap, void *); break;
 		default:
 		{
 			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
@@ -4805,6 +4858,8 @@ _TEST_START(TEST_group)
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
+
+	cargo_print_usage(cargo);
 
 	_TEST_CLEANUP();
 }
