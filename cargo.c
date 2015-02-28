@@ -1537,7 +1537,7 @@ fail:
 static int _cargo_print_options(cargo_t ctx, 
 								cargo_opt_t **opts, size_t opt_count,
 								int show_positional, cargo_str_t *str,
-								int max_name_len)
+								int max_name_len, int indent)
 {
 	#define NAME_PADDING 2
 	size_t i = 0;
@@ -1575,7 +1575,7 @@ static int _cargo_print_options(cargo_t ctx,
 		// Print the option names.
 		// "  --ducks [DUCKS ...]  "
 		if (cargo_appendf(str, "%*s%-*s%s",
-				NAME_PADDING, " ",
+				indent + NAME_PADDING, " ",
 				max_name_len, name,
 				(option_causes_newline ? "\n" : "")) < 0)
 		{
@@ -2702,6 +2702,7 @@ char *cargo_get_usage(cargo_t ctx)
 	cargo_opt_t *opt = NULL;
 	cargo_group_t *grp = NULL;
 	cargo_str_t str;
+	int is_default_group = 1;
 	assert(ctx);
 	#define MAX_OPT_NAME_LEN 40
 
@@ -2796,17 +2797,33 @@ char *cargo_get_usage(cargo_t ctx)
 
 	for (i = 0; i < ctx->group_count; i++)
 	{
+		int indent = 0;
 		grp = &ctx->groups[i];
 
-		// The group name is always set, default group is simply "".
-		if (strlen(grp->name)) cargo_appendf(&str, "%s:\n", grp->title);
-		if (grp->description) cargo_appendf(&str, "%s\n", grp->description);
+		// The group name is always set for normal groups.
+		// The default group is simply "".
+		is_default_group = (strlen(grp->name) == 0);
 
+		if (!is_default_group)
+		{
+			indent = 2;
+		}
+
+		if (!is_default_group) cargo_appendf(&str, "\n%s:\n", grp->title);
+		if (grp->description && strlen(grp->description))
+			cargo_appendf(&str, "%*s%s\n", indent, " ", grp->description);
+
+		if (cargo_appendf(&str,  "\n") < 0) goto fail;
+
+		// Note, we only show the "Positional arguments" and "Options"
+		// titles for the default group. It becomes quite spammy otherwise.
 		if (positional_count > 0)
 		{
-			if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
+			if (is_default_group)
+				if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
+
 			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
-									1, &str, max_name_len))
+									1, &str, max_name_len, indent))
 			{
 				goto fail;
 			}
@@ -2814,9 +2831,11 @@ char *cargo_get_usage(cargo_t ctx)
 
 		if (option_count > 0)
 		{
-			if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
+			if (is_default_group)
+				if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
+
 			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
-									0, &str, max_name_len))
+									0, &str, max_name_len, indent))
 			{
 				goto fail;
 			}
