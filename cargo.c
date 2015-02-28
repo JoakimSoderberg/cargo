@@ -361,6 +361,10 @@ typedef struct cargo_s
 	size_t group_count;
 	size_t max_groups;
 
+	cargo_group_t *mutex_groups;
+	size_t mutex_group_count;
+	size_t mutex_max_groups;
+
 	cargo_opt_t *options;
 	size_t opt_count;
 	size_t max_opts;
@@ -2034,18 +2038,32 @@ static void _cargo_groups_destroy(cargo_t ctx)
 		free(ctx->groups);
 		ctx->groups = NULL;
 	}
+
+	if (ctx->mutex_groups)
+	{
+		for (i = 0; i < ctx->mutex_group_count; i++)
+		{
+			_cargo_group_destroy(&ctx->mutex_groups[i]);
+		}
+
+		free(ctx->mutex_groups);
+		ctx->mutex_groups = NULL;
+	}
 }
 
-static cargo_group_t *_cargo_find_group(cargo_t ctx, const char *name)
+static cargo_group_t *_cargo_find_group(cargo_t ctx,
+					cargo_group_t *groups, size_t group_count, const char *name)
 {
 	size_t i;
 	cargo_group_t *g;
 	assert(ctx);
 	assert(name);
+	assert(groups);
+	assert(group_count);
 
-	for (i = 0; i < ctx->group_count; i++)
+	for (i = 0; i < group_count; i++)
 	{
-		g = &ctx->groups[i];
+		g = &groups[i];
 
 		if (!strcmp(g->name, name))
 		{
@@ -2054,6 +2072,112 @@ static cargo_group_t *_cargo_find_group(cargo_t ctx, const char *name)
 	}
 
 	return NULL;
+}
+
+static int _cargo_add_group(cargo_t ctx,
+					cargo_group_t **groups, size_t *group_count,
+					size_t *max_groups,
+					size_t flags, const char *name,
+					const char *title, const char *description)
+{
+	int ret = -1;
+	cargo_group_t *grp = NULL;
+	assert(ctx);
+	assert(name);
+	assert(groups);
+	assert(max_groups);
+	assert(group_count);
+
+	if (!*groups)
+	{
+		(*max_groups) = CARGO_DEFAULT_MAX_GROUPS;
+
+		if (!((*groups) = calloc(*max_groups, sizeof(cargo_group_t))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+	else if (*group_count >= *max_groups)
+	{
+		(*max_groups) *= 2;
+
+		if (!((*groups) = realloc(*groups,
+			sizeof(cargo_group_t) * (*max_groups))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+	}
+
+	grp = &(*groups)[*group_count];
+	memset(grp, 0, sizeof(cargo_group_t));
+
+	grp->name = name;
+	grp->title = title,
+	grp->description = description;
+
+	grp->flags = flags;
+	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
+
+	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	(*group_count)++;
+
+	ret = 0;
+fail:
+	return ret;
+}
+
+static int _cargo_group_add_option_ex(cargo_t ctx,
+										cargo_group_t *groups,
+										size_t group_count,
+										const char *group,
+										const char *opt)
+{
+	size_t opt_i;
+	cargo_group_t *g = NULL;
+	cargo_opt_t *o = NULL;
+	assert(ctx);
+	assert(groups);
+	assert(group);
+	assert(opt);
+
+	if (!(g = _cargo_find_group(ctx, groups, group_count, group)))
+	{
+		CARGODBG(1, "No such group \"%s\"\n", group);
+		return -1;
+	}
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
+	{
+		CARGODBG(1, "No such option \"%s\"\n", opt);
+		return -1;
+	}
+
+	o = &ctx->options[opt_i];
+
+	if (g->opt_count >= g->max_opt_count)
+	{
+		g->max_opt_count *= 2;
+
+		if (!(g->options = realloc(g->options,
+				g->max_opt_count * sizeof(cargo_opt_t *))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return -1;
+		}
+	}
+
+	g->options[g->opt_count] = o;
+	o->group = g;
+	g->opt_count++;
+
+	return 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -2403,6 +2527,57 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 	return 0;
 }
 
+static void _cargo_print_mutex_group(cargo_group_t *g)
+{
+	size_t i;
+	assert(g);
+
+	for (i = 0; i < g->opt_count; i++)
+	{
+		fprintf(stderr, "%s%s", g->options[i]->name[0],
+				(i < (g->opt_count - 1)) ? ", " : "\n");
+	}
+}
+
+static int _cargo_check_mutex_groups(cargo_t ctx)
+{
+	size_t i = 0;
+	size_t j = 0;
+	size_t parsed_count = 0;
+	cargo_group_t *g = NULL;
+	assert(ctx);
+
+	CARGODBG(2, "Check mutex %lu groups\n", ctx->mutex_group_count);
+
+	for (i = 0; i < ctx->mutex_group_count; i++)
+	{
+		g = &ctx->mutex_groups[i];
+		parsed_count = 0;
+
+		for (j = 0; j < g->opt_count; j++)
+		{
+			if (g->options[j]->parsed)
+			{
+				parsed_count++;
+			}
+		}
+
+		if (parsed_count > 1)
+		{
+			fprintf(stderr, "Only one of these variables allowed at the same time:\n");
+			_cargo_print_mutex_group(g);
+			return -1;
+		}
+		// TODO: Fix this.
+		/*else if ((parsed_count == 0) && (g->flags & CARGO_OPT_REQUIRED))
+		{
+
+		}*/
+	}
+
+	return 0;
+}
+
 // TODO: Maybe have an cargo_parse_ex that takes flags as well...
 // Then we can for instance, either give error on unknown opts/args
 // or just ignore them.
@@ -2542,6 +2717,11 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 			fprintf(stderr, "Missing required option %s\n", opt->name[0]);
 			goto fail;
 		}
+	}
+
+	if (_cargo_check_mutex_groups(ctx))
+	{
+		goto fail;
 	}
 
 	if (ctx->unknown_opts_count > 0)
@@ -2897,96 +3077,28 @@ int cargo_print_usage(cargo_t ctx)
 int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 					const char *title, const char *description)
 {
-	int ret = -1;
-	cargo_group_t *grp = NULL;
-	assert(ctx);
-	assert(name);
-
-	if (!ctx->groups)
-	{
-		ctx->max_groups = CARGO_DEFAULT_MAX_GROUPS;
-
-		if (!(ctx->groups = calloc(ctx->max_groups, sizeof(cargo_group_t))))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			return -1;
-		}
-	}
-	else if (ctx->group_count >= ctx->max_groups)
-	{
-		ctx->max_groups *= 2;
-
-		if (!(ctx->groups = realloc(ctx->groups,
-			sizeof(cargo_group_t) * ctx->max_groups)))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			goto fail;
-		}
-	}
-
-	grp = &ctx->groups[ctx->group_count];
-	memset(grp, 0, sizeof(cargo_group_t));
-
-	grp->name = name;
-	grp->title = title,
-	grp->description = description;
-
-	grp->flags = flags;
-	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
-
-	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
-	{
-		CARGODBG(1, "Out of memory!\n");
-		goto fail;
-	}
-
-	ctx->group_count++;
-
-	ret = 0;
-fail:
-	return ret;
+	return _cargo_add_group(ctx, &ctx->groups, &ctx->group_count,
+							&ctx->max_groups,
+							flags, name, title, description);
 }
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 {
-	size_t opt_i;
-	cargo_group_t *g = NULL;
-	cargo_opt_t *o = NULL;
-	assert(ctx);
-	assert(group);
-	assert(opt);
+	return _cargo_group_add_option_ex(ctx,
+				ctx->groups, ctx->group_count, group, opt);
+}
 
-	if (!(g = _cargo_find_group(ctx, group)))
-	{
-		CARGODBG(1, "No such group \"%s\"\n", group);
-		return -1;
-	}
+int cargo_add_mutex_group(cargo_t ctx, size_t flags, const char *name)
+{
+	return _cargo_add_group(ctx, &ctx->mutex_groups, &ctx->mutex_group_count,
+							&ctx->mutex_max_groups,
+							flags, name, NULL, NULL);
+}
 
-	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
-	{
-		CARGODBG(1, "No such option \"%s\"\n", opt);
-		return -1;
-	}
-
-	o = &ctx->options[opt_i];
-
-	if (g->opt_count >= g->max_opt_count)
-	{
-		g->max_opt_count *= 2;
-
-		if (!(g->options = realloc(g->options,
-				g->max_opt_count * sizeof(cargo_opt_t *))))
-		{
-			CARGODBG(1, "Out of memory!\n");
-			return -1;
-		}
-	}
-
-	g->options[g->opt_count] = o;
-	o->group = g;
-	g->opt_count++;
-
-	return 0;
+int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt)
+{
+	return _cargo_group_add_option_ex(ctx,
+				ctx->mutex_groups, ctx->mutex_group_count, group, opt);
 }
 
 int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
@@ -3036,13 +3148,10 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	if (grpname)
+	if (cargo_group_add_option(ctx, grpname, o->name[0]))
 	{
-		if (cargo_group_add_option(ctx, grpname, o->name[0]))
-		{
-			CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
-			goto fail;
-		}
+		CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
+		goto fail;
 	}
 
 	// Start parsing the format string.
@@ -4866,11 +4975,13 @@ _TEST_START(TEST_group)
 {
 	int i = 0;
 	int j = 0;
+	int k = 0;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 
 	ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
 	cargo_assert(ret == 0, "Failed to add group");
 
+	// Add options to the group using inline method.
 	ret |= cargo_add_option(cargo, "   <group1> --alpha", "The alpha", "i?", &j);
 	ret |= cargo_add_option(cargo, "<group1> --beta -b",
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"
@@ -4880,12 +4991,47 @@ _TEST_START(TEST_group)
 		"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
 		"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
 		"culpa qui officia deserunt mollit anim id est laborum.", "i", &i);
+
+	// Try using the API to add the option to the group.
+	ret |= cargo_add_option(cargo, "--centauri", "The alpha centauri", "i?", &k);
+	ret |= cargo_group_add_option(cargo, "group1", "--centauri");
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 
 	cargo_print_usage(cargo);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_guard)
+{
+	int i = 0;
+	int j = 0;
+	int k = 0;
+	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+
+	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
+	cargo_assert(ret == 0, "Failed to add mutex group");
+
+	// Add options to the group using inline method.
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
+
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
+
+	ret |= cargo_add_option(cargo, "--centauri", "The centauri", "i?", &k);
+	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--centauri");
+	cargo_assert(ret == 0, "Failed to add options");
+
+	// We parse args with 2 members of the mutex group.
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed mutex group with 2 group members");
+
+	//cargo_print_usage(cargo);
 
 	_TEST_CLEANUP();
 }
@@ -4968,7 +5114,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_custom_callback_array),
 	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
 	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
-	CARGO_ADD_TEST(TEST_group)
+	CARGO_ADD_TEST(TEST_group),
+	CARGO_ADD_TEST(TEST_mutex_group_guard),
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

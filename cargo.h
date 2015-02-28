@@ -175,6 +175,12 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
 					const char *title, const char *description);
 
+int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
+
+int cargo_add_mutex_group(cargo_t ctx, size_t flags, const char *name);
+
+int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt);
+
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
