@@ -2255,10 +2255,18 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 			_cargo_print_mutex_group(g);
 			goto fail;
 		}
+
+		free(parse_highlights);
+		parse_highlights = NULL;
 	}
 
 	ret = 0;
 fail:
+	if (parse_highlights)
+	{
+		free(parse_highlights);
+	}
+
 	return ret;
 }
 
