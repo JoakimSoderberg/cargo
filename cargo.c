@@ -2333,7 +2333,6 @@ int cargo_init(cargo_t *ctx, const char *progname)
 void cargo_destroy(cargo_t *ctx)
 {
 	size_t i;
-	size_t j;
 
 	CARGODBG(2, "cargo_destroy: DESTROY!\n");
 
@@ -2459,7 +2458,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 		return NULL;
 	}
 
-	for (i = 0; i < highlight_count; i++)
+	for (i = 0; i < (int)highlight_count; i++)
 	{
 		highlights[i].i = highlights_in[i].i;
 		highlights[i].c = highlights_in[i].c;
@@ -2470,7 +2469,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 	{
 		arglen = strlen(argv[i]);
 
-		if (j < highlight_count)
+		if (j < (int)highlight_count)
 		{
 			cargo_phighlight_t *h = &highlights[j];
 			if (h->i == i)
@@ -2524,7 +2523,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 
 	if (!(flags & CARGO_FPRINT_NOHIGHLIGHT))
 	{
-		for (i = 0; i < highlight_count; i++)
+		for (i = 0; i < (int)highlight_count; i++)
 		{
 			cargo_phighlight_t *h = &highlights[i];
 			char *highlvec;
@@ -2908,7 +2907,6 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 
 char *cargo_get_short_usage(cargo_t ctx)
 {
-	size_t i;
 	char *b = NULL;
 	size_t out_size = 0;
 	size_t indent = 0;
@@ -3510,12 +3508,12 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 	}
 	#else // WIN32
 	{
-		wchar_t *wargs;
+		wchar_t **wargs;
 		size_t converted;
 		size_t needed;
 		char *tmp;
 
-		if (!(wargs = CommandLineToArgvW(cmd, argc)))
+		if (!(wargs = CommandLineToArgvW(cmdline, argc)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return NULL;
