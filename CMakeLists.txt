@@ -54,7 +54,7 @@ if (CARGO_TEST)
 	if (CARGO_WITH_MEMCHECK)
 		if (WIN32)
 			cmake_policy(PUSH)
-			cmake_policy(SET CMP0053 OLD) # Allow () in the var
+			#cmake_policy(SET CMP0053 OLD) # Allow () in the var
 			find_program(DRMEMORY_PROGRAM NAMES drmemory.exe PATHS "$ENV{ProgramFiles(x86)}/Dr. Memory/bin")
 			cmake_policy(POP)
 
