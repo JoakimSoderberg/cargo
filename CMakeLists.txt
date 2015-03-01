@@ -8,7 +8,7 @@ option(CARGO_EXAMPLE "Build example application" ON)
 option(CARGO_HELPER "Build cargo formatting helper" ON)
 option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
 
-option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind" ON)
+option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
 
 if (NOT CARGO_DEBUG)
 	set(CARGO_DEBUG 0)
