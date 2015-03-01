@@ -1887,40 +1887,6 @@ static void _cargo_fmt_prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
-static int _cargo_fmt_parse_custom(cargo_opt_t *o, va_list ap)
-{
-	assert(o);
-
-	CARGODBG(4, "Custom callback\n");
-
-	if (!o->alloc)
-	{
-		CARGODBG(1, "WARNING! Static '.' is ignored for a custom "
-					"callback the memory for the arguments is "
-					"allocated internally.");
-		o->alloc = 1;
-	}
-
-	o->type = CARGO_STRING;
-	o->custom = va_arg(ap, cargo_custom_cb_t);
-	o->custom_user = va_arg(ap, void *);
-
-	// Internal target.
-	o->target = (void **)&o->custom_target;
-	o->target_count = &o->custom_target_count;
-
-	o->lenstr = 0;
-	o->nargs = 1;
-
-	if (!o->custom)
-	{
-		CARGODBG(1, "Got NULL custom callback pointer\n");
-		return -1;
-	}
-
-	return 0;
-}
-
 static const char *_cargo_get_option_group_name(cargo_t ctx,
 										const char *optnames,
 										char **grpname)
@@ -3214,9 +3180,46 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 
 	switch (_cargo_fmt_token(&s))
 	{
+		//
+		// !!!WARNING!!!
+		// Do not attempt to refactor and put these longer cases in
+		// separate functions. Passing a va_list around is dangerous.
+		// This works fine on Unix, but fails randomly on Windows!
+		//
+
 		// Same as string, but the target is internal
 		// and will be passed to the user specified callback.
-		case 'c': if (_cargo_fmt_parse_custom(o, ap)) goto fail; break;
+		case 'c':
+		{
+			CARGODBG(4, "Custom callback\n");
+
+			if (!o->alloc)
+			{
+				CARGODBG(1, "WARNING! Static '.' is ignored for a custom "
+							"callback the memory for the arguments is "
+							"allocated internally.");
+				o->alloc = 1;
+			}
+
+			o->type = CARGO_STRING;
+			o->custom = va_arg(ap, cargo_custom_cb_t);
+			o->custom_user = va_arg(ap, void *);
+
+			// Internal target.
+			o->target = (void **)&o->custom_target;
+			o->target_count = &o->custom_target_count;
+
+			o->lenstr = 0;
+			o->nargs = 1;
+
+			if (!o->custom)
+			{
+				CARGODBG(1, "Got NULL custom callback pointer\n");
+				goto fail;
+			}
+
+			break;
+		}
 		case 's':
 		{
 			o->type = CARGO_STRING;
