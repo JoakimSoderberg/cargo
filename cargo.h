@@ -240,5 +240,6 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 // TODO: Provide wrapper for CommandLineToArgvW
 // http://stackoverflow.com/questions/13481058/commandlinetoargvw-equivalent-on-linux
 // http://linux.die.net/man/3/wordexp
+char **cargo_split_commandline(const char *args, int *argc);
 
 #endif // __CARGO_H__

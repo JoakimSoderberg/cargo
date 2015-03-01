@@ -12,6 +12,7 @@
 #else
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <wordexp.h>
 #endif // _WIN32
 
 // TODO: Add support for option groups.
@@ -3468,6 +3469,114 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 	return ret;
 }
 
+char **cargo_split_commandline(const char *cmdline, int *argc)
+{
+	int i;
+	int err = 0;
+	char **argv = NULL;
+	assert(argc);
+
+	if (!cmdline)
+	{
+		return NULL;
+	}
+
+	// Posix.
+	#ifndef _WIN32
+	{
+		wordexp_t p;
+
+		// Note! This expands shell variables.
+		if (wordexp(cmdline, &p, 0))
+		{
+			return NULL;
+		}
+
+		*argc = p.we_wordc;
+
+		if (!(argv = calloc(*argc, sizeof(char *))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return NULL;
+		}
+
+		for (i = 0; i < p.we_wordc; i++)
+		{
+			if (!(argv[i] = strdup(p.we_wordv[i])))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				err = 1;
+				goto fail;
+			}
+		}
+
+		wordfree(&p);
+
+		return argv;
+	fail:
+		wordfree(&p);
+	}
+	#else // WIN32
+	{
+		wchar_t *wargs;
+		size_t converted;
+		size_t needed;
+		char *tmp;
+
+		if (!(wargs = CommandLineToArgvW(cmd, argc)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return NULL;
+		}
+
+		if (!(argv = calloc(*argc, sizeof(char *))))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			return NULL;
+		}
+
+		// Convert from wchar_t * to ANSI char *
+		for (i = 0; i < *argc; i++)
+		{
+			// Get the size needed for the target buffer.
+			// CP_ACP = Ansi Codepage.
+			needed = WideCharToMultiByte(CP_ACP, 0, wargs[i], -1,
+										NULL, 0, NULL, NULL);
+
+			if (!(argv[i] = malloc(needed)))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				goto fail;
+			}
+
+			// Do the conversion.
+			needed = WideCharToMultiByte(CP_ACP, 0, wargs[i], -1,
+										&argv[i], needed, NULL, NULL);
+		}
+
+		return argv;
+	fail:
+		if (wargs)
+		{
+			free(wargs);
+		}
+	}
+	#endif // WIN32
+
+	if (argv)
+	{
+		for (i = 0; i < *argc; i++)
+		{
+			if (argv[i])
+			{
+				free(argv[i]);
+			}
+		}
+	}
+
+	return NULL;
+}
+
 const char *cargo_get_version()
 {
 	return CARGO_VERSION_STR;
@@ -5113,7 +5222,23 @@ _TEST_START(TEST_mutex_group_guard)
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed mutex group with 2 group members");
 
-	//cargo_print_usage(cargo);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_split_commandline)
+{
+	const char *cmd = "abc def \"ghi jkl\"";
+	char *argv_expect[] =
+	{
+		"abc", "def", "ghi jkl"
+	};
+	char **argv = NULL;
+	int argc = 0;
+
+	argv = cargo_split_commandline(cmd, &argc);
+	cargo_assert(argv != NULL, "Got NULL argv");
+	cargo_assert_str_array(argc, 3, argv, argv_expect);
 
 	_TEST_CLEANUP();
 }
@@ -5198,6 +5323,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
 	CARGO_ADD_TEST(TEST_group),
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
+	CARGO_ADD_TEST(TEST_cargo_split_commandline)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
