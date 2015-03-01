@@ -209,6 +209,8 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 			return -1;
 		}
 
+		va_end(apc);
+
 		if ((size_t)ret >= str->diff)
 		{
 			str->l *= 2;
@@ -1265,7 +1267,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	}
 
 	if (!(ss = calloc(*count, sizeof(char *))))
-		return NULL;
+		goto fail;
 
 	p = strtok(scpy, splitchars);
 	i = 0;
@@ -1286,7 +1288,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 
 	return ss;
 fail:
-	free(scpy);
+	if (scpy) free(scpy);
 	_cargo_free_str_list(&ss, count);
 	return NULL;
 }
@@ -1717,7 +1719,9 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	return 0;
 }
 
-static char **_cargo_split_and_verify_option_names(cargo_t ctx, const char *optnames, size_t *optcount)
+static char **_cargo_split_and_verify_option_names(cargo_t ctx,
+													const char *optnames,
+													size_t *optcount)
 {
 	char **optname_list = NULL;
 	char *tmp = NULL;
@@ -1731,7 +1735,7 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx, const char *optn
 	}
 
 	if (!(optname_list = _cargo_split(tmp, " ", optcount))
-		|| (optcount <= 0))
+		|| (*optcount <= 0))
 	{
 		CARGODBG(1, "Failed to split option name list: \"%s\"\n", optnames);
 		goto fail;
@@ -2905,7 +2909,7 @@ char *cargo_get_usage(cargo_t ctx)
 	if (!(name = malloc(ctx->max_width)))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		return NULL;
+		goto fail;
 	}
 
 	for (i = 0; i < ctx->opt_count; i++)
@@ -3110,7 +3114,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	size_t optcount = 0;
 	char **optname_list = NULL;
 	int ret = -1;
-	char *tmp = NULL;
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
 	cargo_opt_t *o = NULL;
@@ -3412,11 +3415,6 @@ fail:
 	if (grpname)
 	{
 		free(grpname);
-	}
-
-	if (tmp)
-	{
-		free(tmp);
 	}
 
 	if (optname_list)
@@ -4113,9 +4111,9 @@ _TEST_START(TEST_autohelp_default)
 	printf("%s", usage);
 	printf("-------------------------------------\n");
 	cargo_assert(strstr(usage, "help") != NULL, "No help found by default");
-	free(usage);
 
 	_TEST_CLEANUP();
+	free(usage);
 }
 _TEST_END()
 
@@ -4135,9 +4133,9 @@ _TEST_START(TEST_autohelp_off)
 	printf("-------------------------------------\n");
 	cargo_assert(strstr(usage, "help") == NULL,
 				"Help found when auto_help turned off");
-	free(usage);
 
 	_TEST_CLEANUP();
+	free(usage);
 }
 _TEST_END()
 
@@ -4395,7 +4393,7 @@ _TEST_START(TEST_parse_twice)
 		cargo_assert(ret == 0, "Failed to parse advanced example");
 		cargo_assert_array(ports_count, PORTS_COUNT, ports, args1_ports_expect);
 		cargo_assert_str_array(vals_count, 5, vals, args1_vals_expect);
-		cargo_assert(!strcmp(name, "server"), "Expected name = \"server\"");
+		cargo_assert(name && !strcmp(name, "server"), "Expected name = \"server\"");
 
 		// TODO: Remove this and make sure these are freed at cargo_parse instead
 		_cargo_free_str_list(&vals, &vals_count);
