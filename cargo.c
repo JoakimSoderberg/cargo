@@ -377,6 +377,8 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 		case CARGO_DOUBLE: return sizeof(double);
 		case CARGO_STRING: return sizeof(char *);
 	}
+
+	return 0;
 }
 
 static int _cargo_nargs_is_valid(int nargs)
@@ -3506,21 +3508,33 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 	}
 	#else // WIN32
 	{
-		wchar_t **wargs;
-		size_t converted;
-		size_t needed;
-		char *tmp;
+		wchar_t **wargs = NULL;
+		size_t needed = 0;
+		const wchar_t *cmdlinew = NULL;
+		size_t len = strlen(cmdline) + 1;
 
-		if (!(wargs = CommandLineToArgvW(cmdline, argc)))
+		if (!(cmdlinew = calloc(len, sizeof(wchar_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
-			return NULL;
+			goto fail;
+		}
+
+		if (!MultiByteToWideChar(CP_ACP, 0, cmdline, -1, cmdlinew, len))
+		{
+			CARGODBG(1, "Failed to convert to unicode!\n");
+			goto fail;
+		}
+
+		if (!(wargs = CommandLineToArgvW(cmdlinew, argc)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
 		}
 
 		if (!(argv = calloc(*argc, sizeof(char *))))
 		{
 			CARGODBG(1, "Out of memory!\n");
-			return NULL;
+			goto fail;
 		}
 
 		// Convert from wchar_t * to ANSI char *
@@ -3539,15 +3553,16 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 
 			// Do the conversion.
 			needed = WideCharToMultiByte(CP_ACP, 0, wargs[i], -1,
-										&argv[i], needed, NULL, NULL);
+										argv[i], needed, NULL, NULL);
 		}
 
+		if (wargs) LocalFree(wargs);
+		if (cmdlinew) free(cmdlinew);
 		return argv;
+
 	fail:
-		if (wargs)
-		{
-			free(wargs);
-		}
+		if (wargs) LocalFree(wargs);
+		if (cmdlinew) free(cmdlinew);
 	}
 	#endif // WIN32
 
@@ -4653,7 +4668,7 @@ _TEST_START(TEST_multiple_positional_array_argument)
 	int j_expect[] = { 456, 789, 101112 };
 	size_t j_count = 0;
 	float m[3];
-	float m_expect[] = { 4.3, 2.3, 50.34 };
+	float m_expect[] = { 4.3f, 2.3f, 50.34f };
 	size_t m_count = 0;
 	char *args[] =
 	{
@@ -4699,7 +4714,7 @@ _TEST_START(TEST_multiple_positional_array_argument2)
 	int j_expect[] = { 456, 789, 101112 };
 	size_t j_count = 0;
 	float m[3];
-	float m_expect[] = { 4.3, 2.3, 50.34 };
+	float m_expect[] = { 4.3f, 2.3f, 50.34f };
 	size_t m_count = 0;
 	char *args[] =
 	{
@@ -4746,7 +4761,7 @@ _TEST_START(TEST_multiple_positional_array_argument3)
 	int j_expect[] = { 456, 789, 101112 };
 	size_t j_count = 0;
 	float *m = NULL;
-	float m_expect[] = { 4.3, 2.3, 50.34, 0.99 };
+	float m_expect[] = { 4.3f, 2.3f, 50.34f, 0.99f };
 	size_t m_count = 0;
 	char *args[] =
 	{
@@ -4969,8 +4984,6 @@ static int _test_cb(cargo_t ctx, void *user, const char *optname,
 
 _TEST_START(TEST_custom_callback)
 {
-	int i;
-	int j;
 	_test_data_t data;
 	char *args[] = { "program", "--alpha", "128x64" };
 
@@ -5011,8 +5024,7 @@ static int _test_cb_fixed_array(cargo_t ctx, void *user, const char *optname,
 
 _TEST_START(TEST_custom_callback_fixed_array)
 {
-	int i;
-	int j;
+	size_t i;
 	#define DATA_COUNT 5
 	_test_data_t data[DATA_COUNT];
 	size_t data_count = 0;
@@ -5078,8 +5090,7 @@ static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
 
 _TEST_START(TEST_custom_callback_array)
 {
-	int i;
-	int j;
+	size_t i;
 	_test_data_t *data = NULL;
 	size_t data_count = 0;
 	_test_data_t data_expect[] =
@@ -5218,7 +5229,7 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_split_commandline)
 {
-	int i;
+	size_t i;
 	const char *cmd = "abc def \"ghi jkl\"";
 	char *argv_expect[] =
 	{
@@ -5229,12 +5240,12 @@ _TEST_START(TEST_cargo_split_commandline)
 
 	argv = cargo_split_commandline(cmd, &argc);
 	cargo_assert(argv != NULL, "Got NULL argv");
-	cargo_assert_str_array(argc, 3, argv, argv_expect);
+	cargo_assert_str_array((size_t)argc, 3, argv, argv_expect);
 
 	_TEST_CLEANUP();
 	if (argv)
 	{
-		for (i = 0; i < argc; i++)
+		for (i = 0; i < (size_t)argc; i++)
 		{
 			if (argv[i]) free(argv[i]);
 		}
@@ -5771,20 +5782,14 @@ typedef struct args_s
 
 int main(int argc, char **argv)
 {
-	size_t i;
 	int ret = 0;
 	cargo_t cargo;
-	args_t args;
-	char **extra_args;
-	size_t extra_count;
 
 	cargo_init(&cargo, argv[0]);
 
 	// TODO: Make a real example.
 
 	cargo_print_usage(cargo);
-done:
-fail:
 	cargo_destroy(&cargo);
 	return ret;
 }
