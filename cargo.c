@@ -3466,7 +3466,6 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 char **cargo_split_commandline(const char *cmdline, int *argc)
 {
 	int i;
-	int err = 0;
 	char **argv = NULL;
 	assert(argc);
 
@@ -3499,7 +3498,6 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 			if (!(argv[i] = strdup(p.we_wordv[i])))
 			{
 				CARGODBG(1, "Out of memory!\n");
-				err = 1;
 				goto fail;
 			}
 		}
@@ -3566,6 +3564,8 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 				free(argv[i]);
 			}
 		}
+
+		free(argv);
 	}
 
 	return NULL;
@@ -5222,6 +5222,7 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_split_commandline)
 {
+	int i;
 	const char *cmd = "abc def \"ghi jkl\"";
 	char *argv_expect[] =
 	{
@@ -5235,6 +5236,15 @@ _TEST_START(TEST_cargo_split_commandline)
 	cargo_assert_str_array(argc, 3, argv, argv_expect);
 
 	_TEST_CLEANUP();
+	if (argv)
+	{
+		for (i = 0; i < argc; i++)
+		{
+			if (argv[i]) free(argv[i]);
+		}
+
+		free(argv);
+	}
 }
 _TEST_END()
 
