@@ -11,3 +11,4 @@ build_script:
   - cmake -DCARGO_DEBUG=4 ..
   - cmake --build . --config Debug
   - ctest --output-on-failure
+

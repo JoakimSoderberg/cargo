@@ -1921,42 +1921,6 @@ static int _cargo_fmt_parse_custom(cargo_opt_t *o, va_list ap)
 	return 0;
 }
 
-static int _cargo_fmt_parse_string(cargo_opt_t *o, cargo_fmt_scanner_t *s, va_list ap)
-{
-	assert(o);
-	assert(s);
-
-	o->type = CARGO_STRING;
-	o->target = (void *)va_arg(ap, char *);
-
-	CARGODBG(4, "Read string\n");
-	_cargo_fmt_next_token(s);
-
-	if (_cargo_fmt_token(s) == '#')
-	{
-		o->lenstr = (size_t)va_arg(ap, int);
-		CARGODBG(4, "String length: %lu\n", o->lenstr);
-
-		if (o->alloc)
-		{
-			CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
-				"string using # is only done on static strings.\n"
-				"    Are you sure you want this?\n",
-				o->name[0]);
-			CARGODBG(1, "      \"%s\"\n", s->start);
-			CARGODBG(1, "       %*s\n", s->column, "^");
-		}
-	}
-	else
-	{
-		// String size not fixed.
-		o->lenstr = 0;
-		_cargo_fmt_prev_token(s);
-	}
-
-	return 0;
-}
-
 static const char *_cargo_get_option_group_name(cargo_t ctx,
 										const char *optnames,
 										char **grpname)
@@ -3253,7 +3217,38 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		// Same as string, but the target is internal
 		// and will be passed to the user specified callback.
 		case 'c': if (_cargo_fmt_parse_custom(o, ap)) goto fail; break;
-		case 's': if (_cargo_fmt_parse_string(o, &s, ap)) goto fail; break;
+		case 's':
+		{
+			o->type = CARGO_STRING;
+			o->target = (void *)va_arg(ap, char *);
+
+			CARGODBG(4, "Read string\n");
+			_cargo_fmt_next_token(&s);
+
+			if (_cargo_fmt_token(&s) == '#')
+			{
+				o->lenstr = (size_t)va_arg(ap, int);
+				CARGODBG(4, "String length: %lu\n", o->lenstr);
+
+				if (o->alloc)
+				{
+					CARGODBG(1, "%s: WARNING! Usually restricting the size of a "
+						"string using # is only done on static strings.\n"
+						"    Are you sure you want this?\n",
+						o->name[0]);
+					CARGODBG(1, "      \"%s\"\n", s.start);
+					CARGODBG(1, "       %*s\n", s.column, "^");
+				}
+			}
+			else
+			{
+				// String size not fixed.
+				o->lenstr = 0;
+				_cargo_fmt_prev_token(&s);
+			}
+
+			break;
+		}
 		case 'i': o->type = CARGO_INT;    o->target = va_arg(ap, void *); break;
 		case 'd': o->type = CARGO_DOUBLE; o->target = va_arg(ap, void *); break;
 		case 'b': o->type = CARGO_BOOL;   o->target = va_arg(ap, void *); break;
