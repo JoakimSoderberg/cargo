@@ -1269,7 +1269,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 
 	p = strtok(scpy, splitchars);
 	i = 0;
-	while (p)
+	while (p && (i < (*count)))
 	{
 		p += strspn(p, splitchars);
 
@@ -3510,7 +3510,7 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 	{
 		wchar_t **wargs = NULL;
 		size_t needed = 0;
-		const wchar_t *cmdlinew = NULL;
+		wchar_t *cmdlinew = NULL;
 		size_t len = strlen(cmdline) + 1;
 
 		if (!(cmdlinew = calloc(len, sizeof(wchar_t))))
@@ -4507,7 +4507,7 @@ _TEST_START(TEST_parse_same_option_twice_string)
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parsed duplicate option without unique");
-	cargo_assert(!strcmp(s, "def"), "Expected --alpha to have value \"def\"");
+	cargo_assert(s && !strcmp(s, "def"), "Expected --alpha to have value \"def\"");
 
 	_TEST_CLEANUP();
 	if (s) free(s);
@@ -4811,7 +4811,7 @@ _TEST_START_EX(TEST_autoclean_flag, CARGO_AUTOCLEAN)
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse valid option");
-	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+	cargo_assert(s && !strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
 
 	_TEST_CLEANUP();
 	// Note! We're not using the normal _TEST_END here so we can assert after
@@ -4832,7 +4832,7 @@ _TEST_START_EX(TEST_autoclean_flag_off, 0)
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse valid option");
-	cargo_assert(!strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
+	cargo_assert(s && !strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
 
 	_TEST_CLEANUP();
 	cargo_destroy(&cargo);
@@ -5551,6 +5551,7 @@ int main(int argc, char **argv)
 	size_t example_count = 1;
 	size_t i;
 	size_t j;
+	memset(types, 0, sizeof(types));
 
 	if (argc < 2)
 	{
