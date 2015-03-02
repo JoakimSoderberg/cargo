@@ -5358,18 +5358,6 @@ _TEST_START(TEST_many_groups)
 }
 _TEST_END()
 
-// TODO: Test cargo_aapendf to trigger realloc
-// TODO: Test cargo_set_prefix
-// TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
-// TODO: Refactor cargo_get_usage
-// TODO: Test giving add_option an invalid alias
-// TODO: Test cargo_split_commandline with invalid command line
-// TODO: Test vsnprintf with 0 buflen
-// TODO: Test autoclean with string of arrays
-// TODO: Test parsing option --alpha --beta, where --alpha should have an argument.
-
-
-
 _TEST_START(TEST_mutex_group_guard)
 {
 	int i = 0;
@@ -5527,6 +5515,32 @@ _TEST_START(TEST_cargo_set_max_width)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_snprintf)
+{
+	char buf[32];
+	ret = cargo_snprintf(buf, 0, "%d", 123);
+	printf("%d\n", ret);
+	cargo_assert(ret == 0, "Expected ret == 0 when given 0 buflen");
+
+	// Let memcheckers make sure this doesn't write past end of buffer
+	ret = cargo_snprintf(buf, sizeof(buf), "%s", LOREM_IPSUM);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+
+// TODO: Test cargo_aapendf to trigger realloc
+// TODO: Test cargo_set_prefix
+// TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
+// TODO: Refactor cargo_get_usage
+// TODO: Test giving add_option an invalid alias
+// TODO: Test cargo_split_commandline with invalid command line
+// TODO: Test autoclean with string of arrays
+// TODO: Test parsing option --alpha --beta, where --alpha should have an argument.
+// TODO: Add a help function to free argv.
+
+
 //
 // List of all test functions to run:
 //
@@ -5609,7 +5623,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
 	CARGO_ADD_TEST(TEST_mutex_group_require_one),
 	CARGO_ADD_TEST(TEST_cargo_split_commandline),
-	CARGO_ADD_TEST(TEST_cargo_set_max_width)
+	CARGO_ADD_TEST(TEST_cargo_set_max_width),
+	CARGO_ADD_TEST(TEST_cargo_snprintf)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
