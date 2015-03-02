@@ -18,7 +18,11 @@
 #ifdef CARGO_DEBUG
 #define CARGODBG(level, fmt, ...)											\
 {																			\
-	if (level <= CARGO_DEBUG)												\
+	if (level == 1)															\
+	{																		\
+		fprintf(stderr, "[cargo.c:%4d]: [ERROR] " fmt, __LINE__, ##__VA_ARGS__); \
+	}																		\
+	else if (level <= CARGO_DEBUG)											\
 	{																		\
 		fprintf(stderr, "[cargo.c:%4d]: " fmt, __LINE__, ##__VA_ARGS__);	\
 	}																		\
@@ -2938,6 +2942,12 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 
 	opt = &ctx->options[opt_i];
 
+	if (opt->positional)
+	{
+		CARGODBG(1, "Cannot add alias for positional argument\n");
+		return -1;
+	}
+
 	if (opt->name_count >= CARGO_NAME_COUNT)
 	{
 		CARGODBG(1, "Too many aliases for option: %s\n", opt->name[0]);
@@ -5546,12 +5556,16 @@ _TEST_START(TEST_cargo_set_prefix)
 {
 	int i;
 	int j;
+	int k;
 	char *args[] = { "program", "--alpha", "789", "++beta", "123" };
 
 	cargo_set_prefix(cargo, "+");
 
 	ret = cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
 	cargo_assert(ret != 0, "Succesfully added argument with invalid prefix");
+
+	ret = cargo_add_option(cargo, "centauri c", LOREM_IPSUM, "i", &k);
+	cargo_assert(ret != 0, "Expected positional argument to reject alias");
 
 	ret = cargo_add_option(cargo, "++beta +b", LOREM_IPSUM, "i", &i);
 	cargo_assert(ret == 0, "Failed to add option with valid prefix '+'");
@@ -5566,7 +5580,6 @@ _TEST_END()
 
 
 // TODO: Test cargo_aapendf to trigger realloc
-// TODO: Test cargo_set_prefix
 // TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
 // TODO: Refactor cargo_get_usage
 // TODO: Test giving add_option an invalid alias
