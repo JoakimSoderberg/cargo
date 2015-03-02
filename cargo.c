@@ -5254,6 +5254,15 @@ _TEST_START(TEST_zero_or_more_without_arg)
 }
 _TEST_END()
 
+#define LOREM_IPSUM															\
+	"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"		\
+	" eiusmod tempor incididunt ut labore et dolore magna aliqua. "			\
+	"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "	\
+	"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "	\
+	"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "	\
+	"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "	\
+	"culpa qui officia deserunt mollit anim id est laborum."
+
 _TEST_START(TEST_group)
 {
 	int i = 0;
@@ -5266,14 +5275,7 @@ _TEST_START(TEST_group)
 
 	// Add options to the group using inline method.
 	ret |= cargo_add_option(cargo, "   <group1> --alpha", "The alpha", "i?", &j);
-	ret |= cargo_add_option(cargo, "<group1> --beta -b",
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"
-		" eiusmod tempor incididunt ut labore et dolore magna aliqua. "
-		"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "
-		"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
-		"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
-		"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
-		"culpa qui officia deserunt mollit anim id est laborum.", "i", &i);
+	ret |= cargo_add_option(cargo, "<group1> --beta -b", LOREM_IPSUM, "i", &i);
 
 	// Try using the API to add the option to the group.
 	ret |= cargo_add_option(cargo, "--centauri", "The alpha centauri", "i?", &k);
@@ -5289,15 +5291,6 @@ _TEST_START(TEST_group)
 }
 _TEST_END()
 
-#define LOREM_IPSUM \
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do" \
-		" eiusmod tempor incididunt ut labore et dolore magna aliqua. " \
-		"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris " \
-		"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in " \
-		"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla " \
-		"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in " \
-		"culpa qui officia deserunt mollit anim id est laborum."
-
 _TEST_START(TEST_many_groups)
 {
 	size_t i = 0;
@@ -5308,7 +5301,7 @@ _TEST_START(TEST_many_groups)
 	char grpname[256];
 	char title[256];
 	char optname[256];
-	//char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+	char *args[] = { "program", "--optg01o01", "5", "--optg02o02", "123" };
 
 	for (i = 0; i < GROUP_COUNT; i++)
 	{
@@ -5328,8 +5321,10 @@ _TEST_START(TEST_many_groups)
 
 	cargo_assert(ret == 0, "Failed to add groups");
 
-	//ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	//cargo_assert(ret == 0, "Failed zero or more args parse");
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed zero or more args parse");
+	cargo_assert(vals[0][0] == 5, "Expected --optg01o01 to be 5");
+	cargo_assert(vals[1][1] == 123, "Expected --optg02o02 to be 123");
 
 	cargo_print_usage(cargo);
 
@@ -5337,7 +5332,6 @@ _TEST_START(TEST_many_groups)
 }
 _TEST_END()
 
-// TODO: Test add_group for many groups. And many options for each group to trigger reallocation.
 // TODO: Test cargo_aapendf to trigger realloc
 // TODO: Test mutex group with CARGO_MUTEXGRP_ONE_REQUIRED
 // TODO: Test cargo_set_max_width with a fixed size and also one > CARGO_MAX_MAX_WIDTH
