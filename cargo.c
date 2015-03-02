@@ -1224,7 +1224,9 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	size_t i = 0;
 	char *p = NULL;
 	char *scpy = NULL;
+	char *end = NULL;
 	size_t splitlen = strlen(splitchars);
+	size_t split_count = 0;
 	assert(count);
 
 	*count = 0;
@@ -1239,14 +1241,22 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 		return NULL;
 
 	p = scpy;
+	end = scpy + strlen(scpy);
 	p += strspn(p, splitchars);
 
 	*count = 1;
 
 	while (*p)
 	{
+		// If the string ends in just splitchars
+		// don't count the last empty string.
+		if ((p + strspn(p, splitchars)) >= end)
+		{
+			break;
+		}
+
 		// Look for a split character.
-		for (i = 0; i < (int)splitlen; i++)
+		for (i = 0; i < splitlen; i++)
 		{
 			if (*p == splitchars[i])
 			{
@@ -1265,6 +1275,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 
 	p = strtok(scpy, splitchars);
 	i = 0;
+
 	while (p && (i < (*count)))
 	{
 		p += strspn(p, splitchars);
@@ -1277,6 +1288,9 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 		p = strtok(NULL, splitchars);
 		i++;
 	}
+
+	// The count and number of strings must match.
+	assert(i == *count);
 
 	free(scpy);
 
@@ -1297,7 +1311,6 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	if (!s)
 		return NULL;
 
-	// TODO: If we already have a linebreak, use that instead of adding a new one.
 	p = strpbrk(p, " \n");
 	while (p != NULL)
 	{
@@ -1464,21 +1477,34 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 	size_t line_count = 0;
 
 	int padding = 0;
-	char *opt_description = _cargo_linebreak(ctx,
-		ctx->options[i].description,
-		ctx->max_width - 2
-		- max_name_len - (2 * name_padding));
+
+	// We want to fit the opt names + description within max_width
+	// We already know the width of the opt names (max_name_len)
+	// so calculate how wide the description is allowed to be
+	// including any spaces and padding between them.
+	size_t max_desc_len =
+		ctx->max_width 	// Total width of names + description.
+		- 2 			// 2 for spaces before/after opt " --opt ".
+		- max_name_len 	// The longest of the opt names.
+		- name_padding;	// Padding.
+
+	char *opt_description = NULL;
+
+	CARGODBG(2, "max_desc_len = %lu\n", max_desc_len);
+
+	opt_description = _cargo_linebreak(ctx, ctx->options[i].description,
+											max_desc_len);
 
 	if (!opt_description)
 	{
 		ret = -1; goto fail;
 	}
 
-	CARGODBG(3, "ctx->max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
-	CARGODBG(3, "%lu - 2 - %d - (2 * %d) = %lu\n",
+	CARGODBG(5, "ctx->max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
+	CARGODBG(5, "%lu - 2 - %d - (2 * %d) = %lu\n",
 		ctx->max_width, max_name_len,
 		name_padding,
-		ctx->max_width - 2 - max_name_len - (2 * name_padding));
+		max_desc_len);
 
 	if (!(desc_lines = _cargo_split(opt_description, "\n", &line_count)))
 	{
@@ -3735,9 +3761,9 @@ do 																				\
 
 // Start a test. Initializes the lib.
 #define _TEST_START_EX(testname, flags) 				\
-static char *_MAKE_TEST_FUNC_NAME(testname)				\
+static const char *_MAKE_TEST_FUNC_NAME(testname)		\
 {														\
-	char *msg = NULL;									\
+	const char *msg = NULL;								\
 	int ret = 0;										\
 	cargo_t cargo;										\
 														\
@@ -4374,7 +4400,7 @@ _TEST_START(TEST_cargo_split)
 	
 	char *in[] =
 	{
-		" abc def   ghi",
+		" abc def   ghi   ",
 		"abc",
 		NULL
 	};
@@ -5333,8 +5359,6 @@ _TEST_START(TEST_many_groups)
 _TEST_END()
 
 // TODO: Test cargo_aapendf to trigger realloc
-// TODO: Test mutex group with CARGO_MUTEXGRP_ONE_REQUIRED
-// TODO: Test cargo_set_max_width with a fixed size and also one > CARGO_MAX_MAX_WIDTH
 // TODO: Test cargo_set_prefix
 // TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
 // TODO: Refactor cargo_get_usage
@@ -5415,7 +5439,7 @@ _TEST_START(TEST_cargo_split_commandline)
 	};
 	char **argv = NULL;
 	int argc = 0;
-    ret = 0;
+	ret = 0;
 
 	argv = cargo_split_commandline(cmd, &argc);
 	cargo_assert(argv != NULL, "Got NULL argv");
@@ -5434,10 +5458,79 @@ _TEST_START(TEST_cargo_split_commandline)
 }
 _TEST_END()
 
+static const char *_cargo_test_verify_usage_length(char *usage, int width)
+{
+	char *ret = NULL;
+	char **lines = NULL;
+	size_t line_count = 0;
+	size_t len = 0;
+	size_t i = 0;
+	assert(usage);
+	assert(width);
+
+	printf("%s\n", usage);
+
+	if (!(lines = _cargo_split(usage, "\n", &line_count)))
+	{
+		return "Failed to split usage";
+	}
+
+	printf("Line count: %lu\n", line_count);
+
+	for (i = 0; i < line_count; i++)
+	{
+		len = strlen(lines[i]);
+		printf("%02lu Len: %02lu:%s\n", i, len, lines[i]);
+
+		if (len > width)
+		{
+			ret = "Got usage line longer than specified";
+			break;
+		}
+	}
+
+	_cargo_free_str_list(&lines, &line_count);
+	return ret;
+}
+
+_TEST_START(TEST_cargo_set_max_width)
+{
+	int i;
+	int j;
+	const char *err = NULL;
+	char *usage = NULL;
+	char *args[] = { "program", "--alpha", "789", "--beta", "123" };
+
+	ret |= cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
+	ret |= cargo_add_option(cargo, "--beta -b", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_set_max_width(cargo, 40);
+	usage = cargo_get_usage(cargo);
+	cargo_assert(usage != NULL, "Got NULL usage on width 40");
+	err = _cargo_test_verify_usage_length(usage, 40);
+	cargo_assert(err == NULL, err);
+	free(usage);
+	usage = NULL;
+
+	// Set a size bigger than CARGO_MAX_MAX_WIDTH.
+	cargo_set_max_width(cargo, CARGO_MAX_MAX_WIDTH * 2);
+	usage = cargo_get_usage(cargo);
+	cargo_assert(usage != NULL, "Got NULL usage on width CARGO_MAX_MAX_WIDTH * 2");
+	err = _cargo_test_verify_usage_length(usage, CARGO_MAX_MAX_WIDTH);
+	cargo_assert(err == NULL, err);
+	free(usage);
+	usage = NULL;
+
+	_TEST_CLEANUP();
+	if (usage) free(usage);
+}
+_TEST_END()
+
 //
 // List of all test functions to run:
 //
-typedef char *(* cargo_test_f)();
+typedef const char *(* cargo_test_f)();
 
 typedef struct cargo_test_s
 {
@@ -5445,7 +5538,7 @@ typedef struct cargo_test_s
 	cargo_test_f f;
 	int success;
 	int ran;
-	char *error;
+	const char *error;
 } cargo_test_t;
 
 #define CARGO_ADD_TEST(test) { #test, test, 0, 0, NULL }
@@ -5515,7 +5608,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_many_groups),
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
 	CARGO_ADD_TEST(TEST_mutex_group_require_one),
-	CARGO_ADD_TEST(TEST_cargo_split_commandline)
+	CARGO_ADD_TEST(TEST_cargo_split_commandline),
+	CARGO_ADD_TEST(TEST_cargo_set_max_width)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
