@@ -5356,7 +5356,6 @@ _TEST_START(TEST_mutex_group_guard)
 	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
-	// Add options to the group using inline method.
 	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
 
@@ -5370,6 +5369,37 @@ _TEST_START(TEST_mutex_group_guard)
 	// We parse args with 2 members of the mutex group.
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed mutex group with 2 group members");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_require_one)
+{
+	int i = 0;
+	int j = 0;
+	int k = 0;
+	char *args[] = { "program", "--centauri", "5" };
+
+	ret = cargo_add_mutex_group(cargo,
+								CARGO_MUTEXGRP_ONE_REQUIRED,
+								"mutex_group1");
+	cargo_assert(ret == 0, "Failed to add mutex group");
+
+	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i", &j);
+	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
+
+	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
+
+	// Don't add this to te mutex group.
+	ret |= cargo_add_option(cargo, "--centauri", "The centauri", "i?", &k);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	// We parse args with no members of the mutex group.
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0,
+		"Succesfully parsed mutex group with no mutex member when 1 required");
 
 	_TEST_CLEANUP();
 }
@@ -5484,6 +5514,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_group),
 	CARGO_ADD_TEST(TEST_many_groups),
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
+	CARGO_ADD_TEST(TEST_mutex_group_require_one),
 	CARGO_ADD_TEST(TEST_cargo_split_commandline)
 };
 
