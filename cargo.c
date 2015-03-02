@@ -285,7 +285,7 @@ typedef struct cargo_opt_s
 	int nargs;
 	int alloc;
 
-	cargo_group_t *group;
+	int group_index;
 
 	cargo_custom_cb_t custom;
 	void *custom_user;
@@ -316,7 +316,7 @@ struct cargo_group_s
 	char *description;
 	size_t flags;
 
-	cargo_opt_t **options;
+	size_t *option_indices;
 	size_t opt_count;
 	size_t max_opt_count;
 };
@@ -491,6 +491,7 @@ static int _cargo_grow_options(cargo_opt_t **options,
 	assert(options);
 	assert(opt_count);
 	assert(max_opts);
+	assert(*max_opts > 0);
 
 	if (!*options)
 	{
@@ -1521,7 +1522,7 @@ fail:
 }
 
 static int _cargo_print_options(cargo_t ctx, 
-								cargo_opt_t **opts, size_t opt_count,
+								size_t *opt_indices, size_t opt_count,
 								int show_positional, cargo_str_t *str,
 								int max_name_len, int indent)
 {
@@ -1544,7 +1545,7 @@ static int _cargo_print_options(cargo_t ctx,
 	// Option names + descriptions.
 	for (i = 0; i < opt_count; i++)
 	{
-		opt = opts[i];
+		opt = &ctx->options[opt_indices[i]];
 
 		namelen = _cargo_get_option_name_str(ctx, opt,
 											name, ctx->max_width);
@@ -1934,12 +1935,13 @@ static const char *_cargo_get_option_group_name(cargo_t ctx,
 static void _cargo_group_destroy(cargo_group_t *g)
 {
 	if (!g) return;
-	if (g->options) free(g->options);
+	if (g->option_indices) free(g->option_indices);
 	if (g->name) free(g->name);
 	if (g->title) free(g->title);
 	if (g->description) free(g->description);
 
-	g->options = NULL;
+	g->option_indices = NULL;
+	g->opt_count = 0;
 	g->name = NULL;
 	g->title = NULL;
 	g->description = NULL;
@@ -1973,8 +1975,10 @@ static void _cargo_groups_destroy(cargo_t ctx)
 	}
 }
 
+// TODO: Make this return the group_index of the found group also.
 static cargo_group_t *_cargo_find_group(cargo_t ctx,
-					cargo_group_t *groups, size_t group_count, const char *name)
+					cargo_group_t *groups, size_t group_count,
+					const char *name, size_t *grp_i)
 {
 	size_t i;
 	cargo_group_t *g;
@@ -1988,6 +1992,7 @@ static cargo_group_t *_cargo_find_group(cargo_t ctx,
 
 		if (!strcmp(g->name, name))
 		{
+			if (grp_i) *grp_i = i;
 			return g;
 		}
 	}
@@ -2023,7 +2028,7 @@ static int _cargo_add_group(cargo_t ctx,
 		}
 	}
 
-	if (_cargo_find_group(ctx, *groups, *group_count, name))
+	if (_cargo_find_group(ctx, *groups, *group_count, name, NULL))
 	{
 		CARGODBG(1, "Group \"%s\" already exists\n", name);
 		return -1;
@@ -2081,7 +2086,7 @@ static int _cargo_add_group(cargo_t ctx,
 	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
 	grp->opt_count = 0;
 
-	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
+	if (!(grp->option_indices = calloc(grp->max_opt_count, sizeof(size_t))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		goto fail;
@@ -2109,6 +2114,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 {
 	size_t opt_i;
 	cargo_group_t *g = NULL;
+	size_t grp_i;
 	cargo_opt_t *o = NULL;
 	assert(ctx);
 	assert(groups);
@@ -2117,7 +2123,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 
 	CARGODBG(2, "+++++++ Add %s to group \"%s\" +++++++\n", opt, group);
 
-	if (!(g = _cargo_find_group(ctx, groups, group_count, group)))
+	if (!(g = _cargo_find_group(ctx, groups, group_count, group, &grp_i)))
 	{
 		CARGODBG(1, "No such group \"%s\"\n", group);
 		return -1;
@@ -2132,10 +2138,10 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	assert(opt_i < ctx->opt_count);
 	o = &ctx->options[opt_i];
 
-	if (o->group)
+	if (o->group_index > 0)
 	{
 		CARGODBG(1, "\"%s\" is already in another group \"%s\"\n",
-				o->name[0], o->group->name);
+				o->name[0], ctx->groups[o->group_index].name);
 		return -1;
 	}
 
@@ -2146,16 +2152,16 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 
 		g->max_opt_count *= 2;
 
-		if (!(g->options = realloc(g->options,
-				g->max_opt_count * sizeof(cargo_opt_t *))))
+		if (!(g->option_indices = realloc(g->option_indices,
+				g->max_opt_count * sizeof(size_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return -1;
 		}
 	}
 
-	g->options[g->opt_count] = o;
-	o->group = g;
+	g->option_indices[g->opt_count] = opt_i;
+	o->group_index = grp_i;
 	g->opt_count++;
 
 	CARGODBG(2, "   Group \"%s\" option count: %lu\n", g->name, g->opt_count);
@@ -2163,14 +2169,16 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	return 0;
 }
 
-static void _cargo_print_mutex_group(cargo_group_t *g)
+static void _cargo_print_mutex_group(cargo_t ctx, cargo_group_t *g)
 {
 	size_t i;
+	cargo_opt_t *opt = NULL;
 	assert(g);
 
 	for (i = 0; i < g->opt_count; i++)
 	{
-		fprintf(stderr, "%s%s", g->options[i]->name[0],
+		opt = &ctx->options[g->option_indices[i]];
+		fprintf(stderr, "%s%s", opt->name[0],
 				(i < (g->opt_count - 1)) ? ", " : "\n");
 	}
 }
@@ -2183,6 +2191,7 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 	cargo_highlight_t *parse_highlights = NULL;
 	size_t parsed_count = 0;
 	cargo_group_t *g = NULL;
+	cargo_opt_t *opt = NULL;
 	assert(ctx);
 
 	CARGODBG(2, "Check mutex %lu groups\n", ctx->mutex_group_count);
@@ -2201,7 +2210,9 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 
 		for (j = 0; j < g->opt_count; j++)
 		{
-			if (g->options[j]->parsed)
+			opt = &ctx->options[g->option_indices[j]];
+
+			if (opt->parsed)
 			{
 				parse_highlights[parsed_count].i = j + ctx->start;
 				parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
@@ -2226,14 +2237,14 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 			free(s);
 
 			fprintf(stderr, "Only one of these variables allowed at the same time:\n");
-			_cargo_print_mutex_group(g);
+			_cargo_print_mutex_group(ctx, g);
 			goto fail;
 		}
 		else if ((parsed_count == 0)
 				&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
 		{
 			fprintf(stderr, "One of these variables is required:\n");
-			_cargo_print_mutex_group(g);
+			_cargo_print_mutex_group(ctx, g);
 			goto fail;
 		}
 
@@ -2264,7 +2275,7 @@ static int _cargo_add_orphans_to_default_group(cargo_t ctx)
 		opt = &ctx->options[i];
 
 		// Default group.
-		if (!opt->group)
+		if (opt->group_index < 0)
 		{
 			if (cargo_group_add_option(ctx, "", opt->name[0]))
 			{
@@ -3101,7 +3112,7 @@ char *cargo_get_usage(cargo_t ctx)
 			if (is_default_group)
 				if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
 
-			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
+			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
 									1, &str, max_name_len, indent))
 			{
 				goto fail;
@@ -3113,7 +3124,7 @@ char *cargo_get_usage(cargo_t ctx)
 			if (is_default_group)
 				if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
 
-			if (_cargo_print_options(ctx, grp->options, grp->opt_count,
+			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
 									0, &str, max_name_len, indent))
 			{
 				goto fail;
@@ -3243,6 +3254,8 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 			goto fail;
 		}
 	}
+
+	o->group_index = -1;
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, fmt);
