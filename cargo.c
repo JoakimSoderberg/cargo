@@ -15,10 +15,6 @@
 #include <wordexp.h>
 #endif // _WIN32
 
-// TODO: Add support for option groups.
-// TODO: Add support for mutual exclusion groups: 
-// https://docs.python.org/3/library/argparse.html#mutual-exclusion
-
 #ifdef CARGO_DEBUG
 #define CARGODBG(level, fmt, ...)											\
 {																			\
@@ -104,7 +100,6 @@ int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 	return r;
 }
 
-#if CARGO_HELPER // Only used by this...
 int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 {
 	int r;
@@ -114,7 +109,6 @@ int cargo_snprintf(char *buf, size_t buflen, const char *format, ...)
 	va_end(ap);
 	return r;
 }
-#endif // CARGO_HELPER
 
 char *cargo_strndup(const char *s, size_t n)
 {
@@ -185,7 +179,6 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 		}
 
 		str->offset = 0;
-		CARGODBG(4, "Initial alloc %lu\n", str->l);
 
 		if (!(*str->s = calloc(1, str->l)))
 		{
@@ -285,7 +278,7 @@ typedef struct cargo_opt_s
 {
 	char *name[CARGO_NAME_COUNT];
 	size_t name_count;
-	const char *description;
+	const char *description; // TODO: Copy these from user.
 	const char *metavar;
 	int positional;
 	cargo_type_t type;
@@ -318,9 +311,9 @@ typedef struct cargo_opt_s
 
 struct cargo_group_s
 {
-	const char *name;
-	const char *title;
-	const char *description;
+	char *name;
+	char *title;
+	char *description;
 	size_t flags;
 
 	cargo_opt_t **options;
@@ -415,9 +408,9 @@ static char _cargo_is_prefix(cargo_t ctx, char c)
 static int _cargo_find_option_name(cargo_t ctx, const char *name, 
 									size_t *opt_i, size_t *name_i)
 {
-	size_t i;
-	size_t j;
-	cargo_opt_t *opt;
+	size_t i = 0;
+	size_t j = 0;
+	cargo_opt_t *opt = NULL;
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
@@ -1303,20 +1296,17 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	if (!s)
 		return NULL;
 
-	CARGODBG(3, "_cargo_linebreak (MAX WIDTH %lu):\n%lu\"%s\"\n\n",
-		width, strlen(s), s);
-
 	// TODO: If we already have a linebreak, use that instead of adding a new one.
 	p = strpbrk(p, " \n");
 	while (p != NULL)
 	{
-		CARGODBG(4, "(p - start) = %ld: %.*s\n",
+		CARGODBG(6, "(p - start) = %ld: %.*s\n",
 			(p - start), (int)(p - start), start);
 
 		// Restart on already existing explicit line breaks.
 		if (*p == '\n')
 		{
-			CARGODBG(3, "EXISTING NEW LINE len %ld:\n%.*s\n\n",
+			CARGODBG(5, "EXISTING NEW LINE len %ld:\n%.*s\n\n",
 				(p - start), (int)(p - start), start);
 			start = p;
 		}
@@ -1325,7 +1315,7 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 			// We found a word that goes beyond the width we're
 			// aiming for, so add the line break before that word.
 			*prev = '\n';
-			CARGODBG(3, "ADD NEW LINE len %ld:\n%.*s\n\n",
+			CARGODBG(5, "ADD NEW LINE len %ld:\n%.*s\n\n",
 				(prev - start), (int)(prev - start), start);
 			start = prev;
 			continue;
@@ -1334,7 +1324,7 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 		prev = p;
 		p = strpbrk(p + 1, " \n");
 
-		CARGODBG(4, "\n");
+		CARGODBG(5, "\n");
 	}
 
 	return s;
@@ -1405,7 +1395,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 
 		for(j = 1; j < (m + 1); j++)
 		{
-			i1 = DA[t[j - 1]];
+			i1 = DA[(int)t[j - 1]];
 			j1 = DB;
 			cost = ((s[ i - 1] == t[j - 1]) ? 0 : 1);
 
@@ -1418,7 +1408,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 							  d(i1, j1) + (i - i1 - 1) + 1 + (j - j1 - 1));
 		}
 
-		DA[s[i - 1]] = i;
+		DA[(int)s[i - 1]] = i;
 	}
 
 	cost = d(n + 1, m + 1);
@@ -1785,13 +1775,20 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 	memset(o, 0, sizeof(cargo_opt_t));
 	ctx->opt_count++;
 
+	if (o->name_count >= CARGO_NAME_COUNT)
+	{
+		CARGODBG(1, "Max %d names allowed\n", CARGO_NAME_COUNT);
+		return NULL;
+	}
+
 	if (!(optname = strdup(name)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return NULL;
 	}
 
-	o->name[o->name_count++] = optname;
+	o->name[o->name_count] = optname;
+	o->name_count++;
 	o->description = description;
 
 	return o;
@@ -1808,6 +1805,7 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 
 	for (j = 0; j < o->name_count; j++)
 	{
+		CARGODBG(2, "###### FREE OPTION NAME: %s\n", o->name[j]);
 		free(o->name[j]);
 		o->name[j] = NULL;
 	}
@@ -1935,16 +1933,16 @@ static const char *_cargo_get_option_group_name(cargo_t ctx,
 
 static void _cargo_group_destroy(cargo_group_t *g)
 {
-	if (!g)
-	{
-		return;
-	}
+	if (!g) return;
+	if (g->options) free(g->options);
+	if (g->name) free(g->name);
+	if (g->title) free(g->title);
+	if (g->description) free(g->description);
 
-	if (g->options)
-	{
-		free(g->options);
-		g->options = NULL;
-	}
+	g->options = NULL;
+	g->name = NULL;
+	g->title = NULL;
+	g->description = NULL;
 }
 
 static void _cargo_groups_destroy(cargo_t ctx)
@@ -1983,7 +1981,6 @@ static cargo_group_t *_cargo_find_group(cargo_t ctx,
 	assert(ctx);
 	assert(name);
 	assert(groups);
-	assert(group_count);
 
 	for (i = 0; i < group_count; i++)
 	{
@@ -2012,6 +2009,9 @@ static int _cargo_add_group(cargo_t ctx,
 	assert(max_groups);
 	assert(group_count);
 
+	CARGODBG(2, "Add group %s (%lu)\n", name, *group_count);
+
+	// Initial allocation.
 	if (!*groups)
 	{
 		(*max_groups) = CARGO_DEFAULT_MAX_GROUPS;
@@ -2022,7 +2022,15 @@ static int _cargo_add_group(cargo_t ctx,
 			return -1;
 		}
 	}
-	else if (*group_count >= *max_groups)
+
+	if (_cargo_find_group(ctx, *groups, *group_count, name))
+	{
+		CARGODBG(1, "Group \"%s\" already exists\n", name);
+		return -1;
+	}
+
+	// Realloc if needed.
+	if (*group_count >= *max_groups)
 	{
 		(*max_groups) *= 2;
 
@@ -2037,12 +2045,41 @@ static int _cargo_add_group(cargo_t ctx,
 	grp = &(*groups)[*group_count];
 	memset(grp, 0, sizeof(cargo_group_t));
 
-	grp->name = name;
-	grp->title = title,
-	grp->description = description;
+	if (!(grp->name = strdup(name)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	if (title)
+	{
+		if (!(grp->title = strdup(title)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+	}
+	else
+	{
+		if (!(grp->title = strdup(name)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+	}
+
+	if (grp->description)
+	{
+		if (!(grp->description = strdup(description)))
+		{
+			CARGODBG(1, "Out of memory!\n");
+			goto fail;
+		}
+	}
 
 	grp->flags = flags;
 	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
+	grp->opt_count = 0;
 
 	if (!(grp->options = calloc(grp->max_opt_count, sizeof(cargo_opt_t *))))
 	{
@@ -2051,9 +2088,16 @@ static int _cargo_add_group(cargo_t ctx,
 	}
 
 	(*group_count)++;
+	CARGODBG(3, "  group_count after: %lu\n", *group_count)
 
 	ret = 0;
+
 fail:
+	if (ret < 0)
+	{
+		_cargo_group_destroy(grp);
+	}
+
 	return ret;
 }
 
@@ -2071,6 +2115,8 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	assert(group);
 	assert(opt);
 
+	CARGODBG(2, "+++++++ Add %s to group \"%s\" +++++++\n", opt, group);
+
 	if (!(g = _cargo_find_group(ctx, groups, group_count, group)))
 	{
 		CARGODBG(1, "No such group \"%s\"\n", group);
@@ -2083,10 +2129,21 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 		return -1;
 	}
 
+	assert(opt_i < ctx->opt_count);
 	o = &ctx->options[opt_i];
+
+	if (o->group)
+	{
+		CARGODBG(1, "\"%s\" is already in another group \"%s\"\n",
+				o->name[0], o->group->name);
+		return -1;
+	}
 
 	if (g->opt_count >= g->max_opt_count)
 	{
+		CARGODBG(2, "Realloc group max option count from %lu to %lu\n",
+				g->max_opt_count, 2 * g->max_opt_count);
+
 		g->max_opt_count *= 2;
 
 		if (!(g->options = realloc(g->options,
@@ -2100,6 +2157,8 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	g->options[g->opt_count] = o;
 	o->group = g;
 	g->opt_count++;
+
+	CARGODBG(2, "   Group \"%s\" option count: %lu\n", g->name, g->opt_count);
 
 	return 0;
 }
@@ -2192,6 +2251,32 @@ fail:
 	return ret;
 }
 
+static int _cargo_add_orphans_to_default_group(cargo_t ctx)
+{
+	// Instead of being able to delete options from groups
+	// we add any orphans to the default group at first use.
+	size_t i;
+	cargo_opt_t *opt = NULL;
+	assert(ctx);
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		// Default group.
+		if (!opt->group)
+		{
+			if (cargo_group_add_option(ctx, "", opt->name[0]))
+			{
+				CARGODBG(1, "Failed to add \"%s\" to default group\n", opt->name[0]);
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -2238,7 +2323,6 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 
 int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags)
 {
-	int console_width = -1;
 	cargo_s *c;
 	assert(ctx);
 
@@ -2605,6 +2689,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	ctx->start = start_index;
 
 	_cargo_add_help_if_missing(ctx);
+	_cargo_add_orphans_to_default_group(ctx);
 
 	_cargo_free_str_list(&ctx->args, NULL);
 	ctx->arg_count = 0;
@@ -2803,7 +2888,7 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 
 	opt = &ctx->options[opt_i];
 
-	if ((opt->name_count + 1) >= CARGO_NAME_COUNT)
+	if (opt->name_count >= CARGO_NAME_COUNT)
 	{
 		CARGODBG(1, "Too many aliases for option: %s\n", opt->name[0]);
 		return -1;
@@ -2844,13 +2929,12 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 char *cargo_get_short_usage(cargo_t ctx)
 {
 	char *b = NULL;
-	size_t out_size = 0;
 	size_t indent = 0;
-	int need_indent = 0;
 	cargo_astr_t str;
 	assert(ctx);
 
 	_cargo_add_help_if_missing(ctx);
+	_cargo_add_orphans_to_default_group(ctx);
 
 	memset(&str, 0, sizeof(str));
 	str.s = &b;
@@ -2981,6 +3065,14 @@ char *cargo_get_usage(cargo_t ctx)
 
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
 			max_name_len, ctx->max_width);
+
+	#ifdef CARGO_DEBUG
+	for (i = 0; i < ctx->group_count; i++)
+	{
+		CARGODBG(2, "%s: %lu\n",
+			ctx->groups[i].name, ctx->groups[i].opt_count);
+	}
+	#endif
 
 	for (i = 0; i < ctx->group_count; i++)
 	{
@@ -3119,7 +3211,6 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 	cargo_opt_t *o = NULL;
 	char *optname = NULL;
 	char *grpname = NULL;
-	int grp_i = 0;
 	assert(ctx);
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
@@ -3130,17 +3221,7 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		return -1;
 	}
 
-	// Default group.
-	if (!grpname)
-	{
-		if (!(grpname = strdup("")))
-		{
-			CARGODBG(1, "Out of memory\n");
-			return -1;
-		}
-	}
-
-	CARGODBG(2, " Group: %s\n\"%s\"\n", grpname, optnames);
+	CARGODBG(2, " Group: \"%s\", Optnames: \"%s\"\n", grpname, optnames);
 
 	if (!(optname_list = _cargo_split_and_verify_option_names(ctx, optnames, &optcount)))
 	{
@@ -3154,10 +3235,13 @@ int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
 		goto fail;
 	}
 
-	if (cargo_group_add_option(ctx, grpname, o->name[0]))
+	if (grpname)
 	{
-		CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
-		goto fail;
+		if (cargo_group_add_option(ctx, grpname, o->name[0]))
+		{
+			CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
+			goto fail;
+		}
 	}
 
 	// Start parsing the format string.
@@ -3486,7 +3570,7 @@ char **cargo_split_commandline(const char *cmdline, int *argc)
 		if (!(argv = calloc(*argc, sizeof(char *))))
 		{
 			CARGODBG(1, "Out of memory!\n");
-			return NULL;
+			goto fail;
 		}
 
 		for (i = 0; i < p.we_wordc; i++)
@@ -4274,7 +4358,6 @@ _TEST_START(TEST_cargo_split)
 {
 	size_t i;
 	size_t j;
-	char **ss = NULL;
 	
 	char *in[] =
 	{
@@ -4297,6 +4380,7 @@ _TEST_START(TEST_cargo_split)
 
 	char **out[NUM];
 	size_t out_count[NUM];
+    ret = 0;
 
 	for (i = 0; i < NUM; i++)
 	{
@@ -4351,8 +4435,6 @@ _TEST_START(TEST_parse_twice)
 {
 	// This test make sure the parser is reset between
 	// different parse sessions.
-	size_t i = 0;
-	int flag = 0;
 	#define PORTS_COUNT 3
 	int ports[PORTS_COUNT];
 	size_t ports_count = 0;
@@ -4557,11 +4639,10 @@ _TEST_START(TEST_highlight_args)
 {
 	char *args[] = { "program", "--alpha", "abc", "--beta", "def", "ghi", "--crazy", "banans" };
 	int argc = sizeof(args) / sizeof(args[0]);
-	int e;
 
 	printf("With color highlight & args:\n");
 	printf("----------------------------\n");
-	e = cargo_fprint_args(stdout,
+	ret = cargo_fprint_args(stdout,
 						argc,
 						args,
 						1, // Start index.
@@ -4570,11 +4651,11 @@ _TEST_START(TEST_highlight_args)
 						1, "^"CARGO_COLOR_RED,
 						3, "~"CARGO_COLOR_GREEN,
 						4, "-");
-	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
 
 	printf("With highlight & args:\n");
 	printf("----------------------\n");
-	e = cargo_fprint_args(stdout,
+	ret = cargo_fprint_args(stdout,
 						argc,
 						args,
 						1, // Start index.
@@ -4583,29 +4664,29 @@ _TEST_START(TEST_highlight_args)
 						1, "^"CARGO_COLOR_RED,
 						3, "~"CARGO_COLOR_GREEN,
 						4, "-");
-	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
 
 	printf("With highlight & no args:\n");
 	printf("-------------------------\n");
-	e = cargo_fprint_args(stdout,
+	ret = cargo_fprint_args(stdout,
 						argc,
 						args,
 						1, // Start index.
 						CARGO_FPRINT_NOARGS, // flags
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
-	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
 
 	printf("With no highlight & args:\n");
 	printf("-------------------------\n");
-	e = cargo_fprint_args(stdout,
+	ret = cargo_fprint_args(stdout,
 						argc,
 						args,
 						1, // Start index.
 						CARGO_FPRINT_NOHIGHLIGHT, // flags
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
-	cargo_assert(e == 0, "Failed call cargo_fprint_args");
+	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
 
 	_TEST_CLEANUP();
 }
@@ -4614,7 +4695,6 @@ _TEST_END()
 _TEST_START(TEST_positional_argument)
 {
 	// Here we make sure allocated values get freed on a failed parse.
-	char *s = NULL;
 	int i;
 	int j;
 	char *args[] = { "program", "--beta", "123", "456" };
@@ -5196,6 +5276,69 @@ _TEST_START(TEST_group)
 }
 _TEST_END()
 
+#define LOREM_IPSUM \
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do" \
+		" eiusmod tempor incididunt ut labore et dolore magna aliqua. " \
+		"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris " \
+		"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in " \
+		"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla " \
+		"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in " \
+		"culpa qui officia deserunt mollit anim id est laborum."
+
+_TEST_START(TEST_many_groups)
+{
+	size_t i = 0;
+	size_t j = 0;
+	#define GROUP_COUNT 20
+	#define GROUP_OPT_COUNT 20
+	int vals[GROUP_COUNT][GROUP_OPT_COUNT];
+	char grpname[256];
+	char title[256];
+	char optname[256];
+	//char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+
+	for (i = 0; i < GROUP_COUNT; i++)
+	{
+		cargo_snprintf(grpname, sizeof(grpname), "group%d", i+1);
+		cargo_snprintf(title, sizeof(title), "The Group%d", i+1);
+		ret |= cargo_add_group(cargo, 0, grpname, title, "Group");
+		cargo_assert(ret == 0, "Failed to add group");
+
+		for (j = 0; j < GROUP_OPT_COUNT; j++)
+		{
+			cargo_snprintf(optname, sizeof(optname), "--optg%02do%02d", i+1, j+1);
+			ret |= cargo_add_option(cargo, optname, LOREM_IPSUM, "i", &vals[i][j]);
+			ret |= cargo_group_add_option(cargo, grpname, optname);
+			cargo_assert(ret == 0, "Failed to add option");
+		}	
+	}
+
+	cargo_assert(ret == 0, "Failed to add groups");
+
+	//ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	//cargo_assert(ret == 0, "Failed zero or more args parse");
+
+	cargo_print_usage(cargo);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+// TODO: Test add_group for many groups. And many options for each group to trigger reallocation.
+// TODO: Test cargo_aapendf to trigger realloc
+// TODO: Test mutex group with CARGO_MUTEXGRP_ONE_REQUIRED
+// TODO: Test cargo_set_max_width with a fixed size and also one > CARGO_MAX_MAX_WIDTH
+// TODO: Test cargo_set_prefix
+// TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
+// TODO: Refactor cargo_get_usage
+// TODO: Test giving add_option an invalid alias
+// TODO: Test cargo_split_commandline with invalid command line
+// TODO: Test vsnprintf with 0 buflen
+// TODO: Test autoclean with string of arrays
+// TODO: Test parsing option --alpha --beta, where --alpha should have an argument.
+
+
+
 _TEST_START(TEST_mutex_group_guard)
 {
 	int i = 0;
@@ -5235,6 +5378,7 @@ _TEST_START(TEST_cargo_split_commandline)
 	};
 	char **argv = NULL;
 	int argc = 0;
+    ret = 0;
 
 	argv = cargo_split_commandline(cmd, &argc);
 	cargo_assert(argv != NULL, "Got NULL argv");
@@ -5331,6 +5475,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
 	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
 	CARGO_ADD_TEST(TEST_group),
+	CARGO_ADD_TEST(TEST_many_groups),
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
 	CARGO_ADD_TEST(TEST_cargo_split_commandline)
 };
@@ -5379,8 +5524,6 @@ int main(int argc, char **argv)
 {
 	size_t i;
 	int was_error = 0;
-	int testnum = 0;
-	char *res = NULL;
 	int tests_to_run[CARGO_NUM_TESTS];
 	size_t num_tests = 0;
 	size_t success_count = 0;
