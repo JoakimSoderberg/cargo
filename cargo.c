@@ -1772,6 +1772,19 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 		goto fail;
 	}
 
+	// If this is a positional argument it has to start with
+	// [a-zA-Z]
+	if (!_cargo_starts_with_prefix(ctx, optname_list[0]))
+	{
+		if (strpbrk(optname_list[0],
+			"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+			!= optname_list[0])
+		{
+			CARGODBG(1, "A positional argument must start with [a-zA-Z]\n");
+			goto fail;
+		}
+	}
+
 	free(tmp);
 	return optname_list;
 
@@ -5529,6 +5542,28 @@ _TEST_START(TEST_cargo_snprintf)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_set_prefix)
+{
+	int i;
+	int j;
+	char *args[] = { "program", "--alpha", "789", "++beta", "123" };
+
+	cargo_set_prefix(cargo, "+");
+
+	ret = cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
+	cargo_assert(ret != 0, "Succesfully added argument with invalid prefix");
+
+	ret = cargo_add_option(cargo, "++beta +b", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret == 0, "Failed to add option with valid prefix '+'");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse with custom prefix");
+	cargo_assert(i == 123, "Expected ++beta to have value 123");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 
 // TODO: Test cargo_aapendf to trigger realloc
 // TODO: Test cargo_set_prefix
@@ -5624,7 +5659,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_require_one),
 	CARGO_ADD_TEST(TEST_cargo_split_commandline),
 	CARGO_ADD_TEST(TEST_cargo_set_max_width),
-	CARGO_ADD_TEST(TEST_cargo_snprintf)
+	CARGO_ADD_TEST(TEST_cargo_snprintf),
+	CARGO_ADD_TEST(TEST_cargo_set_prefix)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
