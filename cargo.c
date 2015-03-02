@@ -5578,6 +5578,37 @@ _TEST_START(TEST_cargo_set_prefix)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_aapendf)
+{
+	int i;
+	int j;
+	int k;
+	char *s = NULL;
+	size_t lbefore = 0;
+	size_t lorem_lens = (strlen(LOREM_IPSUM) * 3);
+	cargo_astr_t astr;
+
+	// This test is only valid if the test strings causes a realloc.
+	assert(lorem_lens > CARGO_ASTR_DEFAULT_SIZE);
+
+	memset(&astr, 0, sizeof(cargo_astr_t));
+	astr.s = &s;
+
+	ret = cargo_aappendf(&astr, "%s", "Some short string");
+	cargo_assert(ret > 0, "Expected ret > 0");
+	lbefore = astr.l;
+
+	// Trigger realloc.
+	cargo_aappendf(&astr, "%s%s%s", LOREM_IPSUM, LOREM_IPSUM, LOREM_IPSUM);
+	cargo_assert(ret > 0, "Expected ret > 0");
+	cargo_assert(astr.offset > lorem_lens, "Expected longer string");
+	cargo_assert(astr.l > lbefore, "Expected realloc");
+
+	_TEST_CLEANUP();
+	if (s) free(s);
+}
+_TEST_END()
+
 
 // TODO: Test cargo_aapendf to trigger realloc
 // TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
@@ -5673,7 +5704,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_split_commandline),
 	CARGO_ADD_TEST(TEST_cargo_set_max_width),
 	CARGO_ADD_TEST(TEST_cargo_snprintf),
-	CARGO_ADD_TEST(TEST_cargo_set_prefix)
+	CARGO_ADD_TEST(TEST_cargo_set_prefix),
+	CARGO_ADD_TEST(TEST_cargo_aapendf)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
