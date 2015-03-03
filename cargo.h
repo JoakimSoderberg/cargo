@@ -41,7 +41,7 @@
 // Colors.
 //
 
-#ifdef _WIN32
+#if 0 //_WIN32
 #define CARGO_COLOR_BLACK			""
 #define CARGO_COLOR_RED				""
 #define CARGO_COLOR_GREEN			""
@@ -58,7 +58,8 @@
 #define CARGO_COLOR_LIGHT_CYAN		""
 #define CARGO_COLOR_WHITE			""
 #define CARGO_COLOR_RESET			""
-#else
+#endif
+#if 1
 #define CARGO_COLOR_BLACK			"\x1b[22;30m"
 #define CARGO_COLOR_RED				"\x1b[22;31m"
 #define CARGO_COLOR_GREEN			"\x1b[22;32m"
