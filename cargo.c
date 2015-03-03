@@ -2504,7 +2504,7 @@ typedef struct cargo_phighlight_s
 						// to previous highlight.
 	int total_indent;	// Total indentation since start of string.
 	int highlight_len;	// Length of the highlight.
-
+	int show;
 } cargo_phighlight_t;
 
 char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
@@ -2539,15 +2539,22 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 	}
 
 	// Get buffer size and highlight data.
-	for (i = start, j = 0; i < argc; i++)
+	for (i = 0, j = 0; i < argc; i++)
 	{
-		arglen = strlen(argv[i]);
+		arglen = (i >= start) ? strlen(argv[i]) : 0;
 
 		if (j < (int)highlight_count)
 		{
 			cargo_phighlight_t *h = &highlights[j];
 			if (h->i == i)
 			{
+				// We only keep this flag so that we can make sure we don't
+				// output the color codes when an index is out of range.
+				if (i >= start)
+				{
+					h->show = 1;
+				}
+
 				h->highlight_len = (int)arglen;
 				h->total_indent = global_indent;
 
@@ -2558,6 +2565,10 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 					h->indent = h->total_indent
 							  - (hprev->total_indent + hprev->highlight_len);
 				}
+				else
+				{
+					h->indent = h->total_indent;
+				}
 
 				// If we use color, we must include the ANSI color code length
 				// in the buffer length as well.
@@ -2567,7 +2578,8 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 			}
 		}
 
-		global_indent += arglen + 1; // + 1 for space.
+		global_indent += arglen;
+		if (i >= start) global_indent++; // + 1 for space.
 		out_size += global_indent;
 	}
 
@@ -2616,7 +2628,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 			// If we have more characters, we append that as a string.
 			// (This can be used for color ansi color codes).
 			#ifndef _WIN32
-			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color)
+			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", &h->c[1]);
 			}
@@ -2629,7 +2641,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 				highlvec);
 
 			#ifndef _WIN32
-			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color)
+			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
 			}
@@ -4699,7 +4711,13 @@ _TEST_END()
 
 _TEST_START(TEST_highlight_args)
 {
-	char *args[] = { "program", "--alpha", "abc", "--beta", "def", "ghi", "--crazy", "banans" };
+	char *args[] =
+	{
+		"program",
+		"--alpha", "abc",
+		"--beta", "def", "ghi",
+		"--crazy", "banans"
+	};
 	int argc = sizeof(args) / sizeof(args[0]);
 
 	printf("With color highlight & args:\n");
@@ -5609,8 +5627,122 @@ _TEST_START(TEST_cargo_aapendf)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_get_fprint_args)
+{
+	size_t i = 0;
+	size_t j = 0;
+	char *argv[] = { "program", "first", "second", "--third", "123" };
+	int argc = sizeof(argv) / sizeof(argv[0]);
+	char *s = NULL;
+	int start;
+	cargo_highlight_t highlights[] =
+	{
+		{ 1, "#"CARGO_COLOR_YELLOW },
+		{ 4, "="CARGO_COLOR_GREEN }
+	};
+	ret = 0;
 
-// TODO: Test cargo_aapendf to trigger realloc
+	start = 0;
+	printf("\nStart %d:\n", start);
+	printf("----------\n");
+	s = cargo_get_fprint_args(argc, argv,
+							start,	// start.
+							0,		// flags.
+							3,		// highlight_count (how many follows).
+							0, "^"CARGO_COLOR_RED,
+							2 ,"~",
+							4, "*"CARGO_COLOR_CYAN);
+	cargo_assert(s != NULL, "Got NULL fprint string");
+	printf("%s\n", s);
+	for (i = start; i < argc; i++)
+	{
+		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
+	}
+	cargo_assert(strstr(s, "^"), "Expected ^ highlight");
+	cargo_assert(strstr(s, CARGO_COLOR_RED), "Expected red color for ^");
+	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
+	cargo_assert(strstr(s, "*"), "Expected red color for *");
+	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
+	free(s);
+	s = NULL;
+
+	// Other start index.
+	start = 1;
+	printf("\nStart %d:\n", start);
+	printf("----------\n");
+	s = cargo_get_fprint_args(argc, argv,
+							start,	// start.
+							0,		// flags.
+							3,		// highlight_count (how many follows).
+							0, "^"CARGO_COLOR_RED, // Should not be shown.
+							2 ,"~",
+							4, "*"CARGO_COLOR_CYAN);
+	cargo_assert(s != NULL, "Got NULL fprint string");
+	printf("%s\n", s);
+	for (i = start; i < argc; i++)
+	{
+		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
+	}
+	cargo_assert(!strstr(s, "^"), "Expected NO ^ highlight");
+	cargo_assert(!strstr(s, CARGO_COLOR_RED), "Expected NO red color for ^");
+	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
+	cargo_assert(strstr(s, "*"), "Expected red color for *");
+	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
+	free(s);
+	s = NULL;
+
+	// Pass a list instead of var args.
+	for (i = 0; i < argc+1; i++)
+	{
+		start = i;
+		printf("\nList start %d:\n", start);
+		printf("-------------\n");
+		s = cargo_get_fprintl_args(argc, argv,
+								start,	// start.
+								0,		// flags
+								sizeof(highlights) / sizeof(highlights[0]),
+								highlights);
+		printf("%s\n", s);
+		for (j = start; j < argc; j++)
+		{
+			cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
+		}
+
+		if (start <= highlights[0].i)
+		{
+			cargo_assert(strstr(s, "#"), "Expected # highlight");
+			cargo_assert(strstr(s, CARGO_COLOR_YELLOW), "Expected yellow color for #");
+		}
+		else
+		{
+			cargo_assert(!strstr(s, "#"), "Expected NO # highlight");
+			cargo_assert(!strstr(s, CARGO_COLOR_YELLOW), "Expected NO yellow color for #");
+		}
+
+		if (start <= highlights[1].i)
+		{
+			cargo_assert(strstr(s, "="), "Expected = highlight");
+			cargo_assert(strstr(s, CARGO_COLOR_GREEN), "Expected red color for =");
+		}
+		else
+		{
+			cargo_assert(!strstr(s, "="), "Expected NO = highlight");
+			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
+		}
+		free(s);
+		s = NULL;
+	}
+
+	ret = cargo_fprintl_args(stdout, argc, argv, 0, 0,
+							sizeof(highlights) / sizeof(highlights[0]),
+							highlights);
+	cargo_assert(ret == 0, "Expected success");
+
+	_TEST_CLEANUP();
+	if (s) free(s);
+}
+_TEST_END()
+
 // TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
 // TODO: Refactor cargo_get_usage
 // TODO: Test giving add_option an invalid alias
@@ -5705,7 +5837,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_max_width),
 	CARGO_ADD_TEST(TEST_cargo_snprintf),
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
-	CARGO_ADD_TEST(TEST_cargo_aapendf)
+	CARGO_ADD_TEST(TEST_cargo_aapendf),
+	CARGO_ADD_TEST(TEST_cargo_get_fprint_args)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
