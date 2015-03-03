@@ -5511,7 +5511,7 @@ static const char *_cargo_test_verify_usage_length(char *usage, int width)
 		len = strlen(lines[i]);
 		printf("%02lu Len: %02lu:%s\n", i, len, lines[i]);
 
-		if (len > width)
+		if ((int)len > width)
 		{
 			ret = "Got usage line longer than specified";
 			break;
@@ -5598,9 +5598,6 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_aapendf)
 {
-	int i;
-	int j;
-	int k;
 	char *s = NULL;
 	size_t lbefore = 0;
 	size_t lorem_lens = (strlen(LOREM_IPSUM) * 3);
@@ -5629,8 +5626,8 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_get_fprint_args)
 {
-	size_t i = 0;
-	size_t j = 0;
+	int i = 0;
+	int j = 0;
 	char *argv[] = { "program", "first", "second", "--third", "123" };
 	int argc = sizeof(argv) / sizeof(argv[0]);
 	char *s = NULL;
@@ -5659,10 +5656,14 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
 	}
 	cargo_assert(strstr(s, "^"), "Expected ^ highlight");
+	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_RED), "Expected red color for ^");
+	#endif
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
-	cargo_assert(strstr(s, "*"), "Expected red color for *");
+	cargo_assert(strstr(s, "*"), "Expected * highlight");
+	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
+	#endif
 	free(s);
 	s = NULL;
 
@@ -5684,10 +5685,14 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
 	}
 	cargo_assert(!strstr(s, "^"), "Expected NO ^ highlight");
+	#ifndef _WIN32
 	cargo_assert(!strstr(s, CARGO_COLOR_RED), "Expected NO red color for ^");
+	#endif
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
 	cargo_assert(strstr(s, "*"), "Expected red color for *");
+	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
+	#endif
 	free(s);
 	s = NULL;
 
@@ -5711,23 +5716,31 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		if (start <= highlights[0].i)
 		{
 			cargo_assert(strstr(s, "#"), "Expected # highlight");
+			#ifndef _WIN32
 			cargo_assert(strstr(s, CARGO_COLOR_YELLOW), "Expected yellow color for #");
+			#endif
 		}
 		else
 		{
 			cargo_assert(!strstr(s, "#"), "Expected NO # highlight");
+			#ifndef _WIN32
 			cargo_assert(!strstr(s, CARGO_COLOR_YELLOW), "Expected NO yellow color for #");
+			#endif
 		}
 
 		if (start <= highlights[1].i)
 		{
 			cargo_assert(strstr(s, "="), "Expected = highlight");
+			#ifndef _WIN32
 			cargo_assert(strstr(s, CARGO_COLOR_GREEN), "Expected red color for =");
+			#endif
 		}
 		else
 		{
 			cargo_assert(!strstr(s, "="), "Expected NO = highlight");
+			#ifndef _WIN32
 			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
+			#endif
 		}
 		free(s);
 		s = NULL;
