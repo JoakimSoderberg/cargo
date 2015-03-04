@@ -6084,7 +6084,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 			cargo_assert(!strstr(s, "="), "Expected NO = highlight");
 			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
 		}
-		cargo_print_ansicolor(stdout, s);
+
 		free(s);
 		s = NULL;
 	}
