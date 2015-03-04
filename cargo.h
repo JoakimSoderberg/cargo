@@ -41,24 +41,6 @@
 // Colors.
 //
 
-#ifdef _WIN32
-#define CARGO_COLOR_BLACK			""
-#define CARGO_COLOR_RED				""
-#define CARGO_COLOR_GREEN			""
-#define CARGO_COLOR_YELLOW			""
-#define CARGO_COLOR_BLUE			""
-#define CARGO_COLOR_MAGENTA			""
-#define CARGO_COLOR_CYAN			""
-#define CARGO_COLOR_GRAY			""
-#define CARGO_COLOR_DARK_GRAY		""
-#define CARGO_COLOR_LIGHT_RED		""
-#define CARGO_COLOR_LIGHT_GREEN		""
-#define CARGO_COLOR_LIGHT_BLUE		""
-#define CARGO_COLOR_LIGHT_MAGNETA	""
-#define CARGO_COLOR_LIGHT_CYAN		""
-#define CARGO_COLOR_WHITE			""
-#define CARGO_COLOR_RESET			""
-#else
 #define CARGO_COLOR_BLACK			"\x1b[22;30m"
 #define CARGO_COLOR_RED				"\x1b[22;31m"
 #define CARGO_COLOR_GREEN			"\x1b[22;32m"
@@ -75,7 +57,6 @@
 #define CARGO_COLOR_LIGHT_CYAN		"\x1b[01;36m"
 #define CARGO_COLOR_WHITE			"\x1b[01;37m"
 #define CARGO_COLOR_RESET			"\x1b[0m"
-#endif
 
 //
 // Version.
