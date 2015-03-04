@@ -9,6 +9,7 @@
 #include <limits.h>
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
 #else
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -267,7 +268,8 @@ int vasprintf(char** strp, const char* format, va_list ap)
 
 	if (count == 0)
 	{
-		return strdup("");
+		*strp = strdup("");
+		return 0;
 	}
 	else if (count < 0)
 	{
@@ -303,6 +305,13 @@ int asprintf(char** strp, const char* format, ...)
 //
 #define CARGO_ANSI_MAX_ARG 16
 #define CARGO_ANSI_ESC '\x1b'
+
+#define FOREGROUND_BLACK 0
+#define FOREGROUND_WHITE FOREGROUND_RED|FOREGROUND_GREEN|FOREGROUND_BLUE
+
+#define BACKGROUND_BLACK 0
+#define BACKGROUND_WHITE BACKGROUND_RED|BACKGROUND_GREEN|BACKGROUND_BLUE
+
 
 const BYTE foregroundcolor[8] =
 {
@@ -492,7 +501,7 @@ WORD cargo_ansi_state_to_attr(cargo_ansi_state_t *state)
 	else
 	{
 		attr = foregroundcolor[state->foreground] | state->bold
-			 | backgroundcolor[state->background] | state->underline;
+			 | backgroundcolor[state->background] | state->underline;
 	}
 
 	if (state->reverse)
@@ -515,11 +524,11 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
 	memset(&state, 0, sizeof(cargo_ansi_state_t));
 
-	handle = (HANDLE)_get_osfhandle(fileno(fp));
+	handle = (HANDLE)_get_osfhandle(fileno(fd));
 	GetConsoleScreenBufferInfo(handle, &csbi);
 
 	// We reset to these attributes if we get a reset code.
-	state->def = csbi.wAttributes;
+	state.def = csbi.wAttributes;
 
 	while (*s)
 	{
@@ -548,7 +557,7 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 				do
 				{
 					i = strtol(s, &numend, 0);
-					attr |= cargo_ansi_to_win32(&state, i);
+					cargo_ansi_to_win32(&state, i);
 					s = numend + 1;
 				} while (*numend == ';');
 
