@@ -120,7 +120,7 @@ int cargo_write_w32(FILE* fp, const char* buf)
 				goto retry;
 			}
 
-			if (c == ',') 
+			if (c == ';')
 			{
 				if (++n == 6) break;
 				goto retry;
