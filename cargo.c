@@ -18,6 +18,7 @@
 
 #ifdef CARGO_DEBUG
 #define CARGODBG(level, fmt, ...)											\
+do 																			\
 {																			\
 	if (level == 1)															\
 	{																		\
@@ -27,15 +28,16 @@
 	{																		\
 		fprintf(stderr, "[cargo.c:%4d]: " fmt, __LINE__, ##__VA_ARGS__);	\
 	}																		\
-}
+} while (0)
 
 #define CARGODBGI(level, fmt, ...)											\
+do 																			\
 {																			\
 	if (level <= CARGO_DEBUG)												\
 	{																		\
 		fprintf(stderr, fmt, ##__VA_ARGS__);								\
 	}																		\
-}
+} while (0)
 
 #else
 #define CARGODBG(level, fmt, ...)
@@ -2498,7 +2500,7 @@ static int _cargo_add_group(cargo_t ctx,
 	}
 
 	(*group_count)++;
-	CARGODBG(3, "  group_count after: %lu\n", *group_count)
+	CARGODBG(3, "  group_count after: %lu\n", *group_count);
 
 	ret = 0;
 
