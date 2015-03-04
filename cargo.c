@@ -322,7 +322,6 @@ int cargo_asprintf(char** strp, const char* format, ...)
 #define BACKGROUND_BLACK 0
 #define BACKGROUND_WHITE BACKGROUND_RED|BACKGROUND_GREEN|BACKGROUND_BLUE
 
-
 const BYTE foregroundcolor[8] =
 {
 	FOREGROUND_BLACK,					// black foreground
@@ -364,7 +363,6 @@ const BYTE attr2ansi[8] =
 typedef struct cargo_ansi_state_s
 {
 	WORD 	def;		// The default attribute.
-	//int 	reset;		// If we should reset to previous attribute state.
 	BYTE	foreground;	// ANSI base color (0 to 7; add 30)
 	BYTE	background;	// ANSI base color (0 to 7; add 40)
 	BYTE	bold;		// console FOREGROUND_INTENSITY bit
@@ -372,8 +370,6 @@ typedef struct cargo_ansi_state_s
 	BYTE	rvideo; 	// swap foreground/bold & background/underline
 	BYTE	concealed;	// set foreground/bold to background/underline
 	BYTE	reverse;	// swap console foreground & background attributes
-	//BYTE	crm;		// showing control characters?
-	//COORD SavePos;		// saved cursor position
 } cargo_ansi_state_t;
 
 // ANSI render modifiers used by \x1b[#;#;...;#m
@@ -2993,12 +2989,10 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 
 			// If we have more characters, we append that as a string.
 			// (This can be used for color ansi color codes).
-		//	#ifndef _WIN32
 			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", &h->c[1]);
 			}
-			//#endif // _WIN32
 
 			cargo_appendf(&str, "%*s%*.*s",
 				h->indent, "",
@@ -3006,12 +3000,10 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 				h->highlight_len,
 				highlvec);
 
-//			#ifndef _WIN32
 			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
 			}
-	//		#endif // _WIN32
 
 			free(highlvec);
 		}
@@ -6022,14 +6014,10 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
 	}
 	cargo_assert(strstr(s, "^"), "Expected ^ highlight");
-	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_RED), "Expected red color for ^");
-	#endif
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
 	cargo_assert(strstr(s, "*"), "Expected * highlight");
-	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
-	#endif
 	free(s);
 	s = NULL;
 
@@ -6051,14 +6039,10 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		cargo_assert(strstr(s, argv[i]), "Expected to find argv params");
 	}
 	cargo_assert(!strstr(s, "^"), "Expected NO ^ highlight");
-	#ifndef _WIN32
 	cargo_assert(!strstr(s, CARGO_COLOR_RED), "Expected NO red color for ^");
-	#endif
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
 	cargo_assert(strstr(s, "*"), "Expected red color for *");
-	#ifndef _WIN32
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
-	#endif
 	free(s);
 	s = NULL;
 
@@ -6082,31 +6066,23 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		if (start <= highlights[0].i)
 		{
 			cargo_assert(strstr(s, "#"), "Expected # highlight");
-			#ifndef _WIN32
 			cargo_assert(strstr(s, CARGO_COLOR_YELLOW), "Expected yellow color for #");
-			#endif
 		}
 		else
 		{
 			cargo_assert(!strstr(s, "#"), "Expected NO # highlight");
-			#ifndef _WIN32
 			cargo_assert(!strstr(s, CARGO_COLOR_YELLOW), "Expected NO yellow color for #");
-			#endif
 		}
 
 		if (start <= highlights[1].i)
 		{
 			cargo_assert(strstr(s, "="), "Expected = highlight");
-			#ifndef _WIN32
 			cargo_assert(strstr(s, CARGO_COLOR_GREEN), "Expected red color for =");
-			#endif
 		}
 		else
 		{
 			cargo_assert(!strstr(s, "="), "Expected NO = highlight");
-			#ifndef _WIN32
 			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
-			#endif
 		}
 		cargo_print_ansicolor(stdout, s);
 		free(s);
