@@ -252,6 +252,347 @@ int cargo_aappendf(cargo_astr_t *str, const char *fmt, ...)
 	return ret;
 }
 
+//
+// Below is code for translating ANSI color escape codes to
+// windows equivalent API calls.
+//
+#ifdef _WIN32
+int vasprintf(char** strp, const char* format, va_list ap)
+{
+	int count;
+	assert(strp);
+
+	// Find out how long the resulting string is
+	count = _vscprintf(format, ap);
+
+	if (count == 0)
+	{
+		return strdup("");
+	}
+	else if (count < 0)
+	{
+		// Something went wrong, so return the error code (probably still requires checking of "errno" though)
+		return count;
+	}
+
+	// Allocate memory for our string
+	if (!(*strp = malloc(count + 1)))
+	{
+		return -1;
+	}
+
+	// Do the actual printing into our newly created string
+	return vsprintf(*strp, format, ap);
+}
+
+int asprintf(char** strp, const char* format, ...)
+{
+	va_list ap;
+	int count;
+
+	va_start(ap, format);
+	count = vasprintf(strp, format, ap);
+	va_end(ap);
+
+	return count;
+}
+
+//
+// Conversion tables and structs below are from
+// https://github.com/adoxa/ansicon
+//
+#define CARGO_ANSI_MAX_ARG 16
+#define CARGO_ANSI_ESC '\x1b'
+
+const BYTE foregroundcolor[8] =
+{
+	FOREGROUND_BLACK,					// black foreground
+	FOREGROUND_RED,						// red foreground
+	FOREGROUND_GREEN,					// green foreground
+	FOREGROUND_RED | FOREGROUND_GREEN,	// yellow foreground
+	FOREGROUND_BLUE,					// blue foreground
+	FOREGROUND_BLUE | FOREGROUND_RED,	// magenta foreground
+	FOREGROUND_BLUE | FOREGROUND_GREEN,	// cyan foreground
+	FOREGROUND_WHITE					// white foreground
+};
+
+const BYTE backgroundcolor[8] =
+{
+	BACKGROUND_BLACK,					// black background
+	BACKGROUND_RED,						// red background
+	BACKGROUND_GREEN,					// green background
+	BACKGROUND_RED | BACKGROUND_GREEN,	// yellow background
+	BACKGROUND_BLUE,					// blue background
+	BACKGROUND_BLUE | BACKGROUND_RED,	// magenta background
+	BACKGROUND_BLUE | BACKGROUND_GREEN,	// cyan background
+	BACKGROUND_WHITE,					// white background
+};
+
+// Map windows console attribute to ANSI number.
+const BYTE attr2ansi[8] =
+{
+	0,					// black
+	4,					// blue
+	2,					// green
+	6,					// cyan
+	1,					// red
+	5,					// magenta
+	3,					// yellow
+	7					// white
+};
+
+// Used to save the state while parsing the render attributes.
+typedef struct cargo_ansi_state_s
+{
+	WORD 	def;		// The default attribute.
+	//int 	reset;		// If we should reset to previous attribute state.
+	BYTE	foreground;	// ANSI base color (0 to 7; add 30)
+	BYTE	background;	// ANSI base color (0 to 7; add 40)
+	BYTE	bold;		// console FOREGROUND_INTENSITY bit
+	BYTE	underline;	// console BACKGROUND_INTENSITY bit
+	BYTE	rvideo; 	// swap foreground/bold & background/underline
+	BYTE	concealed;	// set foreground/bold to background/underline
+	BYTE	reverse;	// swap console foreground & background attributes
+	//BYTE	crm;		// showing control characters?
+	//COORD SavePos;		// saved cursor position
+} cargo_ansi_state_t;
+
+// ANSI render modifiers used by \x1b[#;#;...;#m
+//
+// 00 for normal display (or just 0)
+// 01 for bold on (or just 1)
+// 02 faint (or just 2)
+// 03 standout (or just 3)
+// 04 underline (or just 4)
+// 05 blink on (or just 5)
+// 07 reverse video on (or just 7)
+// 08 nondisplayed (invisible) (or just 8)
+// 22 normal
+// 23 no-standout
+// 24 no-underline
+// 25 no-blink
+// 27 no-reverse
+// 30 black foreground
+// 31 red foreground
+// 32 green foreground
+// 33 yellow foreground
+// 34 blue foreground
+// 35 magenta foreground
+// 36 cyan foreground
+// 37 white foreground
+// 39 default foreground
+// 40 black background
+// 41 red background
+// 42 green background
+// 43 yellow background
+// 44 blue background
+// 45 magenta background
+// 46 cyan background
+// 47 white background
+// 49 default background
+
+void cargo_ansi_to_win32(cargo_ansi_state_t *state, int ansi)
+{
+	assert(state);
+
+	if ((ansi >= 30) && (ansi <= 37))
+	{
+		// Foreground colors.
+		// We remove 30 so we can use our translation table later.
+		state->foreground = (ansi - 30);
+	}
+	else if ((ansi >= 40) && (ansi <= 47))
+	{
+		// Background colors.
+		state->background = (ansi - 40);
+	}
+	else switch (ansi)
+	{
+		// Reset to defaults.
+		case 0:  // 00 for normal display (or just 0)
+		case 39: // 39 default foreground
+		case 49: // 49 default background
+		{
+			WORD a = state->def;
+
+			if (a < 0)
+			{
+				state->reverse = 1;
+				a = -a;
+			}
+
+			if (ansi != 49)
+				state->foreground = attr2ansi[a & 7];
+
+			if (ansi != 39)
+				state->background = attr2ansi[(a >> 4) & 7];
+
+			// Reset all to default
+			// (or rather what the console was set to before we started parsing)
+			if (ansi == 0)
+			{
+				state->bold = 0;
+				state->underline = 0;
+				state->rvideo = 0;
+				state->concealed = 0;
+			}
+			break;
+		}
+		case 1: state->bold = FOREGROUND_INTENSITY; break;
+		case 5: // blink.
+		case 4: state->underline = BACKGROUND_INTENSITY; break;
+		case 7: state->rvideo = 1; break;
+		case 8: state->concealed = 1; break;
+		case 21: // Double underline says ansicon
+		case 22: state->bold = 0; break;
+		case 25: // no blink.
+		case 24: state->underline = 0; break;
+		case 27: state->rvideo = 0; break;
+		case 28: state->concealed = 0; break;
+	}
+}
+
+WORD cargo_ansi_state_to_attr(cargo_ansi_state_t *state)
+{
+	WORD attr = 0;
+	assert(state);
+
+	if (state->concealed)
+	{
+		// Reversed video.
+		if (state->rvideo)
+		{
+			attr = foregroundcolor[state->foreground]
+				 | backgroundcolor[state->foreground];
+
+			if (state->bold)
+			{
+				attr |= FOREGROUND_INTENSITY | BACKGROUND_INTENSITY;
+			}
+		}
+		else // Normal.
+		{
+			attr = foregroundcolor[state->background]
+				 | backgroundcolor[state->background];
+
+			if (state->underline)
+			{
+				attr |= FOREGROUND_INTENSITY | BACKGROUND_INTENSITY;
+			}
+		}
+	}
+	else if (state->rvideo)
+	{
+		attr = foregroundcolor[state->background]
+			 | backgroundcolor[state->foreground];
+
+		if (state->bold) attr |= BACKGROUND_INTENSITY;
+		if (state->underline) attr |= FOREGROUND_INTENSITY;
+	}
+	else
+	{
+		attr = foregroundcolor[state->foreground] | state->bold
+			 | backgroundcolor[state->background] | state->underline;
+	}
+
+	if (state->reverse)
+	{
+		attr = ((attr >> 4) & 15) | ((attr & 15) << 4);
+	}
+
+	return attr;
+}
+
+void cargo_print_ansicolor(FILE *fd, const char *buf)
+{
+	const char *start = NULL;
+	const char *end = NULL;
+	char *numend = NULL;
+	const char *s = buf;
+	int i = 0;
+	cargo_ansi_state_t state;
+	HANDLE handle = INVALID_HANDLE_VALUE;
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	memset(&state, 0, sizeof(cargo_ansi_state_t));
+
+	handle = (HANDLE)_get_osfhandle(fileno(fp));
+	GetConsoleScreenBufferInfo(handle, &csbi);
+
+	// We reset to these attributes if we get a reset code.
+	state->def = csbi.wAttributes;
+
+	while (*s)
+	{
+		if (*s == CARGO_ANSI_ESC)
+		{
+			s++;
+
+			// ANSI colors are in the following format:
+			// \x1b[#;#;...;#m
+			//
+			// Where # is a set of colors and modifiers, see above for table.
+			if (*s == '[')
+			{
+				s++;
+				end = strchr(s, 'm');
+
+				if (!end || ((end - s) > CARGO_ANSI_MAX_ARG))
+				{
+					// Output other escaped sequences
+					// like normal, we just support colors!
+					continue;
+				}
+
+				// Parses #;#;#;# until there is no more ';'
+				// at the end.
+				do
+				{
+					i = strtol(s, &numend, 0);
+					attr |= cargo_ansi_to_win32(&state, i);
+					s = numend + 1;
+				} while (*numend == ';');
+
+				SetConsoleTextAttribute(handle,
+					cargo_ansi_state_to_attr(&state));
+			}
+		}
+		else
+		{
+			putchar(*s);
+			s++;
+		}
+	}
+}
+
+void cargo_fprintf(FILE *fd, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+	char *s = NULL;
+
+	va_start(ap, fmt);
+	ret = asprintf(&s, fmt, ap);
+	va_end(ap);
+
+	if (ret != -1)
+	{
+		cargo_print_ansicolor(fd, s);
+	}
+
+	if (s) free(s);
+}
+
+#else // Unix below (already has ANSI support).
+
+void cargo_print_ansicolor(FILE *fd, const char *buf)
+{
+	fprintf(fd, "%s", buf);
+}
+
+#define cargo_fprintf fprintf
+
+#endif // End Unix
+
 #define CARGO_NARGS_ONE_OR_MORE 	-1
 #define CARGO_NARGS_ZERO_OR_MORE	-2
 #define CARGO_NARGS_ZERO_OR_ONE		-3
@@ -5756,6 +6097,15 @@ _TEST_START(TEST_cargo_get_fprint_args)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_fprintf)
+{
+	cargo_fprintf(stdout, "%shej%s\n",
+		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
 // TODO: Refactor cargo_get_usage
 // TODO: Test giving add_option an invalid alias
@@ -5851,7 +6201,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_snprintf),
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
 	CARGO_ADD_TEST(TEST_cargo_aapendf),
-	CARGO_ADD_TEST(TEST_cargo_get_fprint_args)
+	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
+	CARGO_ADD_TEST(TEST_cargo_fprintf)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
