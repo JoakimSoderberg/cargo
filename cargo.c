@@ -2977,12 +2977,12 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 
 			// If we have more characters, we append that as a string.
 			// (This can be used for color ansi color codes).
-			#ifndef _WIN32
+		//	#ifndef _WIN32
 			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", &h->c[1]);
 			}
-			#endif // _WIN32
+			//#endif // _WIN32
 
 			cargo_appendf(&str, "%*s%*.*s",
 				h->indent, "",
@@ -2990,12 +2990,12 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
 				h->highlight_len,
 				highlvec);
 
-			#ifndef _WIN32
+//			#ifndef _WIN32
 			if (!(flags & CARGO_FPRINT_NOCOLOR) && has_color && h->show)
 			{
 				cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
 			}
-			#endif // _WIN32
+	//		#endif // _WIN32
 
 			free(highlvec);
 		}
@@ -6092,6 +6092,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
 			#endif
 		}
+		cargo_print_ansicolor(stdout, s);
 		free(s);
 		s = NULL;
 	}
