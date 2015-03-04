@@ -432,7 +432,7 @@ void cargo_ansi_to_win32(cargo_ansi_state_t *state, int ansi)
 		case 39: // 39 default foreground
 		case 49: // 49 default background
 		{
-			WORD a = state->def;
+			WORD a = 7;
 
 			if (a < 0)
 			{
@@ -552,6 +552,7 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 			// Where # is a set of colors and modifiers, see above for table.
 			if (*s == '[')
 			{
+				// TODO: Add support for other Escape codes than render ones.
 				s++;
 				end = strchr(s, 'm');
 
@@ -590,7 +591,7 @@ void cargo_fprintf(FILE *fd, const char *fmt, ...)
 	char *s = NULL;
 
 	va_start(ap, fmt);
-	ret = cargo_asprintf(&s, fmt, ap);
+	ret = cargo_vasprintf(&s, fmt, ap);
 	va_end(ap);
 
 	if (ret != -1)
@@ -600,6 +601,9 @@ void cargo_fprintf(FILE *fd, const char *fmt, ...)
 
 	if (s) free(s);
 }
+
+#define fprintf cargo_fprintf
+#define printf cargo_printf
 
 #else // Unix below (already has ANSI support).
 
@@ -611,6 +615,8 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 #define cargo_fprintf fprintf
 
 #endif // End Unix
+
+#define cargo_printf(fmt, ...) cargo_fprintf(stdout, fmt, ##__VA_ARGS__)
 
 #define CARGO_NARGS_ONE_OR_MORE 	-1
 #define CARGO_NARGS_ZERO_OR_MORE	-2
@@ -6120,13 +6126,13 @@ _TEST_END()
 _TEST_START(TEST_cargo_fprintf)
 {
 	char *s = NULL;
-	cargo_fprintf(stdout, "%shej%s\n",
+	cargo_fprintf(stdout, "%shej%s poop\n",
 		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
 
 	cargo_asprintf(&s, "%shej%s\n",
 		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
 
-	fprintf(stderr, "%s\n", s);
+	cargo_assert(s, "Got NULL string");
 
 	_TEST_CLEANUP();
 	free(s);
