@@ -253,18 +253,27 @@ int cargo_aappendf(cargo_astr_t *str, const char *fmt, ...)
 	return ret;
 }
 
+#ifndef _WIN32
+int _vscprintf(const char *format, va_list argptr)
+{
+    return(vsnprintf(NULL, 0, format, argptr));
+}
+#endif
+
 //
 // Below is code for translating ANSI color escape codes to
 // windows equivalent API calls.
 //
-#ifdef _WIN32
-int vasprintf(char** strp, const char* format, va_list ap)
+int cargo_vasprintf(char **strp, const char *format, va_list ap)
 {
 	int count;
+	va_list apc;
 	assert(strp);
 
 	// Find out how long the resulting string is
-	count = _vscprintf(format, ap);
+	va_copy(apc, ap);
+	count = _vscprintf(format, apc);
+	va_end(apc);
 
 	if (count == 0)
 	{
@@ -287,18 +296,19 @@ int vasprintf(char** strp, const char* format, va_list ap)
 	return vsprintf(*strp, format, ap);
 }
 
-int asprintf(char** strp, const char* format, ...)
+int cargo_asprintf(char** strp, const char* format, ...)
 {
 	va_list ap;
 	int count;
 
 	va_start(ap, format);
-	count = vasprintf(strp, format, ap);
+	count = cargo_vasprintf(strp, format, ap);
 	va_end(ap);
 
 	return count;
 }
 
+#ifdef _WIN32
 //
 // Conversion tables and structs below are from
 // https://github.com/adoxa/ansicon
@@ -580,7 +590,7 @@ void cargo_fprintf(FILE *fd, const char *fmt, ...)
 	char *s = NULL;
 
 	va_start(ap, fmt);
-	ret = asprintf(&s, fmt, ap);
+	ret = cargo_asprintf(&s, fmt, ap);
 	va_end(ap);
 
 	if (ret != -1)
@@ -6109,10 +6119,17 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_fprintf)
 {
+	char *s = NULL;
 	cargo_fprintf(stdout, "%shej%s\n",
 		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
 
+	cargo_asprintf(&s, "%shej%s\n",
+		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
+
+	fprintf(stderr, "%s\n", s);
+
 	_TEST_CLEANUP();
+	free(s);
 }
 _TEST_END()
 
