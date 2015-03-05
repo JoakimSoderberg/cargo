@@ -1,0 +1,10 @@
+language: c
+install:
+  - sudo apt-get -qq -y update
+  - sudo apt-get install cmake valgrind
+script:
+  - mkdir build
+  - cd build
+  - cmake -DCARGO_DEBUG=4 ..
+  - make
+  - ctest --output-on-failure
