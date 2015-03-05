@@ -2,8 +2,9 @@
 [![Appveyor Build status (Windows)](https://ci.appveyor.com/api/projects/status/hia4q08852puktpf?svg=true)](https://ci.appveyor.com/project/JoakimSoderberg/cargo)
 [![drone.io Build Status (verbose)](https://drone.io/github.com/JoakimSoderberg/cargo/status.png)](https://drone.io/github.com/JoakimSoderberg/cargo/latest)
 [![Circle CI](https://circleci.com/gh/JoakimSoderberg/cargo.svg?style=svg)](https://circleci.com/gh/JoakimSoderberg/cargo)
-[![Build Status](https://semaphoreapp.com/api/v1/projects/22d61980-73d0-45bc-ba6c-3ed6c1ebadf5/366031/shields_badge.svg)](https://semaphoreapp.com/joakimsoderberg/cargo)
-[ ![Codeship Status for JoakimSoderberg/cargo](https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master)](https://codeship.com/projects/66740)
+[![Semaphore Build Status](https://semaphoreapp.com/api/v1/projects/22d61980-73d0-45bc-ba6c-3ed6c1ebadf5/366031/shields_badge.svg)](https://semaphoreapp.com/joakimsoderberg/cargo)
+[![Codeship Status for JoakimSoderberg/cargo](https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master)](https://codeship.com/projects/66740)
+[![Shippable Build Status](https://api.shippable.com/projects/54f8944b5ab6cc1352934eed/badge?branchName=master)](https://app.shippable.com/projects/54f8944b5ab6cc1352934eed/builds/latest)
 [![Coverage Status](https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg)](https://coveralls.io/r/JoakimSoderberg/cargo)
 [![Coverity Statical Analysis Status](https://scan.coverity.com/projects/3566/badge.svg)](https://scan.coverity.com/projects/3566)
 
