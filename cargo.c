@@ -3977,6 +3977,24 @@ int cargo_add_option(cargo_t ctx, const char *optnames,
 	return ret;
 }
 
+void cargo_free_commandline(char ***argv, int argc)
+{
+	size_t i;
+	assert(argv);
+
+	if (*argv)
+	{
+		for (i = 0; i < (size_t)argc; i++)
+		{
+			if ((*argv)[i]) free((*argv)[i]);
+			(*argv)[i] = NULL;
+		}
+
+		free(*argv);
+		*argv = NULL;
+	}
+}
+
 char **cargo_split_commandline(const char *cmdline, int *argc)
 {
 	int i;
@@ -5835,15 +5853,7 @@ _TEST_START(TEST_cargo_split_commandline)
 	cargo_assert_str_array((size_t)argc, 3, argv, argv_expect);
 
 	_TEST_CLEANUP();
-	if (argv)
-	{
-		for (i = 0; i < (size_t)argc; i++)
-		{
-			if (argv[i]) free(argv[i]);
-		}
-
-		free(argv);
-	}
+	cargo_free_commandline(&argv, argc);
 }
 _TEST_END()
 
