@@ -10,10 +10,6 @@ option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, a
 
 option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
 
-if (NOT CARGO_DEBUG)
-	set(CARGO_DEBUG 0)
-endif()
-
 # Add project cmake modules to path.
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
@@ -31,7 +27,12 @@ source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
 
 message("Setting debug level to: ${CARGO_DEBUG}")
-add_definitions(-DCARGO_DEBUG=${CARGO_DEBUG})
+
+if (NOT CARGO_DEBUG)
+	remove_definitions(-DCARGO_DEBUG)
+else()
+	add_definitions(-DCARGO_DEBUG=${CARGO_DEBUG})
+endif()
 
 if (MSVC)
     # Turn off Microsofts "security" warnings.
