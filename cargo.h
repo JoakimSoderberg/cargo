@@ -130,8 +130,11 @@ typedef enum cargo_group_flags_e
 typedef enum cargo_flags_e
 {
 	CARGO_AUTOCLEAN						= (1 << 0),
-	CARGO_NOERR_OUTPUT					= (1 << 1),
-	CARGO_NOCOLOR 						= (1 << 2)
+	CARGO_NOCOLOR 						= (1 << 1),
+	CARGO_NOERR_OUTPUT					= (1 << 2),
+	CARGO_NOERR_USAGE					= (1 << 3),
+	CARGO_ERR_LONG_USAGE				= (1 << 4),
+	CARGO_ERR_STDOUT					= (1 << 5)
 } cargo_flags_t;
 
 //
@@ -205,17 +208,20 @@ int cargo_fprint_usage(cargo_t ctx, FILE *f);
 
 int cargo_print_usage(cargo_t ctx);
 
-char *cargo_get_usage(cargo_t ctx);
+// TODO: Return const these and store internally instead!
+const char *cargo_get_usage(cargo_t ctx);
 
 int cargo_fprint_short_usage(cargo_t ctx, FILE *f);
 
 int cargo_print_short_usage(cargo_t ctx);
 
-char *cargo_get_short_usage(cargo_t ctx);
+const char *cargo_get_short_usage(cargo_t ctx);
 
-char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
+const char *cargo_get_error(cargo_t ctx);
 
-char **cargo_get_args(cargo_t ctx, size_t *argc);
+const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
+
+const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 char *cargo_get_fprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,

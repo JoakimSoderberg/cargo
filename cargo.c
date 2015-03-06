@@ -729,6 +729,8 @@ typedef struct cargo_s
 	size_t arg_count;
 
 	char *error;
+	char *short_usage;
+	char *usage;
 } cargo_s;
 
 static void _cargo_set_error(cargo_t ctx, char *error)
@@ -2866,6 +2868,18 @@ void cargo_destroy(cargo_t *ctx)
 			c->error = NULL;
 		}
 
+		if (c->short_usage)
+		{
+			free(c->short_usage);
+			c->short_usage = NULL;
+		}
+
+		if (c->usage)
+		{
+			free(c->usage);
+			c->usage = NULL;
+		}
+
 		free(*ctx);
 		ctx = NULL;
 	}
@@ -3341,11 +3355,24 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		return 1;
 	}
 
-	// TODO: Check for internal print flag...
-	if (ctx->error)
+	// Show errors automatically?
+	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
 	{
-		cargo_fprint_short_usage(ctx, stderr);
-		fprintf(stderr, "%s\n", ctx->error);
+		FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
+
+		if (!(ctx->flags & CARGO_NOERR_USAGE))
+		{
+			if (ctx->flags & CARGO_ERR_LONG_USAGE)
+			{
+				cargo_fprint_usage(ctx, fd);
+			}
+			else
+			{
+				cargo_fprint_short_usage(ctx, fd);
+			}
+		}
+
+		fprintf(fd, "%s\n", ctx->error);
 	}
 
 	return 0;
@@ -3354,7 +3381,13 @@ fail:
 	return -1;
 }
 
-char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
+const char *cargo_get_error(cargo_t ctx)
+{
+	assert(ctx);
+	return ctx->error;
+}
+
+const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
 {
 	assert(ctx);
 
@@ -3363,10 +3396,10 @@ char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
 		*unknown_count = ctx->unknown_opts_count;
 	}
 
-	return ctx->unknown_opts;
+	return (const char **)ctx->unknown_opts;
 }
 
-char **cargo_get_args(cargo_t ctx, size_t *argc)
+const char **cargo_get_args(cargo_t ctx, size_t *argc)
 {
 	assert(ctx);
 
@@ -3375,7 +3408,7 @@ char **cargo_get_args(cargo_t ctx, size_t *argc)
 		*argc = ctx->arg_count;
 	}
 
-	return ctx->args;
+	return (const char **)ctx->args;
 }
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
@@ -3439,7 +3472,7 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	return 0;
 }
 
-char *cargo_get_short_usage(cargo_t ctx)
+const char *cargo_get_short_usage(cargo_t ctx)
 {
 	char *b = NULL;
 	size_t indent = 0;
@@ -3468,10 +3501,18 @@ char *cargo_get_short_usage(cargo_t ctx)
 		return NULL;
 	}
 
+	// We are always responsible to free this.
+	if (ctx->short_usage)
+	{
+		free(ctx->short_usage);
+	}
+
+	ctx->short_usage = b;
+
 	return b;
 }
 
-char *cargo_get_usage(cargo_t ctx)
+const char *cargo_get_usage(cargo_t ctx)
 {
 	char *ret = NULL;
 	size_t i;
@@ -3482,7 +3523,7 @@ char *cargo_get_usage(cargo_t ctx)
 	int max_name_len = 0;
 	size_t positional_count = 0;
 	size_t option_count = 0;
-	char *short_usage = NULL;
+	const char *short_usage = NULL;
 	cargo_opt_t *opt = NULL;
 	cargo_group_t *grp = NULL;
 	cargo_str_t str;
@@ -3661,17 +3702,23 @@ fail:
 		free(name);
 	}
 
-	if (short_usage)
+	// Save the usage and destroy it on exit,
+	// we want the user to be able to do things like this:
+	// printf("%s\nYou're bad at typing!\n", cargo_get_usage(cargo));
+	// without leaking memory.
+	if (ctx->usage)
 	{
-		free(short_usage);
+		free(ctx->usage);
 	}
+
+	ctx->usage = ret;
 
 	return ret;
 }
 
 int cargo_fprint_usage(cargo_t ctx, FILE *f)
 {
-	char *s;
+	const char *s;
 	assert(ctx);
 
 	if (!(s = cargo_get_usage(ctx)))
@@ -3680,7 +3727,6 @@ int cargo_fprint_usage(cargo_t ctx, FILE *f)
 	}
 
 	fprintf(f, "%s\n", s);
-	free(s);
 
 	return 0;
 }
@@ -3692,7 +3738,7 @@ int cargo_print_usage(cargo_t ctx)
 
 int cargo_fprint_short_usage(cargo_t ctx, FILE *f)
 {
-	char *s;
+	const char *s;
 	assert(ctx);
 
 	if (!(s = cargo_get_short_usage(ctx)))
@@ -3701,7 +3747,6 @@ int cargo_fprint_short_usage(cargo_t ctx, FILE *f)
 	}
 
 	fprintf(f, "%s\n", s);
-	free(s);
 
 	return 0;
 }
@@ -4700,7 +4745,7 @@ _TEST_START(TEST_get_usage_settings)
 	size_t j;
 	size_t k;
 	int i;
-	char *usage = NULL;
+	const char *usage = NULL;
 	_test_usage_settings_t tus[] =
 	{
 		{ 0,								{ DESCRIPT, EPILOG, OPT_TXT }, 3},
@@ -4733,20 +4778,16 @@ _TEST_START(TEST_get_usage_settings)
 		printf("-------------------------------------\n");
 		printf("%s\n", usage);
 		printf("-------------------------------------\n");
-
-		free(usage);
-		usage = NULL;
 	}
 
 	_TEST_CLEANUP();
-	if (usage) free(usage);
 }
 _TEST_END()
 
 _TEST_START(TEST_autohelp_default)
 {
 	int i;
-	char *usage = NULL;
+	const char *usage = NULL;
 
 	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
 
@@ -4759,14 +4800,13 @@ _TEST_START(TEST_autohelp_default)
 	cargo_assert(strstr(usage, "help") != NULL, "No help found by default");
 
 	_TEST_CLEANUP();
-	free(usage);
 }
 _TEST_END()
 
 _TEST_START(TEST_autohelp_off)
 {
 	int i;
-	char *usage = NULL;
+	const char *usage = NULL;
 
 	// Turn off auto_help (--help).
 	cargo_set_auto_help(cargo, 0);
@@ -4781,7 +4821,6 @@ _TEST_START(TEST_autohelp_off)
 				"Help found when auto_help turned off");
 
 	_TEST_CLEANUP();
-	free(usage);
 }
 _TEST_END()
 
@@ -4803,7 +4842,7 @@ do 																		\
 
 _TEST_START(TEST_get_usage)
 {
-	char *usage = NULL;
+	const char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
 	usage = cargo_get_usage(cargo);
@@ -4812,7 +4851,6 @@ _TEST_START(TEST_get_usage)
 	printf("Cargo v%s\n", cargo_get_version());
 
 	_TEST_CLEANUP();
-	free(usage);
 }
 _TEST_END()
 
@@ -4867,7 +4905,7 @@ _TEST_END()
 _TEST_START(TEST_get_extra_args)
 {
 	size_t argc = 0;
-	char **extra_args = NULL;
+	const char **extra_args = NULL;
 	char *extra_args_expect[] = { "abc", "def", "ghi" };
 	int i;
 	char *args[] = { "program", "-a", "1", "abc", "def", "ghi" };
@@ -4893,7 +4931,7 @@ _TEST_END()
 _TEST_START(TEST_get_unknown_opts)
 {
 	size_t unknown_count = 0;
-	char **unknown_opts = NULL;
+	const char **unknown_opts = NULL;
 	char *unknown_opts_expect[] = { "-b", "-c" };
 	int i;
 	char *args[] = { "program", "-a", "1", "-b", "-c", "3" };
@@ -5967,7 +6005,7 @@ _TEST_START(TEST_cargo_split_commandline)
 }
 _TEST_END()
 
-static const char *_cargo_test_verify_usage_length(char *usage, int width)
+static const char *_cargo_test_verify_usage_length(const char *usage, int width)
 {
 	char *ret = NULL;
 	char **lines = NULL;
@@ -6007,7 +6045,7 @@ _TEST_START(TEST_cargo_set_max_width)
 	int i;
 	int j;
 	const char *err = NULL;
-	char *usage = NULL;
+	const char *usage = NULL;
 	char *args[] = { "program", "--alpha", "789", "--beta", "123" };
 
 	ret |= cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
@@ -6019,8 +6057,6 @@ _TEST_START(TEST_cargo_set_max_width)
 	cargo_assert(usage != NULL, "Got NULL usage on width 40");
 	err = _cargo_test_verify_usage_length(usage, 40);
 	cargo_assert(err == NULL, err);
-	free(usage);
-	usage = NULL;
 
 	// Set a size bigger than CARGO_MAX_MAX_WIDTH.
 	cargo_set_max_width(cargo, CARGO_MAX_MAX_WIDTH * 2);
@@ -6028,11 +6064,8 @@ _TEST_START(TEST_cargo_set_max_width)
 	cargo_assert(usage != NULL, "Got NULL usage on width CARGO_MAX_MAX_WIDTH * 2");
 	err = _cargo_test_verify_usage_length(usage, CARGO_MAX_MAX_WIDTH);
 	cargo_assert(err == NULL, err);
-	free(usage);
-	usage = NULL;
 
 	_TEST_CLEANUP();
-	if (usage) free(usage);
 }
 _TEST_END()
 
