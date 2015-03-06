@@ -1,0 +1,3 @@
+tests:
+  - 'gcc cargo.c -DCARGO_TEST=ON -DCARGO_DEBUG=4 -o cargo_tests'
+  - './cargo_tests -1'

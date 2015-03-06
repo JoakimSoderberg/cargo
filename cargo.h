@@ -10,7 +10,7 @@
 #endif
 
 //
-// Defaults start.
+// Defaults.
 //
 
 #ifndef CARGO_NAME_COUNT
