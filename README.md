@@ -4,6 +4,7 @@
 [![Circle CI](https://circleci.com/gh/JoakimSoderberg/cargo.svg?style=svg)](https://circleci.com/gh/JoakimSoderberg/cargo)
 [![Semaphore Build Status](https://semaphoreapp.com/api/v1/projects/22d61980-73d0-45bc-ba6c-3ed6c1ebadf5/366031/shields_badge.svg)](https://semaphoreapp.com/joakimsoderberg/cargo)
 [![Shippable Build Status](https://api.shippable.com/projects/54f8944b5ab6cc1352934eed/badge?branchName=master)](https://app.shippable.com/projects/54f8944b5ab6cc1352934eed/builds/latest)
+[![Solano build status](https://ci.solanolabs.com:443/JoakimSoderberg/cargo/badges/193238.png)](https://ci.solanolabs.com:443/JoakimSoderberg/cargo/suites/193238)
 [![Coverage Status](https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg)](https://coveralls.io/r/JoakimSoderberg/cargo)
 [![Coverity Statical Analysis Status](https://scan.coverity.com/projects/3566/badge.svg)](https://scan.coverity.com/projects/3566)
 [![Codeship Status for JoakimSoderberg/cargo](https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master)](https://codeship.com/projects/66740)
