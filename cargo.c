@@ -600,6 +600,7 @@ void cargo_fprintf(FILE *fd, const char *fmt, ...)
 	if (s) free(s);
 }
 
+// Overload the normal printf!
 #define fprintf cargo_fprintf
 #define printf cargo_printf
 
@@ -726,7 +727,21 @@ typedef struct cargo_s
 
 	char **args;
 	size_t arg_count;
+
+	char *error;
 } cargo_s;
+
+static void _cargo_set_error(cargo_t ctx, char *error)
+{
+	assert(ctx);
+
+	if (ctx->error)
+	{
+		free(ctx->error);
+	}
+
+	ctx->error = error;
+}
 
 static size_t _cargo_get_type_size(cargo_type_t t)
 {
@@ -1178,18 +1193,26 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	// (Don't include bool here, since val will be NULL in that case).
 	if ((opt->type != CARGO_BOOL) && (end == val))
 	{
+		cargo_astr_t str;
+		char *error = NULL;
+		char *s = NULL;
 		// TODO: Make helper function instead.
 		size_t fprint_flags =
 			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
+		memset(&str, 0, sizeof(cargo_astr_t));
+		str.s = &error;
 
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
 
-		// TODO: Dont use fprintf here.
-		cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start, fprint_flags,
+		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start, fprint_flags,
 						1, ctx->i, "~"CARGO_COLOR_RED);
-		fprintf(stderr, "Cannot parse \"%s\" as %s for option %s\n",
-				val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
+
+		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option %s\n",
+				s, val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
+
+		if (s) free(s);
+		_cargo_set_error(ctx, error);
 		return -1;
 	}
 
@@ -1232,34 +1255,43 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 {
 	if (opt->parsed)
 	{
+		cargo_astr_t str;
+		char *error = NULL;
+		char *s = NULL;
 		size_t fprint_flags =
 			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
-		// TODO: Don't printf directly here.
+		memset(&str, 0, sizeof(cargo_astr_t));
+		str.s = &error;
 
 		if (opt->flags & CARGO_OPT_UNIQUE)
 		{
-			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start,
+			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 							fprint_flags,
 							2, // Number of highlights.
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
-			fprintf(stderr, " Error: %s was already specified before.\n", name);
+			cargo_aappendf(&str, "%s\n Error: %s was already specified before.\n", s, name);
+			if (s) free(s);
+			_cargo_set_error(ctx, error);
 			return -1;
 		}
 		else
 		{
-			cargo_fprint_args(stderr, ctx->argc, ctx->argv, ctx->start,
+			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 							fprint_flags,
 							2,
 							opt->parsed, "^"CARGO_COLOR_DARK_GRAY,
 							ctx->i, "~"CARGO_COLOR_YELLOW);
-			fprintf(stderr, " Warning: %s was already specified before, "
+
+			cargo_aappendf(&str, " Warning: %s was already specified before, "
 							"the latter value will be used.\n", name);
 
 			// TODO: Should we always do this? Say --abc takes a list of integers.
 			// --abc 1 2 3 ... or why not --abc 1 --def 5 --abc 2 3
 			// (probably a bad idea :D)
 			_cargo_cleanup_option_value(opt);
+			if (s) free(s);
+			_cargo_set_error(ctx, error);
 		}
 	}
 
@@ -1315,11 +1347,16 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	// Look for arguments for this option.
 	if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
 	{
-		// TODO: Don't print this to stderr (callback or similar instead)
+		cargo_astr_t str;
+		char *error = NULL;
 		int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
-		fprintf(stderr, "Not enough arguments for %s."
+		memset(&str, 0, sizeof(cargo_astr_t));
+		str.s = &error;
+
+		cargo_aappendf(&str, "Not enough arguments for %s."
 						" %d expected but got only %d\n", 
 						name, expected, argc - start);
+		_cargo_set_error(ctx, error);
 		return -1;
 	}
 
@@ -1351,8 +1388,13 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			{
 				if ((ctx->j == ctx->i) && !_cargo_zero_args_allowed(opt))
 				{
-					// TODO: Don't print this to stderr.
-					fprintf(stderr, "No argument specified for %s. "
+					cargo_astr_t str;
+					char *error = NULL;
+					memset(&str, 0, sizeof(cargo_astr_t));
+					str.s = &error;
+
+					// TODO: Highlight arg.
+					cargo_aappendf(&str, "No argument specified for %s. "
 									"%d expected.\n",
 									name, 
 									(opt->nargs > 0) ? opt->nargs : 1);
@@ -2577,22 +2619,27 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	return 0;
 }
 
-static void _cargo_print_mutex_group(cargo_t ctx, cargo_group_t *g)
+static void _cargo_print_mutex_group(cargo_t ctx,
+									 cargo_astr_t *str,
+									 cargo_group_t *g)
 {
 	size_t i;
 	cargo_opt_t *opt = NULL;
 	assert(g);
+	assert(str);
 
 	for (i = 0; i < g->opt_count; i++)
 	{
 		opt = &ctx->options[g->option_indices[i]];
-		fprintf(stderr, "%s%s", opt->name[0],
+		cargo_aappendf(str, "%s%s", opt->name[0],
 				(i < (g->opt_count - 1)) ? ", " : "\n");
 	}
 }
 
 static int _cargo_check_mutex_groups(cargo_t ctx)
 {
+	cargo_astr_t str;
+	char *error = NULL;
 	int ret = -1;
 	size_t i = 0;
 	size_t j = 0;
@@ -2601,6 +2648,8 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 	cargo_group_t *g = NULL;
 	cargo_opt_t *opt = NULL;
 	assert(ctx);
+	memset(&str, 0, sizeof(cargo_astr_t));
+	str.s = &error;
 
 	CARGODBG(2, "Check mutex %lu groups\n", ctx->mutex_group_count);
 
@@ -2641,18 +2690,18 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 				goto fail;
 			}
 
-			fprintf(stderr, "%s\n", s);
+			cargo_aappendf(&str, "%s\n", s);
 			free(s);
 
-			fprintf(stderr, "Only one of these variables allowed at the same time:\n");
-			_cargo_print_mutex_group(ctx, g);
+			cargo_aappendf(&str, "Only one of these variables allowed at the same time:\n");
+			_cargo_print_mutex_group(ctx, &str, g);
 			goto fail;
 		}
 		else if ((parsed_count == 0)
 				&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
 		{
 			fprintf(stderr, "One of these variables is required:\n");
-			_cargo_print_mutex_group(ctx, g);
+			_cargo_print_mutex_group(ctx, &str, g);
 			goto fail;
 		}
 
@@ -2805,6 +2854,12 @@ void cargo_destroy(cargo_t *ctx)
 
 		_cargo_free_str_list(&c->args, NULL);
 		_cargo_free_str_list(&c->unknown_opts, NULL);
+
+		if (c->error)
+		{
+			free(c->error);
+			c->error = NULL;
+		}
 
 		free(*ctx);
 		ctx = NULL;
@@ -3111,12 +3166,18 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	char *arg = NULL;
 	const char *name = NULL;
 	cargo_opt_t *opt = NULL;
+	cargo_astr_t str;
+	char *error = NULL;
+	memset(&str, 0, sizeof(cargo_astr_t));
+	str.s = &error;
 
 	CARGODBG(2, "============ Cargo Parse =============\n");
 
 	ctx->argc = argc;
 	ctx->argv = argv;
 	ctx->start = start_index;
+
+	_cargo_set_error(ctx, NULL);
 
 	_cargo_add_help_if_missing(ctx);
 	_cargo_add_orphans_to_default_group(ctx);
@@ -3237,7 +3298,9 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
 		{
 			CARGODBG(1, "Missing required option %s\n", opt->name[0]);
-			fprintf(stderr, "Missing required option %s\n", opt->name[0]);
+			cargo_aappendf(&str, "Missing required option %s\n", opt->name[0]);
+
+			_cargo_set_error(ctx, error);
 			goto fail;
 		}
 	}
@@ -3250,18 +3313,20 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	if (ctx->unknown_opts_count > 0)
 	{
 		const char *suggestion = NULL;
-		// TODO: Don't print to stderr here, instead enable getting as a string.
+
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
-		fprintf(stderr, "Unknown options:\n");
+		cargo_aappendf(&str, "Unknown options:\n");
 
 		for (i = 0; i < ctx->unknown_opts_count; i++)
 		{
 			suggestion = _cargo_find_closest_opt(ctx, ctx->unknown_opts[i]);
-			fprintf(stderr, "%s ", ctx->unknown_opts[i]);
-			if (suggestion) fprintf(stderr, " (Did you mean %s)?", suggestion);
-			fprintf(stderr, "\n");
+
+			cargo_aappendf(&str, "%s ", ctx->unknown_opts[i]);
+			if (suggestion) cargo_aappendf(&str, " (Did you mean %s)?", suggestion);
+			cargo_aappendf(&str, "\n");
 		}
 
+		_cargo_set_error(ctx, error);
 		goto fail;
 	}
 
@@ -3269,6 +3334,13 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	{
 		cargo_print_usage(ctx);
 		return 1;
+	}
+
+	// TODO: Check for internal print flag...
+	if (ctx->error)
+	{
+		cargo_fprint_short_usage(ctx, stderr);
+		fprintf(stderr, "%s\n", ctx->error);
 	}
 
 	return 0;
@@ -3592,26 +3664,46 @@ fail:
 	return ret;
 }
 
-int cargo_fprint_usage(FILE *f, cargo_t ctx)
+int cargo_fprint_usage(cargo_t ctx, FILE *f)
 {
-	char *buf;
+	char *s;
 	assert(ctx);
 
-	if (!(buf = cargo_get_usage(ctx)))
+	if (!(s = cargo_get_usage(ctx)))
 	{
-		CARGODBG(1, "Out of memory!\n");
 		return -1;
 	}
 
-	fprintf(f, "%s\n", buf);
-	free(buf);
+	fprintf(f, "%s\n", s);
+	free(s);
 
 	return 0;
 }
 
 int cargo_print_usage(cargo_t ctx)
 {
-	return cargo_fprint_usage(stderr, ctx);
+	return cargo_fprint_usage(ctx, stderr);
+}
+
+int cargo_fprint_short_usage(cargo_t ctx, FILE *f)
+{
+	char *s;
+	assert(ctx);
+
+	if (!(s = cargo_get_short_usage(ctx)))
+	{
+		return -1;
+	}
+
+	fprintf(f, "%s\n", s);
+	free(s);
+
+	return 0;
+}
+
+int cargo_print_short_usage(cargo_t ctx)
+{
+	return cargo_fprint_short_usage(ctx, stderr);
 }
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,

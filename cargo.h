@@ -201,11 +201,15 @@ void cargo_set_auto_help(cargo_t ctx, int auto_help);
 
 void cargo_set_format(cargo_t ctx, cargo_format_t format);
 
-int cargo_fprint_usage(FILE *f, cargo_t ctx);
+int cargo_fprint_usage(cargo_t ctx, FILE *f);
 
 int cargo_print_usage(cargo_t ctx);
 
 char *cargo_get_usage(cargo_t ctx);
+
+int cargo_fprint_short_usage(cargo_t ctx, FILE *f);
+
+int cargo_print_short_usage(cargo_t ctx);
 
 char *cargo_get_short_usage(cargo_t ctx);
 
