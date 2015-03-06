@@ -2711,6 +2711,11 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 
 	ret = 0;
 fail:
+	if (ret)
+	{
+		_cargo_set_error(ctx, error);
+	}
+
 	if (parse_highlights)
 	{
 		free(parse_highlights);
