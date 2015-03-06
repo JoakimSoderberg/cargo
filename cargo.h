@@ -122,6 +122,11 @@ typedef enum cargo_mutex_group_flags_e
 	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0)
 } cargo_mutex_group_flags_t;
 
+typedef enum cargo_group_flags_e
+{
+	CARGO_GROUP_HIDE					= (1 << 0)
+} cargo_group_flags_t;
+
 typedef enum cargo_flags_e
 {
 	CARGO_AUTOCLEAN						= (1 << 0),
@@ -150,28 +155,35 @@ void cargo_set_flags(cargo_t ctx, cargo_flags_t flags);
 
 cargo_flags_t cargo_get_flags(cargo_t ctx);
 
-int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames, 
-					  const char *description, const char *fmt, va_list ap);
+int cargo_add_optionv_ex(cargo_t ctx, cargo_option_flags_t flags,
+					  const char *optnames, 
+					  const char *description,
+					  const char *fmt, va_list ap);
 
 int cargo_add_optionv(cargo_t ctx, const char *optnames, 
 					  const char *description, const char *fmt, va_list ap);
 
-int cargo_add_option_ex(cargo_t ctx, size_t flags, const char *optnames,
-					 const char *description, const char *fmt, ...);
+int cargo_add_option_ex(cargo_t ctx, cargo_option_flags_t flags,
+					const char *optnames, const char *description,
+					const char *fmt, ...);
 
 int cargo_add_option(cargo_t ctx, const char *optnames,
 					 const char *description, const char *fmt, ...);
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
-int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
+int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
 
-int cargo_add_mutex_group(cargo_t ctx, size_t flags, const char *name);
+int cargo_add_mutex_group(cargo_t ctx,
+						cargo_mutex_group_flags_t flags,
+						const char *name);
 
-int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt);
+int cargo_mutex_group_add_option(cargo_t ctx,
+								const char *group,
+								const char *opt);
 
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
@@ -201,22 +213,26 @@ char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 char **cargo_get_args(cargo_t ctx, size_t *argc);
 
-char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_fprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count, ...);
 
-char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_fprintl_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count,
 							const cargo_highlight_t *highlights);
 
-char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_vfprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count, va_list ap);
 
-int cargo_fprint_args(FILE *f, int argc, char **argv, int start, size_t flags,
+int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
+					  cargo_fprint_flags_t flags,
 					  size_t highlight_count, ...);
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
-							size_t flags, size_t highlight_count,
-							const cargo_highlight_t *highlights);
+					   cargo_fprint_flags_t flags, size_t highlight_count,
+					   const cargo_highlight_t *highlights);
 
 char **cargo_split_commandline(const char *args, int *argc);
 

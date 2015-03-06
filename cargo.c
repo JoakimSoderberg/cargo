@@ -670,7 +670,7 @@ typedef struct cargo_opt_s
 
 	int array;
 	int parsed;
-	size_t flags; // TODO: replace with cargo_option_flags_t
+	cargo_option_flags_t flags;
 	int num_eaten;
 } cargo_opt_t;
 
@@ -682,7 +682,8 @@ struct cargo_group_s
 	char *name;
 	char *title;
 	char *description;
-	size_t flags;
+	size_t flags;			// This is either cargo_group_flags_t
+							// or cargo_mutex_group_flags_t depending on type.
 
 	size_t *option_indices;
 	size_t opt_count;
@@ -2871,7 +2872,8 @@ typedef struct cargo_phighlight_s
 	int show;
 } cargo_phighlight_t;
 
-char *cargo_get_fprintl_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_fprintl_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count,
 							const cargo_highlight_t *highlights_in)
 {
@@ -3020,7 +3022,8 @@ fail:
 	return ret;
 }
 
-char *cargo_get_vfprint_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_vfprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count, va_list ap)
 {
 	char *ret = NULL;
@@ -3050,7 +3053,8 @@ fail:
 	return ret;
 }
 
-char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
+char *cargo_get_fprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
 							size_t highlight_count, ...)
 {
 	char *ret;
@@ -3062,7 +3066,7 @@ char *cargo_get_fprint_args(int argc, char **argv, int start, size_t flags,
 }
 
 int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
-							size_t flags, size_t highlight_count, ...)
+					  cargo_fprint_flags_t flags, size_t highlight_count, ...)
 {
 	char *ret;
 	va_list ap;
@@ -3081,8 +3085,8 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 }
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
-							size_t flags, size_t highlight_count,
-							const cargo_highlight_t *highlights)
+					   cargo_fprint_flags_t flags, size_t highlight_count,
+					   const cargo_highlight_t *highlights)
 {
 	char *ret;
 	if (!(ret = cargo_get_fprintl_args(argc, argv, start, flags,
@@ -3511,6 +3515,11 @@ char *cargo_get_usage(cargo_t ctx)
 		int indent = 0;
 		grp = &ctx->groups[i];
 
+		if (grp->flags & CARGO_GROUP_HIDE)
+		{
+			continue;
+		}
+
 		// The group name is always set for normal groups.
 		// The default group is simply "".
 		is_default_group = (strlen(grp->name) == 0);
@@ -3605,12 +3614,12 @@ int cargo_print_usage(cargo_t ctx)
 	return cargo_fprint_usage(stderr, ctx);
 }
 
-int cargo_add_group(cargo_t ctx, size_t flags, const char *name,
+int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description)
 {
 	return _cargo_add_group(ctx, &ctx->groups, &ctx->group_count,
 							&ctx->max_groups,
-							flags, name, title, description);
+							(size_t)flags, name, title, description);
 }
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
@@ -3619,11 +3628,13 @@ int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 				ctx->groups, ctx->group_count, group, opt);
 }
 
-int cargo_add_mutex_group(cargo_t ctx, size_t flags, const char *name)
+int cargo_add_mutex_group(cargo_t ctx,
+						cargo_mutex_group_flags_t flags,
+						const char *name)
 {
 	return _cargo_add_group(ctx, &ctx->mutex_groups, &ctx->mutex_group_count,
 							&ctx->mutex_max_groups,
-							flags, name, NULL, NULL);
+							(size_t)flags, name, NULL, NULL);
 }
 
 int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt)
@@ -3632,8 +3643,9 @@ int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt
 				ctx->mutex_groups, ctx->mutex_group_count, group, opt);
 }
 
-int cargo_add_optionv_ex(cargo_t ctx, size_t flags, const char *optnames,
-					  const char *description, const char *fmt, va_list ap)
+int cargo_add_optionv_ex(cargo_t ctx, cargo_option_flags_t flags,
+						 const char *optnames, const char *description,
+						 const char *fmt, va_list ap)
 {
 	size_t optcount = 0;
 	char **optname_list = NULL;
@@ -3949,8 +3961,9 @@ int cargo_add_optionv(cargo_t ctx, const char *optnames,
 	return cargo_add_optionv_ex(ctx, 0, optnames, description, fmt, ap);
 }
 
-int cargo_add_option_ex(cargo_t ctx, size_t flags, const char *optnames,
-						const char *description, const char *fmt, ...)
+int cargo_add_option_ex(cargo_t ctx, cargo_option_flags_t flags,
+						const char *optnames, const char *description,
+						const char *fmt, ...)
 {
 	int ret;
 	va_list ap;
