@@ -5,21 +5,21 @@
 
 typedef int (*accumulator_f)(int *integers, size_t count);
 
-int max(int *integers, size_t count)
+int max_ints(int *integers, size_t count)
 {
 	size_t i;
-	int max = 0;
+	int m = 0;
 	for (i = 0; i < count; i++)
-		if (integers[i] > max) max = integers[i];
-	return max;
+		if (integers[i] > m) m = integers[i];
+	return m;
 }
 
-int sum(int *integers, size_t count)
+int sum_ints(int *integers, size_t count)
 {
 	size_t i;
-	int sum = 0;
-	for (i = 0; i < count; i++) sum += integers[i];
-	return sum;
+	int s = 0;
+	for (i = 0; i < count; i++) s += integers[i];
+	return s;
 }
 
 int main(int argc, char **argv)
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
 	int ret = 0;
 	int *integers = NULL;
 	size_t integer_count = 0;
-	accumulator_f accumulator = max;
+	accumulator_f accumulator = max_ints;
 	int sum_flag = 0;
 
 	if (cargo_init(&cargo, argv[0]))
@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	assert(ret == 0);
 
 	if (cargo_parse(cargo, 1, argc, argv)) return -1;
-	if (sum_flag) accumulator = sum;
+	if (sum_flag) accumulator = sum_ints;
 	printf("%d\n", accumulator(integers, integer_count));
 	cargo_destroy(&cargo);
 	free(integers);
