@@ -968,12 +968,57 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	{
 		name = opt->name[i];
 
-		CARGODBG(3, "    %10s == %s ?\n", name, arg);
-
 		if (!strcmp(name, arg))
 		{
-			CARGODBG(3, "          Match\n");
+			CARGODBG(3, "  Found matching option \"%s\", alias \"%s\"\n",
+					opt->name[0], opt->name[i]);
 			return name;
+		}
+	}
+
+	return NULL;
+}
+
+static const char *_cargo_is_option_name_compact(cargo_t ctx, 
+					cargo_opt_t *opt, const char *arg)
+{
+	size_t i;
+	const char *name;
+	const char *s;
+
+	// This looks for the format -vvv when we have
+	// an option "--verbosity -v" of type CARGO_BOOL
+	// that has the CARGO_OPT_BOOL_COUNT flag set.
+	// Then "-v -v -v" and "-vvv" is equivalent and should
+	// parse the bool as 3.
+
+	if (!_cargo_starts_with_prefix(ctx, arg))
+		return NULL;
+
+	for (i = 0; i < opt->name_count; i++)
+	{
+		name = opt->name[i];
+
+		if (!_cargo_starts_with_prefix(ctx, name))
+			continue;
+
+		// "-vvv" -> "vvv"
+		name += strspn(name, ctx->prefix);
+		arg += strspn(arg, ctx->prefix);
+
+		// Compare only the beginning of the arg we're given.
+		// So if the opt has an alias "-v", we remove the "-"
+		// and compare "v" with strlen("v") characters in the
+		// input string: strncmp("v", "vvv", 1) == 0
+		if (!strncmp(name, arg, strlen(name)))
+		{
+			// We must have the bool count flag set for this to be allowed.
+			if (opt->flags & CARGO_OPT_BOOL_COUNT)
+			{
+				CARGODBG(3, "  Found matching option \"%s\", alias \"%s\"\n",
+						opt->name[0], opt->name[i]);
+				return name;
+			}
 		}
 	}
 
@@ -1152,9 +1197,42 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		case CARGO_BOOL:
 		{
 			int amount;
-			CARGODBG(2, "%s", "      bool\n");
-			amount = (opt->flags & CARGO_OPT_BOOL_COUNT) ? (opt->parsed + 1): 1;
-			((int *)target)[opt->target_idx] = amount;
+			int *val = &((int *)target)[opt->target_idx];
+			CARGODBG(2, "      bool\n");
+
+			// TODO: This could be more general to support
+			//       short command lines bundled together:
+			//       "-vaet" same as "-v -a -e -t"...
+	
+			// If BOOL COUNT is turned on, we allow multiple occurances of
+			// a bool option. "-v -v -v" will be parsed as 3.
+			if (opt->flags & CARGO_OPT_BOOL_COUNT)
+			{
+				char *arg = ctx->argv[ctx->i];
+				CARGODBG(2, "        bool count enabled\n");
+
+				// We can specify it as "-vvv" as well.
+				if (!_cargo_is_option_name(ctx, opt, arg)
+				  && _cargo_is_option_name_compact(ctx, opt, arg))
+				{
+					int amount;
+					CARGODBG(2, "          Compact %s\n", arg);
+					arg += strspn(arg, ctx->prefix);
+					amount = (int)strlen(arg);
+					CARGODBG(2, "              %d\n", amount);
+					(*val) += amount;
+				}
+				else
+				{
+					CARGODBG(2, "          Normal\n");
+					(*val)++;
+				}
+			}
+			else
+			{
+				CARGODBG(2, "       No bool count\n");
+				*val = 1;
+			}
 			break;
 		}
 		case CARGO_INT:
@@ -1260,26 +1338,56 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	return 0;
 }
 
-static int _cargo_is_another_option(cargo_t ctx, char *arg)
-{
-	size_t j;
-
-	for (j = 0; j < ctx->opt_count; j++)
-	{
-		if (_cargo_is_option_name(ctx, &ctx->options[j], arg))
-		{
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
 static int _cargo_zero_args_allowed(cargo_opt_t *opt)
 {
 	return (opt->nargs == CARGO_NARGS_ZERO_OR_MORE)
 		|| (opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
 		|| (opt->type == CARGO_BOOL);
+}
+
+static const char *_cargo_check_options(cargo_t ctx, cargo_opt_t **opt, char *arg)
+{
+	size_t j;
+	const char *name = NULL;
+	assert(opt);
+
+	if (!_cargo_starts_with_prefix(ctx, arg))
+		return NULL;
+
+	// Look for completely matching options first.
+	for (j = 0; j < ctx->opt_count; j++)
+	{
+		name = NULL;
+		*opt = &ctx->options[j];
+
+		if ((name = _cargo_is_option_name(ctx, *opt, arg)))
+		{
+			return name;
+		}
+	}
+
+	// Now look for the special case "-vvv" for bools.
+	for (j = 0; j < ctx->opt_count; j++)
+	{
+		name = NULL;
+		*opt = &ctx->options[j];
+
+		if ((name = _cargo_is_option_name_compact(ctx, *opt, arg)))
+		{
+			return name;
+		}
+	}
+
+	*opt = NULL;
+
+	return NULL;
+}
+
+static int _cargo_is_another_option(cargo_t ctx, char *arg)
+{
+	cargo_opt_t *opt = NULL;
+	const char *name = _cargo_check_options(ctx, &opt, arg);
+	return (name != NULL);
 }
 
 static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const char *name)
@@ -1503,33 +1611,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 
 	return opt->num_eaten;
-}
-
-static const char *_cargo_check_options(cargo_t ctx,
-					cargo_opt_t **opt,
-					int argc, char **argv, int i)
-{
-	size_t j;
-	const char *name = NULL;
-	assert(opt);
-
-	if (!_cargo_starts_with_prefix(ctx, argv[i]))
-		return NULL;
-
-	for (j = 0; j < ctx->opt_count; j++)
-	{
-		name = NULL;
-		*opt = &ctx->options[j];
-
-		if ((name = _cargo_is_option_name(ctx, *opt, argv[i])))
-		{
-			return name;
-		}
-	}
-
-	*opt = NULL;
-
-	return NULL;
 }
 
 static int _cargo_compare_strlen(const void *a, const void *b)
@@ -2714,6 +2795,7 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 
 			if (opt->parsed)
 			{
+				// TODO: Mutex. Hmmm is this really correct? opt->parsed is set to ctx->i
 				parse_highlights[parsed_count].i = j + ctx->start;
 				parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
 				parsed_count++;
@@ -2819,8 +2901,7 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		if (_cargo_starts_with_prefix(ctx, arg)
 		&& !_cargo_is_arg_negative_integer(arg))
 		{
-			if (!(name = _cargo_check_options(ctx, &opt,
-							ctx->argc, ctx->argv, ctx->i)))
+			if (!(name = _cargo_check_options(ctx, &opt, arg)))
 			{
 				CARGODBG(2, "    Unknown option: %s\n", arg);
 				ctx->unknown_opts[ctx->unknown_opts_count] = arg;
@@ -3422,8 +3503,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 		// TODO: Add support for abbreviated prefix matching so that
 		// --ar will match --arne unless it's ambigous with some other option.
-		if ((name = _cargo_check_options(ctx, &opt,
-					ctx->argc, ctx->argv, ctx->i)))
+		if ((name = _cargo_check_options(ctx, &opt, arg)))
 		{
 			// We found an option, parse any arguments it might have.
 			if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
@@ -3505,6 +3585,8 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	{
 		goto fail;
 	}
+
+	_cargo_parse_show_error(ctx);
 
 	return 0;
 fail:
@@ -6407,16 +6489,35 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_bool_count)
 {
-	int i;
-	char *args[] = { "program ", "-v", "-v", "-v" };
+	int i = 0;
+	char *args[] = { "program ", "123", "-v", "3", "-v", "-v" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_BOOL_COUNT,
+								"--verbose -v", LOREM_IPSUM, "b", &i);
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("i == %d\n", i);
+	cargo_assert(i == 3, "Expected i to be 3");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_bool_count_compact)
+{
+	int i = 0;
+	char *args[] = { "program ", "-vvv", "123", "-vv" };
 
 	ret |= cargo_add_option_ex(cargo, CARGO_OPT_BOOL_COUNT,
 								"--verbose -v", LOREM_IPSUM, "b", &i);
 
 	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
 
 	printf("i == %d\n", i);
-	cargo_assert(i == 3, "Expected i to be 3");
+	cargo_assert(i == 5, "Expected i to be 5");
 
 	_TEST_CLEANUP();
 }
@@ -6516,7 +6617,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_aapendf),
 	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
 	CARGO_ADD_TEST(TEST_cargo_fprintf),
-	CARGO_ADD_TEST(TEST_cargo_bool_count)
+	CARGO_ADD_TEST(TEST_cargo_bool_count),
+	CARGO_ADD_TEST(TEST_cargo_bool_count_compact)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
