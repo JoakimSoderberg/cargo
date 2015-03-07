@@ -1199,6 +1199,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		cargo_astr_t str;
 		char *error = NULL;
 		char *s = NULL;
+		size_t i;
 		// TODO: Make helper function instead.
 		size_t fprint_flags =
 			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
@@ -1213,10 +1214,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 						ctx->i - 1, "^"CARGO_COLOR_YELLOW, 
 						ctx->j, "~"CARGO_COLOR_RED);
 
-		// TODO: ctx->argv[ctx->i] will not show the option name we're parsing for
-		// especially not positional arguments.
-		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option %s\n",
-				s, val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
+		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
+				s, val, _cargo_type_map[opt->type], opt->name[0]);
 
 		if (s) free(s);
 		_cargo_set_error(ctx, error);
@@ -3445,6 +3444,12 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		#endif // CARGO_DEBUG
 	}
 
+	if (ctx->help)
+	{
+		cargo_print_usage(ctx);
+		return 1;
+	}
+
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		opt = &ctx->options[i];
@@ -3462,12 +3467,6 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	if (_cargo_check_mutex_groups(ctx))
 	{
 		goto fail;
-	}
-
-	if (ctx->help)
-	{
-		cargo_print_usage(ctx);
-		return 1;
 	}
 
 	return 0;
@@ -3710,7 +3709,7 @@ const char *cargo_get_usage(cargo_t ctx)
 
 	if(ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		if (cargo_appendf(&str, "%s\nn", ctx->description) < 0) goto fail;
+		if (cargo_appendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
 	}
 
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
@@ -3754,7 +3753,7 @@ const char *cargo_get_usage(cargo_t ctx)
 		if (positional_count > 0)
 		{
 			if (is_default_group)
-				if (cargo_appendf(&str,  "Positional arguments:\n") < 0) goto fail;
+				if (cargo_appendf(&str, "Positional arguments:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
 									1, &str, max_name_len, indent))
@@ -3763,10 +3762,12 @@ const char *cargo_get_usage(cargo_t ctx)
 			}
 		}
 
+		if (cargo_appendf(&str, "\n") < 0) goto fail;
+
 		if (option_count > 0)
 		{
 			if (is_default_group)
-				if (cargo_appendf(&str,  "Options:\n") < 0) goto fail;
+				if (cargo_appendf(&str, "Options:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
 									0, &str, max_name_len, indent))

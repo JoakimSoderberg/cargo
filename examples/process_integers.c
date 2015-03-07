@@ -37,6 +37,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	cargo_set_description(cargo, "Process some integers.");
+
 	ret |= cargo_add_option(cargo,
 							"integers", "An integer for the accumulator",
 							"[i]+", &integers, &integer_count);
@@ -45,16 +47,9 @@ int main(int argc, char **argv)
 							"b", &sum_flag);
 	assert(ret == 0);
 
-	if (cargo_parse(cargo, 1, argc, argv))
-	{
-		return -1;
-	}
-
+	if (cargo_parse(cargo, 1, argc, argv)) return -1;
 	if (sum_flag) accumulator = sum;
-
 	printf("%d\n", accumulator(integers, integer_count));
-
 	cargo_destroy(&cargo);
-
-	return 0;	
+	return 0;
 }
