@@ -2815,6 +2815,31 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 	return 0;
 }
 
+static void _cargo_parse_show_error(cargo_t ctx)
+{
+	assert(ctx);
+
+	// Show errors automatically?
+	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
+	{
+		FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
+
+		if (!(ctx->flags & CARGO_NOERR_USAGE))
+		{
+			if (ctx->flags & CARGO_ERR_LONG_USAGE)
+			{
+				cargo_fprint_usage(ctx, fd);
+			}
+			else
+			{
+				cargo_fprint_short_usage(ctx, fd);
+			}
+		}
+
+		fprintf(fd, "%s\n", ctx->error);
+	}
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3396,27 +3421,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	return 0;
 fail:
-	// TODO: Put in function
-	// Show errors automatically?
-	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
-	{
-		FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
-
-		if (!(ctx->flags & CARGO_NOERR_USAGE))
-		{
-			if (ctx->flags & CARGO_ERR_LONG_USAGE)
-			{
-				cargo_fprint_usage(ctx, fd);
-			}
-			else
-			{
-				cargo_fprint_short_usage(ctx, fd);
-			}
-		}
-
-		fprintf(fd, "%s\n", ctx->error);
-	}
-
+	_cargo_parse_show_error(ctx);
 	_cargo_cleanup_option_values(ctx);
 	return -1;
 }
