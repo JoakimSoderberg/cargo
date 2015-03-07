@@ -31,8 +31,9 @@ option(CARGO_EXAMPLE "Build example application that comes in cargo.c" ON)
 option(CARGO_HELPER "Build cargo formatting helper" ON)
 option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
 option(CARGO_EXTRA_EXAMPLES "Builds the extra examples under the examples/ directory" ON)
-
 option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
+option(CARGO_BUILD_SHARED_LIB "Build a shared library" ON)
+option(CARGO_BUILD_STATIC_LIB "Build a static library" ON)
 
 # Add project cmake modules to path.
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
@@ -64,10 +65,31 @@ if (MSVC)
    add_definitions("/W3 /D_CRT_SECURE_NO_WARNINGS /wd4005 /wd4996 /nologo")
 endif()
 
+if (CARGO_BUILD_STATIC_LIB)
+	add_library(cargo STATIC cargo.c cargo.h)
+endif()
+
+if (CARGO_BUILD_SHARED_LIB)
+	if (POLICY CMP0042)
+		cmake_policy(PUSH)
+		cmake_policy(SET CMP0042 OLD)
+	endif()
+
+	add_library(cargo_shared SHARED cargo.c cargo.h)
+
+	if (UNIX)
+		set_target_properties(cargo_shared PROPERTIES OUTPUT_NAME cargo)
+	endif()
+
+	if (POLICY CMP0042)
+		cmake_policy(POP)
+	endif()
+endif()
+
 # The internal example in cargo.c
 if (CARGO_EXAMPLE)
-	add_executable(cargo cargo.c cargo.h)
-	set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1")
+	add_executable(cargo_example cargo.c cargo.h)
+	set_target_properties(cargo_example PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1")
 endif()
 
 if (CARGO_EXTRA_EXAMPLES)
