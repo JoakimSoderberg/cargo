@@ -1208,8 +1208,12 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				val, _cargo_type_map[opt->type]);
 
 		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start, fprint_flags,
-						1, ctx->i, "~"CARGO_COLOR_RED);
+						2,
+						ctx->i - 1, "^"CARGO_COLOR_YELLOW, 
+						ctx->j, "~"CARGO_COLOR_RED);
 
+		// TODO: ctx->argv[ctx->i] will not show the option name we're parsing for
+		// especially not positional arguments.
 		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option %s\n",
 				s, val, _cargo_type_map[opt->type], ctx->argv[ctx->i]);
 
@@ -2752,6 +2756,65 @@ static int _cargo_add_orphans_to_default_group(cargo_t ctx)
 	return 0;
 }
 
+static int _cargo_is_arg_negative_integer(const char *arg)
+{
+	return (atoi(arg) < 0);
+}
+
+static int _cargo_check_unknown_options(cargo_t ctx)
+{
+	size_t i;
+	cargo_opt_t *opt = NULL;
+	cargo_astr_t str;
+	char *error = NULL;
+	const char *name = NULL;
+	char *arg = NULL;
+	memset(&str, 0, sizeof(str));
+	str.s = &error;
+
+	// TODO: Add support for options with negative numbers.
+	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
+	{
+		arg = ctx->argv[ctx->i];
+
+		if (_cargo_starts_with_prefix(ctx, arg)
+		&& !_cargo_is_arg_negative_integer(arg))
+		{
+			if (!(name = _cargo_check_options(ctx, &opt,
+							ctx->argc, ctx->argv, ctx->i)))
+			{
+				CARGODBG(2, "    Unknown option: %s\n", arg);
+				ctx->unknown_opts[ctx->unknown_opts_count] = arg;
+				ctx->unknown_opts_count++;
+			}
+		}
+
+		ctx->i++;
+	}
+
+	if (ctx->unknown_opts_count > 0)
+	{
+		const char *suggestion = NULL;
+
+		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
+		cargo_aappendf(&str, "Unknown options:\n");
+
+		for (i = 0; i < ctx->unknown_opts_count; i++)
+		{
+			suggestion = _cargo_find_closest_opt(ctx, ctx->unknown_opts[i]);
+
+			cargo_aappendf(&str, "%s ", ctx->unknown_opts[i]);
+			if (suggestion) cargo_aappendf(&str, " (Did you mean %s)?", suggestion);
+			cargo_aappendf(&str, "\n");
+		}
+
+		_cargo_set_error(ctx, error);
+		return -1;
+	}
+
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3225,7 +3288,13 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
 
-	for (ctx->i = start_index; ctx->i < argc; )
+	// Check for unknown options first.
+	if (_cargo_check_unknown_options(ctx))
+	{
+		goto fail;
+	}
+
+	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
 	{
 		arg = argv[ctx->i];
 		start = ctx->i;
@@ -3241,8 +3310,8 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 		// TODO: Add support for abbreviated prefix matching so that
 		// --ar will match --arne unless it's ambigous with some other option.
-
-		if ((name = _cargo_check_options(ctx, &opt, argc, argv, ctx->i)))
+		if ((name = _cargo_check_options(ctx, &opt,
+					ctx->argc, ctx->argv, ctx->i)))
 		{
 			// We found an option, parse any arguments it might have.
 			if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
@@ -3256,38 +3325,28 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		else
 		{
 			// TODO: Optional to fail on unknown options and arguments!
-			if (_cargo_is_prefix(ctx, argv[ctx->i][0]))
+			size_t opt_i = 0;
+			CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+
+			// Positional argument.
+			if (_cargo_get_positional(ctx, &opt_i) == 0)
 			{
-				CARGODBG(2, "    Unknown option: %s\n", argv[ctx->i]);
-				ctx->unknown_opts[ctx->unknown_opts_count] = argv[ctx->i];
-				ctx->unknown_opts_count++;
-				opt_arg_count = 1;
+				opt = &ctx->options[opt_i];
+				if ((opt_arg_count = _cargo_parse_option(ctx, opt,
+													opt->name[0],
+													argc, argv)) < 0)
+				{
+					CARGODBG(1, "    Failed to parse %s option: %s\n",
+							_cargo_type_map[opt->type], name);
+					goto fail;
+				}
 			}
 			else
 			{
-				size_t opt_i = 0;
-				CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
-
-				// Positional argument.
-				if (_cargo_get_positional(ctx, &opt_i) == 0)
-				{
-					opt = &ctx->options[opt_i];
-					if ((opt_arg_count = _cargo_parse_option(ctx, opt,
-														opt->name[0],
-														argc, argv)) < 0)
-					{
-						CARGODBG(1, "    Failed to parse %s option: %s\n",
-								_cargo_type_map[opt->type], name);
-						goto fail;
-					}
-				}
-				else
-				{
-					CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
-					ctx->args[ctx->arg_count] = argv[ctx->i];
-					ctx->arg_count++;
-					opt_arg_count = 1;
-				}
+				CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
+				ctx->args[ctx->arg_count] = argv[ctx->i];
+				ctx->arg_count++;
+				opt_arg_count = 1;
 			}
 		}
 
@@ -3317,7 +3376,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
 		{
 			CARGODBG(1, "Missing required option %s\n", opt->name[0]);
-			cargo_aappendf(&str, "Missing required option %s\n", opt->name[0]);
+			cargo_aappendf(&str, "Missing required option \"%s\"\n", opt->name[0]);
 
 			_cargo_set_error(ctx, error);
 			goto fail;
@@ -3329,32 +3388,15 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		goto fail;
 	}
 
-	if (ctx->unknown_opts_count > 0)
-	{
-		const char *suggestion = NULL;
-
-		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
-		cargo_aappendf(&str, "Unknown options:\n");
-
-		for (i = 0; i < ctx->unknown_opts_count; i++)
-		{
-			suggestion = _cargo_find_closest_opt(ctx, ctx->unknown_opts[i]);
-
-			cargo_aappendf(&str, "%s ", ctx->unknown_opts[i]);
-			if (suggestion) cargo_aappendf(&str, " (Did you mean %s)?", suggestion);
-			cargo_aappendf(&str, "\n");
-		}
-
-		_cargo_set_error(ctx, error);
-		goto fail;
-	}
-
 	if (ctx->help)
 	{
 		cargo_print_usage(ctx);
 		return 1;
 	}
 
+	return 0;
+fail:
+	// TODO: Put in function
 	// Show errors automatically?
 	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
 	{
@@ -3375,8 +3417,6 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		fprintf(fd, "%s\n", ctx->error);
 	}
 
-	return 0;
-fail:
 	_cargo_cleanup_option_values(ctx);
 	return -1;
 }
@@ -4030,6 +4070,7 @@ int cargo_add_optionv_ex(cargo_t ctx, cargo_option_flags_t flags,
 	o->positional = !_cargo_is_prefix(ctx, o->name[0][0]);
 
 	if (o->positional
+		&& !(o->flags & CARGO_OPT_NOT_REQUIRED)
 		&& (o->nargs != CARGO_NARGS_ZERO_OR_MORE)
 		&& (o->nargs != CARGO_NARGS_ZERO_OR_ONE))
 	{
