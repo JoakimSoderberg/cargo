@@ -2830,9 +2830,10 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		for (i = 0; i < ctx->unknown_opts_count; i++)
 		{
 			suggestion = _cargo_find_closest_opt(ctx, ctx->unknown_opts[i]);
+			if (!suggestion) continue;
 
 			cargo_aappendf(&str, "%s ", ctx->unknown_opts[i]);
-			if (suggestion) cargo_aappendf(&str, " (Did you mean %s)?", suggestion);
+			cargo_aappendf(&str, " (Did you mean %s)?", suggestion);
 			cargo_aappendf(&str, "\n");
 		}
 
@@ -3450,8 +3451,8 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
 		{
-			CARGODBG(1, "Missing required option %s\n", opt->name[0]);
-			cargo_aappendf(&str, "Missing required option \"%s\"\n", opt->name[0]);
+			CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
+			cargo_aappendf(&str, "Missing required argument \"%s\"\n", opt->name[0]);
 
 			_cargo_set_error(ctx, error);
 			goto fail;

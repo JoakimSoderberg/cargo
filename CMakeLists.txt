@@ -4,9 +4,10 @@ project(cargo C)
 
 option(CARGO_DEBUG "Set cargo debug level" 0)
 option(CARGO_TEST "Build unit tests" ON)
-option(CARGO_EXAMPLE "Build example application" ON)
+option(CARGO_EXAMPLE "Build example application that comes in cargo.c" ON)
 option(CARGO_HELPER "Build cargo formatting helper" ON)
 option(CARGO_COVERALLS "Generate coveralls data (CARGO_TEST must be turned on, and CMAKE_BUILD_MODE must be Debug)" OFF)
+option(CARGO_EXTRA_EXAMPLES "Builds the extra examples under the examples/ directory" ON)
 
 option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
 
@@ -25,6 +26,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
 source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
+include_directories(${PROJECT_SOURCE_DIR})
 
 message("Setting debug level to: ${CARGO_DEBUG}")
 
@@ -39,9 +41,19 @@ if (MSVC)
    add_definitions("/W3 /D_CRT_SECURE_NO_WARNINGS /wd4005 /wd4996 /nologo")
 endif()
 
+# The internal example in cargo.c
 if (CARGO_EXAMPLE)
 	add_executable(cargo cargo.c cargo.h)
 	set_target_properties(cargo PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1")
+endif()
+
+if (CARGO_EXTRA_EXAMPLES)
+	file(GLOB EXTRA_EXAMPLE_FILES "${PROJECT_SOURCE_DIR}/examples/*.c")
+
+	foreach(EXAMPLE_FILE ${EXTRA_EXAMPLE_FILES})
+		get_filename_component(EXAMPLE_NAME "${EXAMPLE_FILE}" NAME_WE)
+		add_executable(${EXAMPLE_NAME} "${EXAMPLE_FILE}" cargo.c)
+	endforeach()
 endif()
 
 if (CARGO_HELPER)
