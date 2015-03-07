@@ -16,6 +16,8 @@ C ARGument Obtainer. Alternative command line parser to getopt.
 
 Designed to be small and easy to drop into any program without much configuration.
 
+cargo is license under the [MIT License](http://opensource.org/licenses/mit-license.php)
+
 Compiling
 ---------
 
