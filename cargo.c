@@ -1151,8 +1151,10 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	{
 		case CARGO_BOOL:
 		{
+			int amount;
 			CARGODBG(2, "%s", "      bool\n");
-			((int *)target)[opt->target_idx] = 1;
+			amount = (opt->flags & CARGO_OPT_BOOL_COUNT) ? (opt->parsed + 1): 1;
+			((int *)target)[opt->target_idx] = amount;
 			break;
 		}
 		case CARGO_INT:
@@ -1294,6 +1296,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 
 		if (opt->flags & CARGO_OPT_UNIQUE)
 		{
+			CARGODBG(2, "%s: Parsing option as unique\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 							fprint_flags,
 							2, // Number of highlights.
@@ -1304,8 +1307,19 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			_cargo_set_error(ctx, error);
 			return -1;
 		}
+		else if ((opt->type == CARGO_BOOL)
+			  && (opt->flags & CARGO_OPT_BOOL_COUNT))
+		{
+			// This is for parsing multiple arguments of the same type
+			// for instance -v -v -v.
+			// We need to reset the target index when doing this, otherwise
+			// we would be treating the target value for the bool option as an
+			// array since target_idx is incremented on each parse.
+			opt->target_idx = 0;
+		}
 		else
 		{
+			CARGODBG(2, "%s: Parsing option that has already been parsed\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 							fprint_flags,
 							2,
@@ -6391,14 +6405,28 @@ _TEST_START(TEST_cargo_fprintf)
 }
 _TEST_END()
 
-// TODO: Test cargo_get_fprint_args, cargo_get_fprintl_args
+_TEST_START(TEST_cargo_bool_count)
+{
+	int i;
+	char *args[] = { "program ", "-v", "-v", "-v" };
+
+	ret |= cargo_add_option_ex(cargo, CARGO_OPT_BOOL_COUNT,
+								"--verbose -v", LOREM_IPSUM, "b", &i);
+
+	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+
+	printf("i == %d\n", i);
+	cargo_assert(i == 3, "Expected i to be 3");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Refactor cargo_get_usage
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
 // TODO: Test autoclean with string of arrays
 // TODO: Test parsing option --alpha --beta, where --alpha should have an argument.
-// TODO: Add a help function to free argv.
-
 
 //
 // List of all test functions to run:
@@ -6487,7 +6515,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
 	CARGO_ADD_TEST(TEST_cargo_aapendf),
 	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
-	CARGO_ADD_TEST(TEST_cargo_fprintf)
+	CARGO_ADD_TEST(TEST_cargo_fprintf),
+	CARGO_ADD_TEST(TEST_cargo_bool_count)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

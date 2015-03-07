@@ -137,7 +137,8 @@ typedef enum cargo_option_flags_e
 {
 	CARGO_OPT_UNIQUE					= (1 << 0),
 	CARGO_OPT_REQUIRED					= (1 << 1),
-	CARGO_OPT_NOT_REQUIRED				= (1 << 2)
+	CARGO_OPT_NOT_REQUIRED				= (1 << 2),
+	CARGO_OPT_BOOL_COUNT				= (1 << 3)
 } cargo_option_flags_t;
 
 typedef enum cargo_mutex_group_flags_e
