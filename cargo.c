@@ -723,6 +723,7 @@ typedef struct cargo_s
 	const char *prefix;
 
 	char **unknown_opts;
+	int *unknown_opts_idxs;
 	size_t unknown_opts_count;
 
 	char **args;
@@ -2763,8 +2764,10 @@ static int _cargo_is_arg_negative_integer(const char *arg)
 
 static int _cargo_check_unknown_options(cargo_t ctx)
 {
+	int ret = -1;
 	size_t i;
 	cargo_opt_t *opt = NULL;
+	cargo_highlight_t *highlights = NULL;
 	cargo_astr_t str;
 	char *error = NULL;
 	const char *name = NULL;
@@ -2785,6 +2788,7 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 			{
 				CARGODBG(2, "    Unknown option: %s\n", arg);
 				ctx->unknown_opts[ctx->unknown_opts_count] = arg;
+				ctx->unknown_opts_idxs[ctx->unknown_opts_count] = ctx->i;
 				ctx->unknown_opts_count++;
 			}
 		}
@@ -2795,9 +2799,33 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 	if (ctx->unknown_opts_count > 0)
 	{
 		const char *suggestion = NULL;
+		char *s = NULL;
+		size_t fprint_flags =
+				(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		cargo_aappendf(&str, "Unknown options:\n");
+
+		if (!(highlights = calloc(ctx->unknown_opts_count,
+								sizeof(cargo_highlight_t))))
+		{
+			goto fail;
+		}
+
+		for (i = 0; i < ctx->unknown_opts_count; i++)
+		{
+			highlights[i].i = ctx->unknown_opts_idxs[i];
+			highlights[i].c = "~"CARGO_COLOR_RED;
+		}
+
+		if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
+			fprint_flags, ctx->unknown_opts_count, highlights)))
+		{
+			CARGODBG(1, "Out of memory\n");
+			goto fail;
+		}
+
+		cargo_aappendf(&str, "%s\n", s);
 
 		for (i = 0; i < ctx->unknown_opts_count; i++)
 		{
@@ -2808,11 +2836,20 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 			cargo_aappendf(&str, "\n");
 		}
 
+		free(highlights);
+		free(s);
 		_cargo_set_error(ctx, error);
 		return -1;
 	}
 
-	return 0;
+	ret = 0;
+
+fail:
+	// We failed to set the error...
+	if (error) free(error);
+	if (highlights) free(highlights);
+
+	return ret;
 }
 
 static void _cargo_parse_show_error(cargo_t ctx)
@@ -2949,6 +2986,12 @@ void cargo_destroy(cargo_t *ctx)
 
 		_cargo_free_str_list(&c->args, NULL);
 		_cargo_free_str_list(&c->unknown_opts, NULL);
+
+		if (c->unknown_opts_idxs)
+		{
+			free(c->unknown_opts_idxs);
+			c->unknown_opts_idxs = NULL;
+		}
 
 		if (c->error)
 		{
@@ -3293,6 +3336,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	ctx->arg_count = 0;
 
 	_cargo_free_str_list(&ctx->unknown_opts, NULL);
+	if (ctx->unknown_opts_idxs) free(ctx->unknown_opts_idxs);
 	ctx->unknown_opts_count = 0;
 
 	// Make sure we start over, if this function is
@@ -3308,6 +3352,12 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	if (!(ctx->unknown_opts_idxs = calloc(argc, sizeof(int))))
+	{
+		CARGODBG(1, "Out of memory");
 		goto fail;
 	}
 
