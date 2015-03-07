@@ -51,5 +51,6 @@ int main(int argc, char **argv)
 	if (sum_flag) accumulator = sum;
 	printf("%d\n", accumulator(integers, integer_count));
 	cargo_destroy(&cargo);
+	free(integers);
 	return 0;
 }
