@@ -1,4 +1,10 @@
 site_name: cargo
+repo_url: https://github.com/JoakimSoderberg/cargo
 pages:
-- [index.md, Home]
+- ['index.md', 'Introduction']
+- ['gettingstarted.md', 'User guide', 'Getting Started']
+- ['adding.md', 'User guide', 'Add options']
+- ['parsing.md', 'User guide', 'Parsing']
+- ['tutorial.md', 'Examples', 'Tutorial']
+- ['api.md', 'Reference', 'API reference']
 theme: readthedocs

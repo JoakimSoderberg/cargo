@@ -25,7 +25,7 @@ The main design principles:
 
  - **Simple API**:
    The API has been heavily inspired by how Python 
-   [argparse][arparse] and other dynamic languages.
+   [argparse][argparse] and other dynamic languages.
 
  - **Test suite**:
    The goal is keep a [90% test coverage][coveralls].

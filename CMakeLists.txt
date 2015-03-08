@@ -48,6 +48,16 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
+# Get cargo version from header.
+file(READ cargo.h HEADER_CONTENTS)
+foreach(VER MAJOR MINOR PATCH)
+	string(REGEX MATCH "define[ \t]+CARGO_${VER}_VERSION[ \t]+([0-9])" BLA ${HEADER_CONTENTS})
+	set(CARGO_${VER}_VERSION ${CMAKE_MATCH_1})
+endforeach()
+
+set(CARGO_VERSION ${CARGO_MAJOR_VERSION}.${CARGO_MINOR_VERSION}.${CARGO_PATCH_VERSION})
+message("Cargo version: ${CARGO__VERSION}")
+
 source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
 include_directories(${PROJECT_SOURCE_DIR})
