@@ -73,5 +73,5 @@ $ ctest           # Run the tests.
 [coverity_img]: https://scan.coverity.com/projects/3566/badge.svg
 [codeship]: https://codeship.com/projects/66740
 [codeship_img]: https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master
-[docs]: https://readthedocs.org/projects/cargo/?badge=latest
+[docs]: http://cargo.readthedocs.org/en/latest/
 [docs_img]: https://readthedocs.org/projects/cargo/badge/?version=latest
