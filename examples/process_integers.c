@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 	accumulator_f accumulator = max_ints;
 	int sum_flag = 0;
 
-	if (cargo_init(&cargo, argv[0]))
+	if (cargo_init(&cargo, 0, argv[0]))
 	{
 		fprintf(stderr, "Failed to init command line parsing\n");
 		return -1;
@@ -62,10 +62,10 @@ int main(int argc, char **argv)
 
 	cargo_set_description(cargo, "Process some integers.");
 
-	ret |= cargo_add_option(cargo,
-							"integers", "An integer for the accumulator",
+	ret |= cargo_add_option(cargo, 0, "integers",
+							"An integer for the accumulator",
 							"[i]+", &integers, &integer_count);
-	ret |= cargo_add_option(cargo, "--sum -s",
+	ret |= cargo_add_option(cargo, 0, "--sum -s",
 							"Sum the integers (default: find the max)",
 							"b", &sum_flag);
 	assert(ret == 0);

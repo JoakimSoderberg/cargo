@@ -1885,7 +1885,7 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 
 	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
-		if (cargo_add_option(ctx, "--help", "Show this help", "b", &ctx->help))
+		if (cargo_add_option(ctx, 0, "--help", "Show this help", "b", &ctx->help))
 		{
 			CARGODBG(1, "Failed to add --help\n");
 			return;
@@ -3039,7 +3039,7 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
-int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags)
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 {
 	cargo_s *c;
 	assert(ctx);
@@ -3061,11 +3061,6 @@ int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags)
 	cargo_add_group(c, 0, "", "", "");
 
 	return 0;
-}
-
-int cargo_init(cargo_t *ctx, const char *progname)
-{
-	return cargo_init_ex(ctx, progname, 0);
 }
 
 void cargo_destroy(cargo_t *ctx)
@@ -4001,7 +3996,7 @@ int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt
 				ctx->mutex_groups, ctx->mutex_group_count, group, opt);
 }
 
-int cargo_add_optionv_ex(cargo_t ctx, cargo_option_flags_t flags,
+int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 						 const char *optnames, const char *description,
 						 const char *fmt, va_list ap)
 {
@@ -4314,13 +4309,7 @@ fail:
 	return ret;
 }
 
-int cargo_add_optionv(cargo_t ctx, const char *optnames, 
-					  const char *description, const char *fmt, va_list ap)
-{
-	return cargo_add_optionv_ex(ctx, 0, optnames, description, fmt, ap);
-}
-
-int cargo_add_option_ex(cargo_t ctx, cargo_option_flags_t flags,
+int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 						const char *optnames, const char *description,
 						const char *fmt, ...)
 {
@@ -4329,21 +4318,7 @@ int cargo_add_option_ex(cargo_t ctx, cargo_option_flags_t flags,
 	assert(ctx);
 
 	va_start(ap, fmt);
-	ret = cargo_add_optionv_ex(ctx, flags, optnames, description, fmt, ap);
-	va_end(ap);
-
-	return ret;
-}
-
-int cargo_add_option(cargo_t ctx, const char *optnames,
-					 const char *description, const char *fmt, ...)
-{
-	int ret;
-	va_list ap;
-	assert(ctx);
-
-	va_start(ap, fmt);
-	ret = cargo_add_optionv(ctx, optnames, description, fmt, ap);
+	ret = cargo_add_optionv(ctx, flags, optnames, description, fmt, ap);
 	va_end(ap);
 
 	return ret;
@@ -4552,7 +4527,7 @@ static const char *_MAKE_TEST_FUNC_NAME(testname)		\
 	int ret = 0;										\
 	cargo_t cargo;										\
 														\
-	if (cargo_init_ex(&cargo, "program", flags))		\
+	if (cargo_init(&cargo, flags, "program"))			\
 	{													\
 		return "Failed to init cargo";					\
 	}
@@ -4589,7 +4564,7 @@ _TEST_START(TEST_no_args_bool_option)
 	char *args[] = { "program", "--alpha" };
 	int argc = sizeof(args) / sizeof(args[0]);
 
-	ret = cargo_add_option(cargo, "--alpha", "Description", "b", &a);
+	ret = cargo_add_option(cargo, 0, "--alpha", "Description", "b", &a);
 	cargo_assert(ret == 0, "Failed to add valid bool option");
 
 	if (cargo_parse(cargo, 1, argc, args))
@@ -4612,7 +4587,7 @@ _TEST_END()
 	{																		\
 		char *args[] = { "program", "--alpha", #value };					\
 		type a;																\
-		ret = cargo_add_option(cargo, "--alpha -a",							\
+		ret = cargo_add_option(cargo, 0, "--alpha -a",						\
 								"Description", 								\
 								fmt,										\
 								&a, ##__VA_ARGS__);							\
@@ -4638,7 +4613,7 @@ _TEST_START(TEST_add_static_string_option)
 {
 	char b[10];
 	char *args[] = { "program", "--beta", "abc" };
- 	ret = cargo_add_option(cargo, "--beta -b",
+ 	ret = cargo_add_option(cargo, 0, "--beta -b",
 							"Description", 
 							".s#",
 							&b, sizeof(b));
@@ -4659,7 +4634,7 @@ _TEST_START(TEST_add_alloc_string_option)
 {
 	char *b = NULL;
 	char *args[] = { "program", "--beta", "abc" };
- 	ret = cargo_add_option(cargo, "--beta -b",
+ 	ret = cargo_add_option(cargo, 0, "--beta -b",
 							"Description", 
 							"s",
 							&b);
@@ -4684,7 +4659,7 @@ _TEST_END()
 //
 #define _TEST_ARRAY_OPTION(array, array_size, args, argc, fmt, ...) 		 \
 {																			 \
- 	ret = cargo_add_option(cargo, "--beta -b", "Description",				 \
+ 	ret = cargo_add_option(cargo, 0, "--beta -b", "Description",				 \
  							fmt, ##__VA_ARGS__);							 \
 	cargo_assert(ret == 0,													 \
 		"Failed to add "#array"["#array_size"] array option");				 \
@@ -4875,7 +4850,7 @@ _TEST_START(TEST_add_alloc_dynamic_int_array_option_noargs)
 	char *args[] = { "program", "--beta" };
 	size_t count;
 
-	ret = cargo_add_option(cargo, "--beta -b", "Description", "[i]+",
+	ret = cargo_add_option(cargo, 0, "--beta -b", "Description", "[i]+",
 							&a, &count);
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -4899,7 +4874,7 @@ _TEST_START(TEST_print_usage)
 	int *vals = NULL;
 	size_t val_count = 0;
 
- 	ret |= cargo_add_option(cargo, "--alpha -a",
+ 	ret |= cargo_add_option(cargo, 0, "--alpha -a",
 			"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
 			"eiusmod tempor incididunt ut labore et dolore magna aliqua. "
 			"Ut enim ad minim veniam, quis nostrud exercitation ullamco "
@@ -4911,13 +4886,13 @@ _TEST_START(TEST_print_usage)
 			".[i]#",
 			&a, &a_count, sizeof(a) / sizeof(a[0]));
 
- 	ret |= cargo_add_option(cargo, "--beta -b",
+ 	ret |= cargo_add_option(cargo, 0, "--beta -b",
 			"Shorter description", 
 			"f",
 			&b);
 	ret |= cargo_set_metavar(cargo, "--beta", "FLOAT");
 
- 	ret |= cargo_add_option(cargo, "--call_this_a_long_option_that_wont_fit -c",
+ 	ret |= cargo_add_option(cargo, 0, "--call_this_a_long_option_that_wont_fit -c",
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
 			"accusantium doloremque laudantium, totam rem aperiam, eaque ipsa "
 			"quae ab illo inventore veritatis et quasi architecto beatae vitae "
@@ -4925,7 +4900,7 @@ _TEST_START(TEST_print_usage)
 			"d",
 			&c);
 
- 	ret |= cargo_add_option(cargo, "--shorter -s",
+ 	ret |= cargo_add_option(cargo, 0, "--shorter -s",
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
 			"accusantium doloremque laudantium, totam rem aperiam, eaque ipsa "
 			"quae ab illo inventore veritatis et quasi architecto beatae vitae "
@@ -4933,7 +4908,7 @@ _TEST_START(TEST_print_usage)
 			"s",
 			&s);
 
- 	ret |= cargo_add_option(cargo, "--vals -v",
+ 	ret |= cargo_add_option(cargo, 0, "--vals -v",
 			"Shorter description",
 			"[ i ]+",
 			&vals, &val_count);
@@ -4970,7 +4945,7 @@ _TEST_START(TEST_get_usage_settings)
 		{ CARGO_FORMAT_HIDE_DESCRIPTION,	{ EPILOG, OPT_TXT }, 2}
 	};
 
-	ret |= cargo_add_option(cargo, "--alpha -a", OPT_TXT, "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", OPT_TXT, "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_description(cargo, "Brown fox");
@@ -5006,7 +4981,7 @@ _TEST_START(TEST_autohelp_default)
 	int i;
 	const char *usage = NULL;
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
 	// Default is to automatically add --help option.
 	usage = cargo_get_usage(cargo);
@@ -5027,7 +5002,7 @@ _TEST_START(TEST_autohelp_off)
 
 	// Turn off auto_help (--help).
 	cargo_set_auto_help(cargo, 0);
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
 	usage = cargo_get_usage(cargo);
 	cargo_assert(usage != NULL, "Got NULL usage");
@@ -5041,20 +5016,20 @@ _TEST_START(TEST_autohelp_off)
 }
 _TEST_END()
 
-#define _ADD_TEST_USAGE_OPTIONS() 										\
-do 																		\
-{																		\
-	int *k;																\
-	size_t k_count;														\
-	int i;																\
-	float f;															\
-	int b;																\
-	ret |= cargo_add_option(cargo, "pos", "Positional arg", "[i]+",		\
-							&k, &k_count);								\
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);	\
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);		\
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);	\
-	cargo_assert(ret == 0, "Failed to add options");					\
+#define _ADD_TEST_USAGE_OPTIONS() 											\
+do 																			\
+{																			\
+	int *k;																	\
+	size_t k_count;															\
+	int i;																	\
+	float f;																\
+	int b;																	\
+	ret |= cargo_add_option(cargo, 0, "pos", "Positional arg", "[i]+",		\
+							&k, &k_count);									\
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);	\
+	ret |= cargo_add_option(cargo, 0, "--beta", "The alpha", "f", &f);		\
+	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);	\
+	cargo_assert(ret == 0, "Failed to add options");						\
 } while (0)
 
 _TEST_START(TEST_get_usage)
@@ -5078,9 +5053,9 @@ _TEST_START(TEST_misspelled_argument)
 	int b;
 	char *args[] = { "program", "--bota", "0.1" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta", "The alpha", "f", &f);
+	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, 3, args);
@@ -5097,9 +5072,9 @@ _TEST_START(TEST_max_option_count)
 
 	cargo_set_option_count_hint(cargo, 1);
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, "--crash -c", "The alpha", "b", &b);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta", "The alpha", "f", &f);
+	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);
 
 	cargo_assert(ret == 0, "Failed to add options");
 	_TEST_CLEANUP();
@@ -5110,9 +5085,9 @@ _TEST_START(TEST_add_duplicate_option)
 {
 	int i;
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret != 0, "Succesfully added duplicated, not allowed");
 
 	_TEST_CLEANUP();
@@ -5127,7 +5102,7 @@ _TEST_START(TEST_get_extra_args)
 	int i;
 	char *args[] = { "program", "-a", "1", "abc", "def", "ghi" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5153,7 +5128,7 @@ _TEST_START(TEST_get_unknown_opts)
 	int i;
 	char *args[] = { "program", "-a", "1", "-b", "-c", "3" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5237,8 +5212,8 @@ _TEST_START(TEST_parse_invalid_value)
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta", "a" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5278,10 +5253,10 @@ _TEST_START(TEST_parse_twice)
 	};
 	int args2_ports_expect[] = { 33, 34, 36 };
 
-	ret |= cargo_add_option(cargo, "--ports -p", "Ports", ".[i]#",
+	ret |= cargo_add_option(cargo, 0, "--ports -p", "Ports", ".[i]#",
 							&ports, &ports_count, PORTS_COUNT);
-	ret |= cargo_add_option(cargo, "--name -n", "Name", "s", &name);
-	ret |= cargo_add_option(cargo, "--vals -v", "Description of vals", "[s]+",
+	ret |= cargo_add_option(cargo, 0, "--name -n", "Name", "s", &name);
+	ret |= cargo_add_option(cargo, 0, "--vals -v", "Description of vals", "[s]+",
 							&vals, &vals_count);
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -5323,8 +5298,8 @@ _TEST_START(TEST_parse_missing_value)
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5341,8 +5316,8 @@ _TEST_START(TEST_parse_missing_array_value)
 	int j;
 	char *args[] = { "program", "--beta", "2", "--alpha", "1", "2" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
-	ret = cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5361,8 +5336,8 @@ _TEST_START(TEST_parse_missing_array_value_ensure_free)
 	size_t j_count;
 	char *args[] = { "program", "--beta", "2", "3", "--alpha", "1", "2" };
 
-	ret = cargo_add_option(cargo, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
-	ret = cargo_add_option(cargo, "--beta -b", "The beta", "[i]#", &j, &j_count, 2);
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "[i]#", &j, &j_count, 2);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5379,8 +5354,8 @@ _TEST_START(TEST_parse_same_option_twice)
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5398,8 +5373,8 @@ _TEST_START(TEST_parse_same_option_twice_string)
 	int i;
 	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5417,9 +5392,9 @@ _TEST_START(TEST_parse_same_option_twice_with_unique)
 	int j;
 	char *args[] = { "program", "--alpha", "1", "--beta", "4", "--alpha", "2" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_UNIQUE,
+	ret |= cargo_add_option(cargo, CARGO_OPT_UNIQUE,
 								"--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5437,9 +5412,9 @@ _TEST_START(TEST_parse_same_option_twice_string_with_unique)
 	int i;
 	char *args[] = { "program", "--alpha", "abc", "--beta", "4", "--alpha", "def" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_UNIQUE,
+	ret |= cargo_add_option(cargo, CARGO_OPT_UNIQUE,
 							"--alpha -a", "The alpha", "s", &s);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5522,8 +5497,8 @@ _TEST_START(TEST_positional_argument)
 	int j;
 	char *args[] = { "program", "--beta", "123", "456" };
 
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", "i", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "alpha", "The alpha", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5545,8 +5520,8 @@ _TEST_START(TEST_positional_array_argument)
 	size_t j_count = 0;
 	char *args[] = { "program", "--beta", "123", "456", "789", "101112" };
 
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#", &j, &j_count, 3);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "alpha", "The alpha", ".[i]#", &j, &j_count, 3);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5579,11 +5554,11 @@ _TEST_START(TEST_multiple_positional_array_argument)
 		"4.3", "2.3", "50.34"
 	};
 
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+	ret |= cargo_add_option(cargo, 0, "alpha", "The alpha", ".[i]#",
 							&j, &j_count, 3);
-	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", ".[f]#",
+	ret |= cargo_add_option(cargo, 0, "mad", "Mutual Assured Destruction", ".[f]#",
 							&m, &m_count, 3);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5625,11 +5600,11 @@ _TEST_START(TEST_multiple_positional_array_argument2)
 		"4.3", "2.3", "50.34"
 	};
 
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+	ret |= cargo_add_option(cargo, 0, "alpha", "The alpha", ".[i]#",
 							&j, &j_count, 3);
-	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", ".[f]#",
+	ret |= cargo_add_option(cargo, 0, "mad", "Mutual Assured Destruction", ".[f]#",
 							&m, &m_count, 3);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5672,11 +5647,11 @@ _TEST_START(TEST_multiple_positional_array_argument3)
 		"4.3", "2.3", "50.34", "0.99"
 	};
 
-	ret |= cargo_add_option(cargo, "alpha", "The alpha", ".[i]#",
+	ret |= cargo_add_option(cargo, 0, "alpha", "The alpha", ".[i]#",
 							&j, &j_count, 3);
-	ret |= cargo_add_option(cargo, "mad", "Mutual Assured Destruction", "[f]+",
+	ret |= cargo_add_option(cargo, 0, "mad", "Mutual Assured Destruction", "[f]+",
 							&m, &m_count);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5707,7 +5682,7 @@ _TEST_START_EX(TEST_autoclean_flag, CARGO_AUTOCLEAN)
 	char *s = NULL;
 	char *args[] = { "program", "--alpha", "abc" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "s", &s);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5728,7 +5703,7 @@ _TEST_START_EX(TEST_autoclean_flag_off, 0)
 	char *s = NULL;
 	char *args[] = { "program", "--alpha", "abc" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "s", &s);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "s", &s);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5753,8 +5728,8 @@ _TEST_START(TEST_parse_zero_or_more_with_args)
 	cargo_get_flags(cargo);
 	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5773,8 +5748,8 @@ _TEST_START(TEST_parse_zero_or_more_without_args)
 	int j;
 	char *args[] = { "program", "--beta", "2", "--alpha" };
 
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5802,9 +5777,9 @@ _TEST_START(TEST_parse_zero_or_more_with_positional)
 	cargo_get_flags(cargo);
 	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
 
-	ret |= cargo_add_option(cargo, "pos", "The positional", "[i]*", &pos, &pos_count);
-	ret |= cargo_add_option(cargo, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "[i]*", &j, &j_count);
+	ret |= cargo_add_option(cargo, 0, "pos", "The positional", "[i]*", &pos, &pos_count);
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "[i]*", &j, &j_count);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5824,9 +5799,9 @@ _TEST_START(TEST_required_option_missing)
 	int j;
 	char *args[] = { "program", "--beta", "123", "456" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_REQUIRED,
+	ret |= cargo_add_option(cargo, CARGO_OPT_REQUIRED,
 							"--alpha", "The alpha", "i", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5842,9 +5817,9 @@ _TEST_START(TEST_required_option)
 	int j;
 	char *args[] = { "program", "--beta", "123", "456", "--alpha", "789" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_REQUIRED,
+	ret |= cargo_add_option(cargo, CARGO_OPT_REQUIRED,
 							"--alpha", "The alpha", "i", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5890,7 +5865,7 @@ _TEST_START(TEST_custom_callback)
 
 	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "c", _test_cb, &data);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "c", _test_cb, &data);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -5941,7 +5916,7 @@ _TEST_START(TEST_custom_callback_fixed_array)
 
 	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "[c]#",
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "[c]#",
 							_test_cb_fixed_array, &data, &data_count, DATA_COUNT);
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -6006,7 +5981,7 @@ _TEST_START(TEST_custom_callback_array)
 
 	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "[c]*",
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "[c]*",
 							_test_cb_array, &data, &data_count, DATA_COUNT);
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -6034,8 +6009,8 @@ _TEST_START(TEST_zero_or_more_with_arg)
 	int j = 0;
 	char *args[] = { "program", "--alpha", "789", "--beta", "123", "456" };
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -6052,8 +6027,8 @@ _TEST_START(TEST_zero_or_more_without_arg)
 	int j = 5;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -6084,11 +6059,11 @@ _TEST_START(TEST_group)
 	cargo_assert(ret == 0, "Failed to add group");
 
 	// Add options to the group using inline method.
-	ret |= cargo_add_option(cargo, "   <group1> --alpha", "The alpha", "i?", &j);
-	ret |= cargo_add_option(cargo, "<group1> --beta -b", LOREM_IPSUM, "i", &i);
+	ret |= cargo_add_option(cargo, 0, "   <group1> --alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "<group1> --beta -b", LOREM_IPSUM, "i", &i);
 
 	// Try using the API to add the option to the group.
-	ret |= cargo_add_option(cargo, "--centauri", "The alpha centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The alpha centauri", "i?", &k);
 	ret |= cargo_group_add_option(cargo, "group1", "--centauri");
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -6123,7 +6098,7 @@ _TEST_START(TEST_many_groups)
 		for (j = 0; j < GROUP_OPT_COUNT; j++)
 		{
 			cargo_snprintf(optname, sizeof(optname), "--optg%02do%02d", i+1, j+1);
-			ret |= cargo_add_option(cargo, optname, LOREM_IPSUM, "i", &vals[i][j]);
+			ret |= cargo_add_option(cargo, 0, optname, LOREM_IPSUM, "i", &vals[i][j]);
 			ret |= cargo_group_add_option(cargo, grpname, optname);
 			cargo_assert(ret == 0, "Failed to add option");
 		}	
@@ -6152,13 +6127,13 @@ _TEST_START(TEST_mutex_group_guard)
 	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
 
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
 
-	ret |= cargo_add_option(cargo, "--centauri", "The centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--centauri");
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -6182,14 +6157,14 @@ _TEST_START(TEST_mutex_group_require_one)
 								"mutex_group1");
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
-	ret |= cargo_add_option(cargo, "--alpha", "The alpha", "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i", &j);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
 
-	ret |= cargo_add_option(cargo, "--beta -b", "The beta", "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
 
 	// Don't add this to te mutex group.
-	ret |= cargo_add_option(cargo, "--centauri", "The centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	// We parse args with no members of the mutex group.
@@ -6265,8 +6240,8 @@ _TEST_START(TEST_cargo_set_max_width)
 	const char *usage = NULL;
 	char *args[] = { "program", "--alpha", "789", "--beta", "123" };
 
-	ret |= cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
-	ret |= cargo_add_option(cargo, "--beta -b", LOREM_IPSUM, "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM, "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", LOREM_IPSUM, "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_max_width(cargo, 40);
@@ -6309,13 +6284,13 @@ _TEST_START(TEST_cargo_set_prefix)
 
 	cargo_set_prefix(cargo, "+");
 
-	ret = cargo_add_option(cargo, "--alpha", LOREM_IPSUM, "i", &j);
+	ret = cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM, "i", &j);
 	cargo_assert(ret != 0, "Succesfully added argument with invalid prefix");
 
-	ret = cargo_add_option(cargo, "centauri c", LOREM_IPSUM, "i", &k);
+	ret = cargo_add_option(cargo, 0, "centauri c", LOREM_IPSUM, "i", &k);
 	cargo_assert(ret != 0, "Expected positional argument to reject alias");
 
-	ret = cargo_add_option(cargo, "++beta +b", LOREM_IPSUM, "i", &i);
+	ret = cargo_add_option(cargo, 0, "++beta +b", LOREM_IPSUM, "i", &i);
 	cargo_assert(ret == 0, "Failed to add option with valid prefix '+'");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -6492,7 +6467,7 @@ _TEST_START(TEST_cargo_bool_count)
 	int i = 0;
 	char *args[] = { "program ", "123", "-v", "3", "-v", "-v" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_BOOL_COUNT,
+	ret |= cargo_add_option(cargo, CARGO_OPT_BOOL_COUNT,
 								"--verbose -v", LOREM_IPSUM, "b", &i);
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -6510,7 +6485,7 @@ _TEST_START(TEST_cargo_bool_count_compact)
 	int i = 0;
 	char *args[] = { "program ", "-vvv", "123", "-vv" };
 
-	ret |= cargo_add_option_ex(cargo, CARGO_OPT_BOOL_COUNT,
+	ret |= cargo_add_option(cargo, CARGO_OPT_BOOL_COUNT,
 								"--verbose -v", LOREM_IPSUM, "b", &i);
 
 	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
@@ -6992,7 +6967,7 @@ int main(int argc, char **argv)
 	{
 		for (i = 0; i < type_count; i++)
 		{
-			printf("cargo_add_option(cargo, \"--%s", varname);
+			printf("cargo_add_option(cargo, 0, \"--%s", varname);
 			if (strlen(varname) > 1) printf(" -%c", varname[0]);
 			printf("\", \"Description of %s\", \"", varname);
 
@@ -7068,7 +7043,7 @@ int main(int argc, char **argv)
 	int ret = 0;
 	cargo_t cargo;
 
-	cargo_init(&cargo, argv[0]);
+	cargo_init(&cargo, 0, argv[0]);
 
 	// TODO: Make a real example.
 

@@ -172,9 +172,7 @@ typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
 // Functions.
 //
 
-int cargo_init_ex(cargo_t *ctx, const char *progname, cargo_flags_t flags);
-
-int cargo_init(cargo_t *ctx, const char *progname);
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname);
 
 void cargo_destroy(cargo_t *ctx);
 
@@ -182,20 +180,14 @@ void cargo_set_flags(cargo_t ctx, cargo_flags_t flags);
 
 cargo_flags_t cargo_get_flags(cargo_t ctx);
 
-int cargo_add_optionv_ex(cargo_t ctx, cargo_option_flags_t flags,
+int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 					  const char *optnames, 
 					  const char *description,
 					  const char *fmt, va_list ap);
 
-int cargo_add_optionv(cargo_t ctx, const char *optnames, 
-					  const char *description, const char *fmt, va_list ap);
-
-int cargo_add_option_ex(cargo_t ctx, cargo_option_flags_t flags,
+int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 					const char *optnames, const char *description,
 					const char *fmt, ...);
-
-int cargo_add_option(cargo_t ctx, const char *optnames,
-					 const char *description, const char *fmt, ...);
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
