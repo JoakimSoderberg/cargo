@@ -1,5 +1,5 @@
-Setup
-=====
+Using cargo API
+===============
 
 The first thing you need to do is to setup a cargo instance. This is done
 by declaring a `cargo_t` struct. Note that this struct is opaque and meant to
@@ -186,7 +186,8 @@ assert(ret == 0);
 **Note:** A call to `cargo_add_option` should never fail. If it fails, either 
       there is a bug in your code, the system is out of memory, or there is a
       bug in cargo itself. For this reason it is good to always `assert` that
-      the return value is `0`. See [getting started](gettingstarted.md) for more
+      the return value is `0`.
+      See [getting started](gettingstarted.md#debugging-cargo) for more
       information about debugging.
 ********************************************************************************
 
@@ -257,4 +258,8 @@ cargo_add_option(cargo, "--strs -s", "Description of strs", "[s]#",
 cargo_add_option(cargo, "--strs -s", "Description of strs", "[s]+",
                  &strs, &strs_count); // Allocated unlimited length.
 ```
+
+
+
+
 
