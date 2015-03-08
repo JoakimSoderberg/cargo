@@ -1,13 +1,14 @@
-[![Travis CI build status (Linux)](https://travis-ci.org/JoakimSoderberg/cargo.svg)](https://travis-ci.org/JoakimSoderberg/cargo)
-[![Appveyor Build status (Windows)](https://ci.appveyor.com/api/projects/status/hia4q08852puktpf?svg=true)](https://ci.appveyor.com/project/JoakimSoderberg/cargo)
-[![drone.io Build Status (verbose)](https://drone.io/github.com/JoakimSoderberg/cargo/status.png)](https://drone.io/github.com/JoakimSoderberg/cargo/latest)
-[![Circle CI](https://circleci.com/gh/JoakimSoderberg/cargo.svg?style=svg)](https://circleci.com/gh/JoakimSoderberg/cargo)
-[![Semaphore Build Status](https://semaphoreapp.com/api/v1/projects/22d61980-73d0-45bc-ba6c-3ed6c1ebadf5/366031/shields_badge.svg)](https://semaphoreapp.com/joakimsoderberg/cargo)
-[![Shippable Build Status](https://api.shippable.com/projects/54f8944b5ab6cc1352934eed/badge?branchName=master)](https://app.shippable.com/projects/54f8944b5ab6cc1352934eed/builds/latest)
-[![Solano build status](https://ci.solanolabs.com:443/JoakimSoderberg/cargo/badges/193238.png)](https://ci.solanolabs.com:443/JoakimSoderberg/cargo/suites/193238)
-[![Coverage Status](https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg)](https://coveralls.io/r/JoakimSoderberg/cargo)
-[![Coverity Statical Analysis Status](https://scan.coverity.com/projects/3566/badge.svg)](https://scan.coverity.com/projects/3566)
-[![Codeship Status for JoakimSoderberg/cargo](https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master)](https://codeship.com/projects/66740)
+[![Travis CI build status (Linux)][travis_img]][travis]
+[![Appveyor Build status (Windows)][appveyor_img]][appveyor]
+[![drone.io Build Status (verbose)][droneio_img]][droneio]
+[![Circle CI][circleci_img]][circleci]
+[![Semaphore Build Status][semaphore_img]][semaphore]
+[![Shippable Build Status][shippable_img]][shippable]
+[![Solano build status][solano_img]][solano]
+[![Coverage Status][coveralls_img]][coveralls]
+[![Coverity Statical Analysis Status][coverity_img]][coverity]
+[![Codeship Status for JoakimSoderberg/cargo][codeship_img]][codeship]
+[![Documentation Status][docs_img]][docs]
 
 cargo
 =====
@@ -51,3 +52,26 @@ $ cmake ..        # Add -DCARGO_DEBUG=<level> for debugging output.
 $ cmake --build . # You can use 'make' also, but not with Visual Studio.
 $ ctest           # Run the tests.
 ```
+
+[travis]: https://travis-ci.org/JoakimSoderberg/cargo
+[travis_img]: https://travis-ci.org/JoakimSoderberg/cargo.svg
+[appveyor]: https://ci.appveyor.com/project/JoakimSoderberg/cargo
+[appveyor_img]: https://ci.appveyor.com/api/projects/status/hia4q08852puktpf?svg=true
+[droneio]: https://drone.io/github.com/JoakimSoderberg/cargo/latest
+[droneio_img]: https://drone.io/github.com/JoakimSoderberg/cargo/status.png
+[circleci]: https://circleci.com/gh/JoakimSoderberg/cargo
+[circleci_img]: https://circleci.com/gh/JoakimSoderberg/cargo.svg?style=svg 
+[semaphore]: https://semaphoreapp.com/joakimsoderberg/cargo
+[semaphore_img]: https://semaphoreapp.com/api/v1/projects/22d61980-73d0-45bc-ba6c-3ed6c1ebadf5/366031/shields_badge.svg
+[shippable]: https://app.shippable.com/projects/54f8944b5ab6cc1352934eed/builds/latest
+[shippable_img]: https://api.shippable.com/projects/54f8944b5ab6cc1352934eed/badge?branchName=master
+[solano]: https://ci.solanolabs.com:443/JoakimSoderberg/cargo/suites/193238
+[solano_img]: https://ci.solanolabs.com:443/JoakimSoderberg/cargo/badges/193238.png
+[coveralls]: https://coveralls.io/r/JoakimSoderberg/cargo
+[coveralls_img]: https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg
+[coverity]: https://scan.coverity.com/projects/3566
+[coverity_img]: https://scan.coverity.com/projects/3566/badge.svg
+[codeship]: https://codeship.com/projects/66740
+[codeship_img]: https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master
+[docs]: https://readthedocs.org/projects/cargo/?badge=latest
+[docs_img]: https://readthedocs.org/projects/cargo/badge/?version=latest
