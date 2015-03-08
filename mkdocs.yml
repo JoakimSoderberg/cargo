@@ -1,0 +1,4 @@
+site_name: cargo
+pages:
+- [index.md, Home]
+theme: readthedocs
