@@ -729,7 +729,6 @@ typedef struct cargo_s
 	char **argv;
 	int start;
 
-	int add_help;
 	int help;
 
 	cargo_group_t *groups;
@@ -1883,7 +1882,8 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 {
 	assert(ctx);
 
-	if (ctx->add_help && _cargo_find_option_name(ctx, "--help", NULL, NULL))
+	if (!(ctx->flags & CARGO_NO_AUTOHELP)
+		&& _cargo_find_option_name(ctx, "--help", NULL, NULL))
 	{
 		if (cargo_add_option(ctx, 0, "--help", "Show this help", "b", &ctx->help))
 		{
@@ -2972,25 +2972,24 @@ fail:
 
 static void _cargo_parse_show_error(cargo_t ctx)
 {
+	FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
 	assert(ctx);
+
+	if (!(ctx->flags & CARGO_NOERR_USAGE))
+	{
+		if (ctx->flags & CARGO_ERR_LONG_USAGE)
+		{
+			cargo_fprint_usage(ctx, fd);
+		}
+		else
+		{
+			cargo_fprint_short_usage(ctx, fd);
+		}
+	}
 
 	// Show errors automatically?
 	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
 	{
-		FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
-
-		if (!(ctx->flags & CARGO_NOERR_USAGE))
-		{
-			if (ctx->flags & CARGO_ERR_LONG_USAGE)
-			{
-				cargo_fprint_usage(ctx, fd);
-			}
-			else
-			{
-				cargo_fprint_short_usage(ctx, fd);
-			}
-		}
-
 		fprintf(fd, "%s\n", ctx->error);
 	}
 }
@@ -3053,7 +3052,6 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 	c->max_opts = CARGO_DEFAULT_MAX_OPTS;
 	c->flags = flags;
 	c->progname = progname;
-	c->add_help = 1;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
 
@@ -3132,7 +3130,6 @@ void cargo_destroy(cargo_t *ctx)
 void cargo_set_flags(cargo_t ctx, cargo_flags_t flags)
 {
 	assert(ctx);
-	// TODO: Hmm, are there flags we should only be allowed to set in init?
 	ctx->flags = flags;
 }
 
@@ -3165,12 +3162,6 @@ void cargo_set_epilog(cargo_t ctx, const char *epilog)
 {
 	assert(ctx);
 	ctx->epilog = epilog;
-}
-
-void cargo_set_auto_help(cargo_t ctx, int auto_help)
-{
-	assert(ctx);
-	ctx->add_help = auto_help;
 }
 
 void cargo_set_format(cargo_t ctx, cargo_format_t format)
@@ -5001,7 +4992,7 @@ _TEST_START(TEST_autohelp_off)
 	const char *usage = NULL;
 
 	// Turn off auto_help (--help).
-	cargo_set_auto_help(cargo, 0);
+	cargo_set_flags(cargo, CARGO_NO_AUTOHELP);
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
 	usage = cargo_get_usage(cargo);

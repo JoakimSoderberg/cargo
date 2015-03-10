@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 	accumulator_f accumulator = max_ints;
 	int sum_flag = 0;
 
-	if (cargo_init(&cargo, 0, argv[0]))
+	if (cargo_init(&cargo, CARGO_ERR_LONG_USAGE, argv[0]))
 	{
 		fprintf(stderr, "Failed to init command line parsing\n");
 		return -1;

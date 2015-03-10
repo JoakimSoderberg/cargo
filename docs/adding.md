@@ -1,10 +1,11 @@
-Using cargo API
-===============
+Initializing cargo
+==================
 
 The first thing you need to do is to setup a cargo instance. This is done
-by declaring a `cargo_t` struct. Note that this struct is opaque and meant to
-only be manipulated using the cargo API. This instance will be referred to as
-the **context** in the rest of this documentation.
+by declaring a [`cargo_t`](api.md#cargo_t) struct. Note that this struct is
+opaque and meant to only be manipulated using the cargo API.
+This instance will be referred to as the **context** in the rest of this
+documentation.
 
 You should always check the return value of any cargo API call.
 
@@ -16,21 +17,22 @@ int main(int argc, char **argv)
 }
 ```
 
-Before you can use this instance you need to initialize it using `cargo_init`.
+Before you can use this instance you need to initialize it using
+[`cargo_init`](api.md#cargo_init).
 
 ```c
-int cargo_init(cargo_t *ctx, const char *progname); 
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname); 
 ```
 
 The `progname` is the program name you want cargo to display in usage
 information and such. In most cases this will be `argv[0]`.
 
 ```c
-cargo_init(&cargo, argv[0]);
+cargo_init(&cargo, 0, argv[0]);
 ```
 
 Similarly when you are done using cargo you need to free up any resources used
-by cargo via the `cargo_destroy` api call.
+by cargo via the [`cargo_destroy`](api.md#cargo_destroy) api call.
 
 ```c
 void cargo_destroy(cargo_t *ctx);
@@ -50,7 +52,7 @@ int main(int argc, char **argv)
 {
     cargo_t cargo; // The cargo context instance.
 
-    if (cargo_init(&cargo, argv[0]))
+    if (cargo_init(&cargo, 0, argv[0]))
     {
         return -1;
     }
@@ -67,32 +69,44 @@ Adding options
 The entire point of cargo is that you give it a set of options that it should
 look for when parsing a given set of commandline arguments.
 
-To do this you use the `cargo_add_option` function. As you can see the function
-takes a variable set of arguments just like `printf`, what these arguments
-contain depends on the contents of the `fmt` string.
+To do this you use the [`cargo_add_option`](api.md#cargo_add_option) function.
+As you can see the function takes a variable set of arguments just like
+`printf`, what these arguments contain depends on the contents of the
+`fmt` string.
 
 ```c
-int cargo_add_option(cargo_t ctx, const char *optnames,
-                     const char *description, const char *fmt, ...);
+int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
+                     const char *optnames, const char *description,
+                     const char *fmt, ...);
 ```
 
-**Context**
+### Context
 
-As with all of the cargo API it takes a `cargo_t` context instance as the
-first argument.
+As with all of the cargo API it takes a [`cargo_t`](api.md#cargo_t) context
+instance as the first argument.
 
-**Option names**
+### Flags
+
+The option `flags` let you set some specific flags for the option, such as
+it being required [`CARGO_OPT_REQUIRED`](api.md#CARGO_OPT_REQUIRED), or the
+opposite for *positional* arguments
+[`CARGO_OPT_NOT_REQUIRED`](api.md#CARGO_OPT_NOT_REQUIRED). See the
+[API reference](api.md#cargo_option_flags_t) for details.
+
+### Option names
 
 The `optnames` argument specifies the command line option name, for instance
 `"--myoption"`. You can also pass a set of aliases to this option, like this
-`"--myoption -m"`. You can add up to `CARGO_NAME_COUNT` (which defaults to 4)
+`"--myoption -m"`. You can add up to
+[`CARGO_NAME_COUNT`](api.md#CARGO_NAME_COUNT) (which defaults to 4)
 option names/aliases to an option, see [getting started](gettingstarted.md)
 for details on how to raise this if needed.
 
 In the examples above the `'-'` character is referred to as the
 option **prefix**, in this example we use the default character as specified
-by `CARGO_DEFAULT_PREFIX`. However if you want to support another prefix
-character you can change it using `cargo_set_prefix`. It is possible to specify
+by [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX). However if you want
+to support another prefix character you can change it using
+[`cargo_set_prefix`](api.md#cargo_set_prefix). It is possible to specify
 multiple prefix characters.
 
 Adding an option that doesn't start with a prefix character will make it a
@@ -103,14 +117,14 @@ By default all *options* are **optional** and all *positional* arguments are
 **required**. It is possible to make either of these required/optional
 see the [API reference](api.md) for details.
 
-**Description**
+### Description
 
 The `description` is self explanatory. Note that this will be automatically
 formatted unless you explicitly set it not to via the 
-`CARGO_FORMAT_RAW_OPT_DESCRIPTION` flag. More on that in the
-[API reference](api.md)
+[`CARGO_FORMAT_RAW_OPT_DESCRIPTION`](api.md#CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+flag. More on that in the [API reference](api.md#cargo_format_t)
 
-**Format**
+### Format
 
 Here is where you specify what this cargo option should look for when parsing
 the commandline arguments it is passed. The function takes a variable set of
@@ -124,12 +138,13 @@ See [getting started](gettingstarted.md) on how to compile this.
 For a full description of the formatting language, please see the
 [API reference](api.md).
 
-Here's an example of using `cargo_add_option` to parse an integer:
+Here's an example of using [`cargo_add_option`](api.md#cargo_add_option)
+to parse an integer:
 
 ```c
 int integer = 5; // Default value should be 5.
 ...
-ret = cargo_add_option(cargo, "--integer -i", "An integer", "i", &integer);
+ret = cargo_add_option(cargo, 0, "--integer -i", "An integer", "i", &integer);
 assert(ret == 0); // This should never happen. Must be a bug!
 ```
 
@@ -147,12 +162,13 @@ The default behaviour is to allocate the list of items.
 int *integers;
 size_t integer_count;
 ...
-ret = cargo_add_option(cargo, "--integers -i", "Integers", "[i]+",
+ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]+",
                        &integers, &integer_count);
 assert(ret == 0);
 ```
 
-Other options instead of using `+` is `*` and `#`.
+Other options instead of using [`+`](api.md#plus) is [`*`](api.md#star) and
+[`#`](api.md#hash).
 
 `*` works the same as `+` and means **zero or more** items.
 `#` means that we should parse a fixed amount of items. To do this we must
@@ -162,34 +178,43 @@ specify the max number of items as an argument as well, in this example `4`:
 int *integers;
 size_t integer_count;
 ...
-ret = cargo_add_option(cargo, "--integers -i", "Integers", "[i]#",
+ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]#",
                        &integers, &integer_count, 4);
 assert(ret == 0);
 ```
 
-When parsing using both `*` and `+` the default behaviour of allocating the
-list on the heap makes sense. However, when you parse a list of a known size
-you often want to allocate it statically. To do this, you prepend the format
-string with a `.`. So for example to parse the same `4` integers into a fixed
+When parsing using both [`*`](api.md#star) and [`+`](api.md#plus) the default
+behaviour of allocating the list on the heap makes sense. However, when you
+parse a list of a known size you often want to allocate it statically.
+To do this, you prepend the format string with a [`.`](api.md#.). So for example
+to parse the same `4` integers into a fixed
 size array:
 
 ```c
 int integers[4]; // Fixed size.
 size_t integer_count;
 ...
-ret = cargo_add_option(cargo, "--integers -i", "Integers", ".[i]#", // Added dot
+ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", ".[i]#", // Dot
                        &integers, &integer_count, 4);
 assert(ret == 0);
 ```
 
 ********************************************************************************
-**Note:** A call to `cargo_add_option` should never fail. If it fails, either 
-      there is a bug in your code, the system is out of memory, or there is a
-      bug in cargo itself. For this reason it is good to always `assert` that
-      the return value is `0`.
+**Note:** A call to [`cargo_add_option`](api.md#cargo_add_option) should never
+      fail. If it fails, either there is a bug in your code, the system is out
+      of memory, or there is a bug in cargo itself. For this reason it is good
+      to always `assert` that the return value is `0`.
       See [getting started](gettingstarted.md#debugging-cargo) for more
       information about debugging.
 ********************************************************************************
+
+Automatic --help option
+-----------------------
+People in need wants `--help`, so by default cargo will create this option for
+you. If you for some reason hate helping people you can turn this behaviour
+off by passing [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) to
+[`cargo_init`](api.md#cargo_init)
+
 
 Help with format strings
 ------------------------
@@ -213,9 +238,9 @@ So let's use our earlier example with a list of integers, we simply pass
 $ bin/cargo_helper "int *integers"
 int *integers;
 size_t integers_count;
-cargo_add_option(cargo, "--integers -i", "Description of integers", "[i]#",
+cargo_add_option(cargo, 0, "--integers -i", "Description of integers", "[i]#",
         &integers, &integers_count, 128); // Allocated with max length 128.
-cargo_add_option(cargo, "--integers -i", "Description of integers", "[i]+",
+cargo_add_option(cargo, 0, "--integers -i", "Description of integers", "[i]+",
         &integers, &integers_count); // Allocated unlimited length.
 ```
 
@@ -225,7 +250,7 @@ Or with a fixed array of `4` integers:
 bin/cargo_helper "int integers[4]"
 int integers[4];
 size_t integers_count;
-cargo_add_option(cargo, "--integers -i", "Description of integers", ".[i]#",
+cargo_add_option(cargo, 0, "--integers -i", "Description of integers", ".[i]#",
                  &integers, &integers_count, 4);
 ```
 
@@ -236,7 +261,7 @@ An allocated string:
 ```bash
 $ bin/cargo_helper "char *str"
 char *str;
-cargo_add_option(cargo, "--str -s", "Description of str", "s", &str);
+cargo_add_option(cargo, 0, "--str -s", "Description of str", "s", &str);
 ```
 
 A fixed size string:
@@ -244,7 +269,7 @@ A fixed size string:
 ```bash
 $ bin/cargo_helper "char str[32]"
 char str[32];
-cargo_add_option(cargo, "--str -s", "Description of str", ".s", &str, 32);
+cargo_add_option(cargo, 0, "--str -s", "Description of str", ".s", &str, 32);
 ```
 
 A list of strings:
@@ -253,9 +278,9 @@ A list of strings:
 $ bin/cargo_helper "char **strs"
 char **strs;
 size_t strs_count;
-cargo_add_option(cargo, "--strs -s", "Description of strs", "[s]#",
+cargo_add_option(cargo, 0, "--strs -s", "Description of strs", "[s]#",
                  &strs, &strs_count, 128); // Allocated with max length 128.
-cargo_add_option(cargo, "--strs -s", "Description of strs", "[s]+",
+cargo_add_option(cargo, 0, "--strs -s", "Description of strs", "[s]+",
                  &strs, &strs_count); // Allocated unlimited length.
 ```
 
