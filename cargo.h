@@ -192,6 +192,8 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
+// TODO: Enable setting group flags after this? Group hide doesn't make much
+// sense otherwise...
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
 

@@ -3799,6 +3799,7 @@ const char *cargo_get_usage(cargo_t ctx)
 	// TODO: Let's be more strict here and use the exact padding instead.
 	usagelen = (int)(usagelen * 2.5);
 
+	// TODO: Redo this with cargo_astr_t instead...
 	// Allocate the final buffer.
 	if (!(b = malloc(usagelen)))
 	{
@@ -3812,6 +3813,7 @@ const char *cargo_get_usage(cargo_t ctx)
 
 	cargo_appendf(&str, "%s\n", short_usage);
 
+	// TODO: Line breaks for description!
 	if(ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
 		if (cargo_appendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
@@ -3847,6 +3849,7 @@ const char *cargo_get_usage(cargo_t ctx)
 			indent = 2;
 		}
 
+		// TODO: Fix line break for descriptions as well!
 		if (!is_default_group) cargo_appendf(&str, "\n%s:\n", grp->title);
 		if (grp->description && strlen(grp->description))
 			cargo_appendf(&str, "%*s%s\n", indent, " ", grp->description);

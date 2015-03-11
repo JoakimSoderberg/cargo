@@ -65,7 +65,7 @@ int main(int argc, char **argv)
 ```
 
 Adding options
---------------
+==============
 The entire point of cargo is that you give it a set of options that it should
 look for when parsing a given set of commandline arguments.
 
@@ -208,16 +208,82 @@ assert(ret == 0);
       information about debugging.
 ********************************************************************************
 
+Option aliases
+==============
+As seen in the examples below, when calling
+[`cargo_add_option`](api.md#cargo_add_option) you usually pass any aliases with
+the option name, for example: `"--integers -i"`.
+
+It is also possible to do this via a separate function call to
+[`cargo_add_alias`](api.md#cargo_add_alias):
+
+```c
+int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
+```
+
 Automatic --help option
------------------------
+=======================
 People in need wants `--help`, so by default cargo will create this option for
 you. If you for some reason hate helping people you can turn this behaviour
 off by passing [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) to
 [`cargo_init`](api.md#cargo_init)
 
+Groups
+======
+It is possible to tell cargo to group your options when printing usage, these
+groups can have a title and a description, and any options in them are displayed
+together. If an option doesn't have a group it is put in the default group
+that has no name which is displayed first.
+
+To create a group you use [`cargo_add_group`](api.md#cargo_add_group):
+
+```c
+int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
+                    const char *title, const char *description);
+```
+
+The only argument that is required is the `name`.
+If no `title` is given, the `name` is used instead. Also the `description`
+is optional.
+
+Add options to groups
+---------------------
+You can add options to a group in two ways. The first is using the 
+[`cargo_group_add_option`](api.md#cargo_group_add_option) function.
+
+```c
+int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
+```
+
+This function simply takes a `group` name, as well as an `opt`ion name.
+
+The other way to add an option to a group is to do it directly in the
+[`cargo_add_option`](api.md#cargo_add_option) call by prepending the group
+name enclodes in brackets, like this: `"<group1> --integers -i"`
+
+Here's an example of both methods:
+
+```c
+ret = cargo_add_option(cargo, 0, "<group1> --integers -i", 
+                       "Integers", "[i]+",
+                       &integers, &integer_count);
+```
+
+or with a separate function call:
+
+```c
+ret = cargo_add_option(cargo, 0, "--integers -i", 
+                       "Integers", "[i]+",
+                       &integers, &integer_count);
+
+ret |= cargo_group_add_option(cargo, "group1", "--integers");
+```
+
+Mutually exclusive groups
+=========================
 
 Help with format strings
-------------------------
+========================
 Ok, so you got the basics down on how to parse some integers for an option.
 However, learning some new formatting language kind of sucks.
 
