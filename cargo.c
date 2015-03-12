@@ -2667,7 +2667,7 @@ static int _cargo_add_group(cargo_t ctx,
 		}
 	}
 
-	if (grp->description)
+	if (description)
 	{
 		if (!(grp->description = strdup(description)))
 		{
@@ -3850,7 +3850,8 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 		cargo_aappendf(&str, "%s\n", short_usage);
 	}
 
-	if(ctx->description && !(flags & CARGO_FORMAT_HIDE_DESCRIPTION))
+	if(ctx->description && strlen(ctx->description)
+	   && !(flags & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
 		if (flags & CARGO_FORMAT_RAW_DESCRIPTION)
 		{
@@ -4078,8 +4079,10 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			goto fail;
 		}
 	}
-
-	o->group_index = -1;
+	else
+	{
+		o->group_index = -1;
+	}
 
 	// Start parsing the format string.
 	_cargo_fmt_scanner_init(&s, fmt);
