@@ -1028,7 +1028,7 @@ static void _cargo_free_str_list(char ***s, size_t *count)
 {
 	size_t i;
 
-	if (!s || !*s)
+	if (!s)
 		goto done;
 
 	// Only free elements if we have a count.
