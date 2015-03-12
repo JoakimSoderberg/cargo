@@ -2255,6 +2255,7 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	size_t i;
 	int ret;
 	cargo_astr_t opt_str;
+	size_t prev_offset = 0;
 	char *opt_s = NULL;
 	assert(ctx);
 	assert(str);
@@ -2278,8 +2279,9 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 		}
 
 		// Does the option fit on this line?
-		if ((str->offset + opt_str.offset) >= ctx->max_width)
+		if ((str->offset + opt_str.offset - prev_offset) >= ctx->max_width)
 		{
+			prev_offset = str->offset;
 			cargo_aappendf(str, "\n%*s", indent, " ");
 		}
 
