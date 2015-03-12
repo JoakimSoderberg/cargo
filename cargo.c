@@ -1028,7 +1028,7 @@ static void _cargo_free_str_list(char ***s, size_t *count)
 {
 	size_t i;
 
-	if (!s)
+	if (!s || !*s)
 		goto done;
 
 	// Only free elements if we have a count.
@@ -3107,8 +3107,6 @@ static int _cargo_get_group_description(cargo_t ctx, cargo_astr_t *str,
 	}
 	else
 	{
-		size_t line_count = 0;
-
 		if (!(lb_desc = _cargo_linebreak(ctx, grp->description, ctx->max_width)))
 		{
 			goto fail;
