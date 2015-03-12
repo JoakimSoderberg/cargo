@@ -118,12 +118,14 @@ typedef struct cargo_highlight_s
 
 typedef enum cargo_format_e
 {
-	CARGO_FORMAT_RAW_HELP				= (1 << 0),
-	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 1),
-	CARGO_FORMAT_RAW_OPT_DESCRIPTION	= (1 << 2),
-	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 3),
-	CARGO_FORMAT_HIDE_EPILOG			= (1 << 4),
-	CARGO_FORMAT_HIDE_SHORT				= (1 << 5)
+	CARGO_FORMAT_FULL_USAGE				= 0,
+	CARGO_FORMAT_SHORT_USAGE			= (1 << 0),
+	CARGO_FORMAT_RAW_HELP				= (1 << 1),
+	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 2),
+	CARGO_FORMAT_RAW_OPT_DESCRIPTION	= (1 << 3),
+	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 4),
+	CARGO_FORMAT_HIDE_EPILOG			= (1 << 5),
+	CARGO_FORMAT_HIDE_SHORT				= (1 << 6)
 } cargo_format_t;
 
 typedef enum cargo_fprint_flags_e
@@ -221,28 +223,30 @@ void cargo_set_description(cargo_t ctx, const char *description);
 
 void cargo_set_epilog(cargo_t ctx, const char *epilog);
 
-void cargo_set_auto_help(cargo_t ctx, int auto_help);
+int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_format_t flags);
 
-void cargo_set_format(cargo_t ctx, cargo_format_t format);
+int cargo_print_usage(cargo_t ctx, cargo_format_t flags);
 
-int cargo_fprint_usage(cargo_t ctx, FILE *f);
-
-int cargo_print_usage(cargo_t ctx);
-
-// TODO: Return const these and store internally instead!
-const char *cargo_get_usage(cargo_t ctx);
-
+// TODO: Maybe get rid of these and have a flag for getting only short usage.
 int cargo_fprint_short_usage(cargo_t ctx, FILE *f);
 
 int cargo_print_short_usage(cargo_t ctx);
 
 const char *cargo_get_short_usage(cargo_t ctx);
 
+// TODO: Return const these and store internally instead!
+// TODO: Add cargo_format_t flags here instead... Maybe rename to cargo_usage_t
+const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags);
+
 const char *cargo_get_error(cargo_t ctx);
 
 const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 const char **cargo_get_args(cargo_t ctx, size_t *argc);
+
+//
+// Utility functions.
+//
 
 char *cargo_get_fprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,

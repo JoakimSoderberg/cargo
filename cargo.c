@@ -2000,11 +2000,11 @@ const char *_cargo_find_closest_opt(cargo_t ctx, const char *unknown)
 	return (min_dist <= 1) ? ctx->options[maxi].name[maxj] : NULL;
 }
 
-static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
+static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_astr_t *str,
 				size_t i, int name_padding, int option_causes_newline, int max_name_len)
 {
 	size_t j;
-	int ret = 0;
+	int ret = -1;
 	assert(str);
 	assert(ctx);
 
@@ -2026,13 +2026,17 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 	char *opt_description = NULL;
 
 	CARGODBG(2, "max_desc_len = %lu\n", max_desc_len);
+	CARGODBG(2, "str.l = %lu\n", str->l);
+	CARGODBG(2, "str.offset = %lu\n", str->offset);
 
 	opt_description = _cargo_linebreak(ctx, ctx->options[i].description,
 											max_desc_len);
 
 	if (!opt_description)
 	{
-		ret = -1; goto fail;
+		CARGODBG(1, "%s: Failed to line break option description\n",
+				ctx->options[i].name[0]);
+		goto fail;
 	}
 
 	CARGODBG(5, "ctx->max_width - 2 - max_name_len - (2 * NAME_PADDING) =\n");
@@ -2043,7 +2047,8 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 
 	if (!(desc_lines = _cargo_split(opt_description, "\n", &line_count)))
 	{
-		ret = -1; goto fail;
+		CARGODBG(1, "Failed to split option description\n");
+		goto fail;
 	}
 
 	for (j = 0; j < line_count; j++)
@@ -2064,13 +2069,15 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_str_t *str,
 			padding = max_name_len + name_padding;
 		}
 
-		if (cargo_appendf(str, "  %*s%s\n",
+		if (cargo_aappendf(str, "  %*s%s\n",
 			padding, "", desc_lines[j]) < 0)
 		{
-			ret = -1; goto fail;
+			CARGODBG(1, "Failed to append\n");
+			goto fail;
 		}
 	}
 
+	ret = 0;
 fail:
 	if (opt_description)
 	{
@@ -2084,8 +2091,9 @@ fail:
 
 static int _cargo_print_options(cargo_t ctx, 
 								size_t *opt_indices, size_t opt_count,
-								int show_positional, cargo_str_t *str,
-								int max_name_len, int indent)
+								int show_positional, cargo_astr_t *str,
+								int max_name_len, int indent,
+								cargo_format_t flags)
 {
 	#define NAME_PADDING 2
 	size_t i = 0;
@@ -2097,6 +2105,7 @@ static int _cargo_print_options(cargo_t ctx,
 	assert(str);
 	assert(ctx);
 
+	// TODO: Replace with cargo_astr_t so we don't have to prealloc max_width
 	if (!(name = malloc(ctx->max_width)))
 	{
 		CARGODBG(1, "Out of memory!\n");
@@ -2108,6 +2117,7 @@ static int _cargo_print_options(cargo_t ctx,
 	{
 		opt = &ctx->options[opt_indices[i]];
 
+		// TODO: Hmmm maybe store option max length in the opt struct instead when adding?
 		namelen = _cargo_get_option_name_str(ctx, opt,
 											name, ctx->max_width);
 
@@ -2122,7 +2132,7 @@ static int _cargo_print_options(cargo_t ctx,
 
 		// Print the option names.
 		// "  --ducks [DUCKS ...]  "
-		if (cargo_appendf(str, "%*s%-*s%s",
+		if (cargo_aappendf(str, "%*s%-*s%s",
 				indent + NAME_PADDING, " ",
 				max_name_len, name,
 				(option_causes_newline ? "\n" : "")) < 0)
@@ -2131,10 +2141,10 @@ static int _cargo_print_options(cargo_t ctx,
 		}
 
 		// Option description.
-		if ((ctx->format & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+		if ((flags & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
 			|| (strlen(opt->description) < ctx->max_width))
 		{
-			if (cargo_appendf(str, "%*s%s\n",
+			if (cargo_aappendf(str, "%*s%s\n",
 				NAME_PADDING, "", opt->description) < 0)
 			{
 				goto fail;
@@ -2979,7 +2989,7 @@ static void _cargo_parse_show_error(cargo_t ctx)
 	{
 		if (ctx->flags & CARGO_ERR_LONG_USAGE)
 		{
-			cargo_fprint_usage(ctx, fd);
+			cargo_fprint_usage(ctx, fd, 0);
 		}
 		else
 		{
@@ -2992,6 +3002,66 @@ static void _cargo_parse_show_error(cargo_t ctx)
 	{
 		fprintf(fd, "%s\n", ctx->error);
 	}
+}
+
+static int _cargo_get_max_name_length(cargo_t ctx,
+			size_t *positional_count, size_t *option_count)
+{
+	#define MAX_OPT_NAME_LEN 40
+	size_t i = 0;
+	int namelen = 0;
+	int max_name_len = 0;
+	char *name = NULL;
+	cargo_opt_t *opt = NULL;
+	assert(ctx);
+	assert(positional_count);
+	assert(option_count);
+
+	(*positional_count) = 0;
+	(*option_count) = 0;
+
+	// TODO: Replace with cargo_astr_t so we don't have to prealloc max_width
+	if (!(name = malloc(ctx->max_width)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return -1;
+	}
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		if (opt->positional)
+		{
+			(*positional_count)++;
+		}
+		else
+		{
+			(*option_count)++;
+		}
+
+		namelen = _cargo_get_option_name_str(ctx, opt,
+											name, ctx->max_width);
+
+		if (namelen < 0)
+		{
+			max_name_len = -1;
+			goto fail;
+		}
+
+		// Get the longest option name.
+		// (However, if it's too long don't count it, then we'll just
+		// do a line break before printing the description).
+		if ((namelen > max_name_len) && (namelen <= MAX_OPT_NAME_LEN))
+		{
+			max_name_len = namelen;
+		}
+	}
+
+fail:
+	if (name) free(name);
+
+	return max_name_len;
 }
 
 // -----------------------------------------------------------------------------
@@ -3549,7 +3619,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 	if (ctx->help)
 	{
-		cargo_print_usage(ctx);
+		cargo_print_usage(ctx, 0);
 		return 1;
 	}
 
@@ -3712,13 +3782,11 @@ const char *cargo_get_short_usage(cargo_t ctx)
 	return b;
 }
 
-const char *cargo_get_usage(cargo_t ctx)
+const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 {
 	char *ret = NULL;
 	size_t i;
 	char *b = NULL;
-	char *name = NULL;
-	int usagelen = 0;
 	int namelen;
 	int max_name_len = 0;
 	size_t positional_count = 0;
@@ -3726,16 +3794,19 @@ const char *cargo_get_usage(cargo_t ctx)
 	const char *short_usage = NULL;
 	cargo_opt_t *opt = NULL;
 	cargo_group_t *grp = NULL;
-	cargo_str_t str;
+	cargo_astr_t str;
 	int is_default_group = 1;
 	assert(ctx);
-	#define MAX_OPT_NAME_LEN 40
 
 	if (!(short_usage = cargo_get_short_usage(ctx)))
 	{
 		CARGODBG(1, "Failed to get short usage\n");
 		return NULL;
 	}
+
+	// TODO: Instead of looping over all options at this stage, save the length
+	// of all options on add_option, including max_length, positional_count and
+	// so on.
 
 	// First get option names and their length.
 	// We get the widest one so we know the column width to use
@@ -3744,79 +3815,26 @@ const char *cargo_get_usage(cargo_t ctx)
 	//   --longer_option_b  Another description...
 	// ^-------------------^
 	// What should the above width be.
-	if (!(name = malloc(ctx->max_width)))
+	if ((max_name_len = _cargo_get_max_name_length(ctx,
+						&positional_count, &option_count)) < 0)
 	{
-		CARGODBG(1, "Out of memory!\n");
+		CARGODBG(1, "Failed to get option name max length\n");
 		goto fail;
 	}
 
-	for (i = 0; i < ctx->opt_count; i++)
-	{
-		opt = &ctx->options[i];
-
-		if (opt->positional)
-		{
-			positional_count++;
-		}
-		else
-		{
-			option_count++;
-		}
-
-		namelen = _cargo_get_option_name_str(ctx, opt,
-											name, ctx->max_width);
-
-		if (namelen < 0)
-		{
-			goto fail;
-		}
-
-		// Get the longest option name.
-		// (However, if it's too long don't count it, then we'll just
-		// do a line break before printing the description).
-		if ((namelen > max_name_len) && (namelen <= MAX_OPT_NAME_LEN))
-		{
-			max_name_len = namelen;
-		}
-
-		usagelen += namelen + strlen(opt->description);
-	}
-
-	// TODO: Don't "guess" the length like this, use cargo_aapendf instead!
-	if (ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
-	{
-		usagelen += strlen(ctx->description);
-	}
-
-	if (ctx->epilog && !(ctx->format & CARGO_FORMAT_HIDE_EPILOG))
-	{
-		usagelen += strlen(ctx->epilog);
-	}
-
-	usagelen += strlen(short_usage);
-
-	// Add some extra to fit padding.
-	// TODO: Let's be more strict here and use the exact padding instead.
-	usagelen = (int)(usagelen * 2.5);
-
-	// TODO: Redo this with cargo_astr_t instead...
-	// Allocate the final buffer.
-	if (!(b = malloc(usagelen)))
-	{
-		CARGODBG(1, "Out of memory!\n");
-		goto fail;
-	}
-
-	str.s = b;
-	str.l = usagelen;
+	str.s = &b;
+	str.l = 1024;
 	str.offset = 0;
 
-	cargo_appendf(&str, "%s\n", short_usage);
+	if (!(flags & CARGO_FORMAT_HIDE_SHORT))
+	{
+		cargo_aappendf(&str, "%s\n", short_usage);
+	}
 
 	// TODO: Line breaks for description!
-	if(ctx->description && !(ctx->format & CARGO_FORMAT_HIDE_DESCRIPTION))
+	if(ctx->description && !(flags & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		if (cargo_appendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
+		if (cargo_aappendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
 	}
 
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
@@ -3850,44 +3868,44 @@ const char *cargo_get_usage(cargo_t ctx)
 		}
 
 		// TODO: Fix line break for descriptions as well!
-		if (!is_default_group) cargo_appendf(&str, "\n%s:\n", grp->title);
+		if (!is_default_group) cargo_aappendf(&str, "\n%s:\n", grp->title);
 		if (grp->description && strlen(grp->description))
-			cargo_appendf(&str, "%*s%s\n", indent, " ", grp->description);
+			cargo_aappendf(&str, "%*s%s\n", indent, " ", grp->description);
 
-		if (cargo_appendf(&str,  "\n") < 0) goto fail;
+		if (cargo_aappendf(&str,  "\n") < 0) goto fail;
 
 		// Note, we only show the "Positional arguments" and "Options"
 		// titles for the default group. It becomes quite spammy otherwise.
 		if (positional_count > 0)
 		{
 			if (is_default_group)
-				if (cargo_appendf(&str, "Positional arguments:\n") < 0) goto fail;
+				if (cargo_aappendf(&str, "Positional arguments:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
-									1, &str, max_name_len, indent))
+									1, &str, max_name_len, indent, flags))
 			{
 				goto fail;
 			}
 		}
 
-		if (cargo_appendf(&str, "\n") < 0) goto fail;
+		if (cargo_aappendf(&str, "\n") < 0) goto fail;
 
 		if (option_count > 0)
 		{
 			if (is_default_group)
-				if (cargo_appendf(&str, "Options:\n") < 0) goto fail;
+				if (cargo_aappendf(&str, "Options:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
-									0, &str, max_name_len, indent))
+									0, &str, max_name_len, indent, flags))
 			{
 				goto fail;
 			}
 		}
 	}
 
-	if (ctx->epilog && !(ctx->format & CARGO_FORMAT_HIDE_EPILOG))
+	if (ctx->epilog && !(flags & CARGO_FORMAT_HIDE_EPILOG))
 	{
-		if (cargo_appendf(&str, "%s\n", ctx->epilog) < 0) goto fail;
+		if (cargo_aappendf(&str, "%s\n", ctx->epilog) < 0) goto fail;
 	}
 
 	ret = b;
@@ -3902,14 +3920,9 @@ fail:
 		}
 	}
 
-	if (name)
-	{
-		free(name);
-	}
-
 	// Save the usage and destroy it on exit,
 	// we want the user to be able to do things like this:
-	// printf("%s\nYou're bad at typing!\n", cargo_get_usage(cargo));
+	// printf("%s\nYou're bad at typing!\n", cargo_get_usage(cargo, 0));
 	// without leaking memory.
 	if (ctx->usage)
 	{
@@ -3921,12 +3934,12 @@ fail:
 	return ret;
 }
 
-int cargo_fprint_usage(cargo_t ctx, FILE *f)
+int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_format_t flags)
 {
 	const char *s;
 	assert(ctx);
 
-	if (!(s = cargo_get_usage(ctx)))
+	if (!(s = cargo_get_usage(ctx, flags)))
 	{
 		return -1;
 	}
@@ -3936,9 +3949,9 @@ int cargo_fprint_usage(cargo_t ctx, FILE *f)
 	return 0;
 }
 
-int cargo_print_usage(cargo_t ctx)
+int cargo_print_usage(cargo_t ctx, cargo_format_t flags)
 {
-	return cargo_fprint_usage(ctx, stderr);
+	return cargo_fprint_usage(ctx, stderr, flags);
 }
 
 int cargo_fprint_short_usage(cargo_t ctx, FILE *f)
@@ -4911,7 +4924,7 @@ _TEST_START(TEST_print_usage)
 	cargo_set_epilog(cargo, "That's it!");
 	cargo_set_description(cargo, "Introductionary description");
 
-	cargo_print_usage(cargo);
+	cargo_print_usage(cargo, 0);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -4947,8 +4960,7 @@ _TEST_START(TEST_get_usage_settings)
 
 	for (j = 0; j < sizeof(tus) / sizeof(tus[0]); j++)
 	{
-		cargo_set_format(cargo, tus[j].fmt);
-		usage = cargo_get_usage(cargo);
+		usage = cargo_get_usage(cargo, tus[j].fmt);
 		cargo_assert(usage != NULL, "Got null usage");
 		printf("\n\n");
 
@@ -4978,7 +4990,7 @@ _TEST_START(TEST_autohelp_default)
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
 	// Default is to automatically add --help option.
-	usage = cargo_get_usage(cargo);
+	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage");
 	printf("-------------------------------------\n");
 	printf("%s", usage);
@@ -4998,7 +5010,7 @@ _TEST_START(TEST_autohelp_off)
 	cargo_set_flags(cargo, CARGO_NO_AUTOHELP);
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
-	usage = cargo_get_usage(cargo);
+	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage");
 	printf("-------------------------------------\n");
 	printf("%s", usage);
@@ -5031,7 +5043,7 @@ _TEST_START(TEST_get_usage)
 	const char *usage = NULL;
 
 	_ADD_TEST_USAGE_OPTIONS();
-	usage = cargo_get_usage(cargo);
+	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Failed to get allocated usage");
 	printf("%s\n", usage);
 	printf("Cargo v%s\n", cargo_get_version());
@@ -6064,7 +6076,7 @@ _TEST_START(TEST_group)
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 
-	cargo_print_usage(cargo);
+	cargo_print_usage(cargo, 0);
 
 	_TEST_CLEANUP();
 }
@@ -6105,7 +6117,7 @@ _TEST_START(TEST_many_groups)
 	cargo_assert(vals[0][0] == 5, "Expected --optg01o01 to be 5");
 	cargo_assert(vals[1][1] == 123, "Expected --optg02o02 to be 123");
 
-	cargo_print_usage(cargo);
+	cargo_print_usage(cargo, 0);
 
 	_TEST_CLEANUP();
 }
@@ -6239,14 +6251,14 @@ _TEST_START(TEST_cargo_set_max_width)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_max_width(cargo, 40);
-	usage = cargo_get_usage(cargo);
+	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage on width 40");
 	err = _cargo_test_verify_usage_length(usage, 40);
 	cargo_assert(err == NULL, err);
 
 	// Set a size bigger than CARGO_MAX_MAX_WIDTH.
 	cargo_set_max_width(cargo, CARGO_MAX_MAX_WIDTH * 2);
-	usage = cargo_get_usage(cargo);
+	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage on width CARGO_MAX_MAX_WIDTH * 2");
 	err = _cargo_test_verify_usage_length(usage, CARGO_MAX_MAX_WIDTH);
 	cargo_assert(err == NULL, err);
@@ -7041,7 +7053,7 @@ int main(int argc, char **argv)
 
 	// TODO: Make a real example.
 
-	cargo_print_usage(cargo);
+	cargo_print_usage(cargo, 0);
 	cargo_destroy(&cargo);
 	return ret;
 }
