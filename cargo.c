@@ -3074,6 +3074,61 @@ fail:
 	return max_name_len;
 }
 
+static int _cargo_get_group_description(cargo_t ctx, cargo_astr_t *str,
+										cargo_group_t *grp, int indent)
+{
+	int ret = -1;
+	size_t j = 0;
+	char *lb_desc = NULL;
+	char **desc_lines = NULL;
+	size_t line_count = 0;
+	assert(ctx);
+	assert(str);
+	assert(grp);
+
+	if (!grp->description || strlen(grp->description) == 0)
+	{
+		cargo_aappendf(str,  "\n");
+		return 0;
+	}
+
+	if (grp->flags & CARGO_GROUP_RAW_DESCRIPTION)
+	{
+		cargo_aappendf(str, "%*s%s\n", indent, " ", grp->description);
+	}
+	else
+	{
+		size_t line_count = 0;
+
+		if (!(lb_desc = _cargo_linebreak(ctx, grp->description, ctx->max_width)))
+		{
+			goto fail;
+		}
+
+		if (!(desc_lines = _cargo_split(lb_desc, "\n", &line_count)))
+		{
+			CARGODBG(1, "Failed to split group description\n");
+			goto fail;
+		}
+
+		for (j = 0; j < line_count; j++)
+		{
+			cargo_aappendf(str, "%*s%s\n", indent, " ", desc_lines[j]);
+		}
+	}
+
+	ret = 0;
+fail:
+	if (lb_desc)
+	{
+		free(lb_desc);
+	}
+
+	_cargo_free_str_list(&desc_lines, &line_count);
+
+	return ret;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3860,7 +3915,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 		else
 		{
 			char *lb_desc;
-			if (!(lb_desc = _cargo_linebreak(ctx,ctx->description, ctx->max_width)))
+			if (!(lb_desc = _cargo_linebreak(ctx, ctx->description, ctx->max_width)))
 			{
 				goto fail;
 			}
@@ -3899,12 +3954,12 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 			indent = 2;
 		}
 
-		// TODO: Fix line break for descriptions as well!
 		if (!is_default_group) cargo_aappendf(&str, "\n%s:\n", grp->title);
-		if (grp->description && strlen(grp->description))
-			cargo_aappendf(&str, "%*s%s\n", indent, " ", grp->description);
 
-		if (cargo_aappendf(&str,  "\n") < 0) goto fail;
+		if (_cargo_get_group_description(ctx, &str, grp, indent))
+		{
+			goto fail;
+		}
 
 		// Note, we only show the "Positional arguments" and "Options"
 		// titles for the default group. It becomes quite spammy otherwise.
@@ -6094,6 +6149,7 @@ _TEST_START(TEST_group)
 	int j = 0;
 	int k = 0;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
+	cargo_set_max_width(cargo, 60);
 
 	ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
 	cargo_assert(ret == 0, "Failed to add group");
