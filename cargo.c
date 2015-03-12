@@ -1841,6 +1841,7 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	char *start = s;
 	char *prev = s;
 	char *p = s;
+	char *end = NULL;
 
 	if (!s)
 		return NULL;
@@ -1873,6 +1874,15 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 		p = strpbrk(p + 1, " \n");
 
 		CARGODBG(5, "\n");
+	}
+
+	// Make sure the last line is also within "width".
+	p = strrchr(s, '\n');
+	if (!p) p = s;
+
+	if (((s + strlen(s)) - p) > width)
+	{
+		*prev = '\n';
 	}
 
 	return s;
@@ -3798,10 +3808,19 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	int is_default_group = 1;
 	assert(ctx);
 
-	if (!(short_usage = cargo_get_short_usage(ctx)))
+	if (!(flags & CARGO_FORMAT_HIDE_SHORT))
 	{
-		CARGODBG(1, "Failed to get short usage\n");
-		return NULL;
+		if (!(short_usage = cargo_get_short_usage(ctx)))
+		{
+			CARGODBG(1, "Failed to get short usage\n");
+			return NULL;
+		}
+	}
+
+	// Only show short usage.
+	if (flags & CARGO_FORMAT_SHORT_USAGE)
+	{
+		return short_usage;
 	}
 
 	// TODO: Instead of looping over all options at this stage, save the length
@@ -3826,15 +3845,27 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	str.l = 1024;
 	str.offset = 0;
 
-	if (!(flags & CARGO_FORMAT_HIDE_SHORT))
+	if (short_usage && !(flags & CARGO_FORMAT_HIDE_SHORT))
 	{
 		cargo_aappendf(&str, "%s\n", short_usage);
 	}
 
-	// TODO: Line breaks for description!
 	if(ctx->description && !(flags & CARGO_FORMAT_HIDE_DESCRIPTION))
 	{
-		if (cargo_aappendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
+		if (flags & CARGO_FORMAT_RAW_DESCRIPTION)
+		{
+			if (cargo_aappendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
+		}
+		else
+		{
+			char *lb_desc;
+			if (!(lb_desc = _cargo_linebreak(ctx,ctx->description, ctx->max_width)))
+			{
+				goto fail;
+			}
+			cargo_aappendf(&str, "\n%s\n", lb_desc);
+			free(lb_desc);
+		}
 	}
 
 	CARGODBG(2, "max_name_len = %d, ctx->max_width = %lu\n",
@@ -6245,6 +6276,8 @@ _TEST_START(TEST_cargo_set_max_width)
 	const char *err = NULL;
 	const char *usage = NULL;
 	char *args[] = { "program", "--alpha", "789", "--beta", "123" };
+
+	cargo_set_description(cargo, LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
 
 	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM, "i", &j);
 	ret |= cargo_add_option(cargo, 0, "--beta -b", LOREM_IPSUM, "i", &i);
