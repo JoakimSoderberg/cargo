@@ -670,7 +670,7 @@ typedef struct cargo_opt_s
 {
 	char *name[CARGO_NAME_COUNT];
 	size_t name_count;
-	const char *description; // TODO: Copy these from user.
+	char *description;
 	const char *metavar;
 	int positional;
 	cargo_type_t type;
@@ -2107,6 +2107,7 @@ static int _cargo_print_options(cargo_t ctx,
 {
 	#define NAME_PADDING 2
 	size_t i = 0;
+	size_t opt_i;
 	cargo_opt_t *opt = NULL;
 	int option_causes_newline = 0;
 	size_t namelen = 0;
@@ -2125,7 +2126,8 @@ static int _cargo_print_options(cargo_t ctx,
 	// Option names + descriptions.
 	for (i = 0; i < opt_count; i++)
 	{
-		opt = &ctx->options[opt_indices[i]];
+		opt_i = opt_indices[i];
+		opt = &ctx->options[opt_i];
 
 		// TODO: Hmmm maybe store option max length in the opt struct instead when adding?
 		namelen = _cargo_get_option_name_str(ctx, opt,
@@ -2151,7 +2153,8 @@ static int _cargo_print_options(cargo_t ctx,
 		}
 
 		// Option description.
-		if ((flags & CARGO_FORMAT_RAW_OPT_DESCRIPTION)
+		if ((flags & CARGO_FORMAT_RAW_OPT_DESCRIPTIONS)
+			|| (opt->flags & CARGO_OPT_RAW_DESCRIPTION)
 			|| (strlen(opt->description) < ctx->max_width))
 		{
 			if (cargo_aappendf(str, "%*s%s\n",
@@ -2163,7 +2166,7 @@ static int _cargo_print_options(cargo_t ctx,
 		else
 		{
 			// Add line breaks to fit the width we want.
-			if (_cargo_fit_optnames_and_description(ctx, str, i,
+			if (_cargo_fit_optnames_and_description(ctx, str, opt_i,
 					indent + NAME_PADDING, option_causes_newline, max_name_len))
 			{
 				goto fail;
@@ -2384,7 +2387,12 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 
 	o->name[o->name_count] = optname;
 	o->name_count++;
-	o->description = description;
+
+	if (!(o->description = strdup(description)))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return NULL;
+	}
 
 	return o;
 }
@@ -2406,6 +2414,12 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	}
 
 	o->name_count = 0;
+
+	if (o->description)
+	{
+		free(o->description);
+		o->description = NULL;
+	}
 
 	// Special case for custom callback target, it is allocated
 	// internally so we should always auto clean it.
@@ -2997,14 +3011,7 @@ static void _cargo_parse_show_error(cargo_t ctx)
 
 	if (!(ctx->flags & CARGO_NOERR_USAGE))
 	{
-		if (ctx->flags & CARGO_ERR_LONG_USAGE)
-		{
-			cargo_fprint_usage(ctx, fd, 0);
-		}
-		else
-		{
-			cargo_fprint_short_usage(ctx, fd);
-		}
+		cargo_fprint_usage(ctx, fd, ctx->format);
 	}
 
 	// Show errors automatically?
@@ -3129,6 +3136,12 @@ fail:
 	return ret;
 }
 
+void cargo_set_internal_usage_format(cargo_t ctx, cargo_format_t format)
+{
+	assert(ctx);
+	ctx->format = format;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3189,6 +3202,9 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 	c->progname = progname;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
+
+	// By default we show only short usage on errors.
+	c->format = CARGO_FORMAT_SHORT_USAGE;
 
 	// Add the default group.
 	cargo_add_group(c, 0, "", "", "");
@@ -4073,6 +4089,25 @@ int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 {
 	return _cargo_group_add_option_ex(ctx,
 				ctx->groups, ctx->group_count, group, opt);
+}
+
+int cargo_group_set_flags(cargo_t ctx, const char *group,
+						   cargo_group_flags_t flags)
+{
+	cargo_group_t *g = NULL;
+	size_t grp_i;
+	assert(ctx);
+	assert(group);
+
+	if (!(g = _cargo_find_group(ctx, ctx->groups, ctx->group_count, group, &grp_i)))
+	{
+		CARGODBG(1, "No such group \"%s\"\n", group);
+		return -1;
+	}
+
+	g->flags = flags;
+
+	return 0;
 }
 
 int cargo_add_mutex_group(cargo_t ctx,
@@ -6148,10 +6183,12 @@ _TEST_START(TEST_group)
 	int i = 0;
 	int j = 0;
 	int k = 0;
+	int l = 0;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 	cargo_set_max_width(cargo, 60);
 
 	ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
+	ret |= cargo_add_group(cargo, 0, "group2", "The Group 2", LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
 	cargo_assert(ret == 0, "Failed to add group");
 
 	// Add options to the group using inline method.
@@ -6161,6 +6198,8 @@ _TEST_START(TEST_group)
 	// Try using the API to add the option to the group.
 	ret |= cargo_add_option(cargo, 0, "--centauri", "The alpha centauri", "i?", &k);
 	ret |= cargo_group_add_option(cargo, "group1", "--centauri");
+	
+	ret |= cargo_add_option(cargo, 0, "<group2> --delta", LOREM_IPSUM LOREM_IPSUM, "i?", &l);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);

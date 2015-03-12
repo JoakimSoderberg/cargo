@@ -120,12 +120,11 @@ typedef enum cargo_format_e
 {
 	CARGO_FORMAT_FULL_USAGE				= 0,
 	CARGO_FORMAT_SHORT_USAGE			= (1 << 0),
-	CARGO_FORMAT_RAW_HELP				= (1 << 1),
-	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 2),
-	CARGO_FORMAT_RAW_OPT_DESCRIPTION	= (1 << 3),
-	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 4),
-	CARGO_FORMAT_HIDE_EPILOG			= (1 << 5),
-	CARGO_FORMAT_HIDE_SHORT				= (1 << 6)
+	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 1),
+	CARGO_FORMAT_RAW_OPT_DESCRIPTIONS	= (1 << 2),
+	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 3),
+	CARGO_FORMAT_HIDE_EPILOG			= (1 << 4),
+	CARGO_FORMAT_HIDE_SHORT				= (1 << 5)
 } cargo_format_t;
 
 typedef enum cargo_fprint_flags_e
@@ -161,9 +160,8 @@ typedef enum cargo_flags_e
 	CARGO_NOCOLOR 						= (1 << 1),
 	CARGO_NOERR_OUTPUT					= (1 << 2),
 	CARGO_NOERR_USAGE					= (1 << 3),
-	CARGO_ERR_LONG_USAGE				= (1 << 4),
-	CARGO_ERR_STDOUT					= (1 << 5),
-	CARGO_NO_AUTOHELP					= (1 << 6)
+	CARGO_ERR_STDOUT					= (1 << 4),
+	CARGO_NO_AUTOHELP					= (1 << 5)
 } cargo_flags_t;
 
 //
@@ -203,6 +201,9 @@ int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
 
+int cargo_group_set_flags(cargo_t ctx, const char *group,
+						  cargo_group_flags_t flags);
+
 int cargo_add_mutex_group(cargo_t ctx,
 						cargo_mutex_group_flags_t flags,
 						const char *name);
@@ -212,6 +213,8 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *opt);
 
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+
+void cargo_set_internal_usage_format(cargo_t ctx, cargo_format_t format);
 
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
