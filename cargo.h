@@ -90,16 +90,26 @@
 #define CARGO_MAJOR_VERSION 0
 #define CARGO_MINOR_VERSION 1
 #define CARGO_PATCH_VERSION 0
+#define CARGO_RELEASE 		1 // 0 = Release, 1 = Alpha.
 
 #define CARGO_VERSION                        \
-	((CARGO_MAJOR_VERSION << 16) |           \
-	(CARGO_MINOR_VERSION << 8)   |           \
-	(CARGO_PATCH_VERSION))
+	((CARGO_MAJOR_VERSION << 24) |           \
+	(CARGO_MINOR_VERSION << 16)  |           \
+	(CARGO_PATCH_VERSION << 8)   |			 \
+	(CARGO_RELEASE))
 
+#if CARGO_RELEASE == 0
 #define CARGO_VERSION_STR                    \
 	CARGO_STRINGIFY(CARGO_MAJOR_VERSION) "." \
 	CARGO_STRINGIFY(CARGO_MINOR_VERSION) "." \
 	CARGO_STRINGIFY(CARGO_PATCH_VERSION)
+#else
+#define CARGO_VERSION_STR                    \
+	CARGO_STRINGIFY(CARGO_MAJOR_VERSION) "." \
+	CARGO_STRINGIFY(CARGO_MINOR_VERSION) "." \
+	CARGO_STRINGIFY(CARGO_PATCH_VERSION)	 \
+	"-alpha"
+#endif
 
 const char *cargo_get_version();
 

@@ -122,7 +122,11 @@ To turn off any automatic error output you can pass
 fetch any error message using [`cargo_get_error`](api.md#cargo_get_error).
 
 If you instead rather have cargo output the full usage on an error you can pass
-the [`CARGO_ERR_LONG_USAGE`](api.md#CARGO_ERR_LONG_USAGE).
+the [`CARGO_USAGE_FULL_USAGE`](api.md#CARGO_USAGE_FULL_USAGE) flag to the
+[`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags)
+function.
+Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when
+using [`cargo_print_usage`](api.md#cargo_print_usage).
 
 By default the error messages are printed to `stderr`, if you instead want cargo
 to print them to `stdout` you can set the
@@ -161,7 +165,7 @@ Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
 
 ### Long usage
 
-[`CARGO_ERR_LONG_USAGE`](api.md#CARGO_ERR_LONG_USAGE)
+`cargo_set_internal_usage_flags(cargo, CARGO_USAGE_FULL_USAGE);`
 
 ```bash
 $ process_integers
