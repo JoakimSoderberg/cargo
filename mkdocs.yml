@@ -8,3 +8,4 @@ pages:
 - ['tutorial.md', 'Examples', 'Tutorial']
 - ['api.md', 'Reference', 'API reference']
 theme: readthedocs
+markdown_extensions: ['fenced_code', 'codehilite', 'toc(permalink=True)']

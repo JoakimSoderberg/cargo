@@ -1,3 +1,8 @@
+Table of contents
+=================
+
+[TOC]
+
 Initializing cargo
 ==================
 
@@ -259,7 +264,7 @@ This function simply takes a `group` name, as well as an `opt`ion name.
 
 The other way to add an option to a group is to do it directly in the
 [`cargo_add_option`](api.md#cargo_add_option) call by prepending the group
-name enclodes in brackets, like this: `"<group1> --integers -i"`
+name enclodes in brackets, like this: `"<group1> --integers -i"
 
 Here's an example of both methods:
 

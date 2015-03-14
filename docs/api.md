@@ -2,44 +2,71 @@
 API reference
 =============
 
-Default defines
----------------
+## Default defines ##
 
-# `CARGO_CONFIG`
+### `CARGO_CONFIG` ###
 
-# `CARGO_NAME_COUNT`
+If this is set, `cargo.h` will `#include cargo_config.h` where you can
+override any of the default macros below. So that you can leave
+`cargo.h` untouched.
 
-# `CARGO_DEFAULT_PREFIX`
+### `CARGO_NAME_COUNT` ###
 
-# `CARGO_DEFAULT_MAX_OPTS`
+The max number of names allowed for an option. Defines how many
+names and aliases any given option is allowed to have.
 
-# `CARGO_DEFAULT_MAX_WIDTH`
+### `CARGO_DEFAULT_PREFIX` ###
 
-# `CARGO_AUTO_MAX_WIDTH`
+This defines the default prefix characters for options. Note that this can also
+be changed using [`cargo_set_prefix`](api.md#cargo_set_prefix).
 
-# `CARGO_MAX_MAX_WIDTH`
+### `CARGO_DEFAULT_MAX_OPTS` ###
+
+The default start value for the max number of options. If more
+options are added, the list of options will be reallocated.
+
+This can also be changed using the function
+[`cargo_set_option_count_hint`](api.md#cargo_set_option_count_hint)
+
+### `CARGO_DEFAULT_MAX_WIDTH` ###
+
+The default max width for the usage output if we cannot get the console width
+from the operating system. By default the max width is set to
+[`CARGO_AUTO_MAX_WIDTH`](api.md#CARGO_AUTO_MAX_WIDTH).
+
+This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width).
+
+### `CARGO_AUTO_MAX_WIDTH` ###
+
+Sets the max width for the usage output to the console width.
+
+### `CARGO_MAX_MAX_WIDTH`
+
+The absolute max console width allowed, any value set via
+This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width), will be
+capped to this.
 
 Cargo version
 -------------
 
-# `CARGO_MAJOR_VERSION`
+### `CARGO_MAJOR_VERSION` ###
 
 The major version of cargo. Example: **1**.2.3
 
-# `CARGO_MINOR_VERSION`
+### `CARGO_MINOR_VERSION` ###
 
 The minor version of cargo. Example: 1.**2**.3
 
-# `CARGO_PATCH_VERSION`
+### `CARGO_PATCH_VERSION` ###
 
 The patch version of cargo. Example: 1.2.**3**
 
-# `CARGO_RELEASE`
+### `CARGO_RELEASE` ###
 
 If this is a release build, this will be set to `0`. Otherwise it is a
 development build.
 
-# `CARGO_VERSION`
+### `CARGO_VERSION` ###
 
 A hexidecimal representation of the cargo version, as a 4-byte integer in the
 form `(MAJOR << 24) | (MINOR << 16) | (PATCH << 8)`.
@@ -72,12 +99,19 @@ And check for specific capabilities based on version:
 ...
 ```
 
-# `CARGO_VERSION_STR`
+### `CARGO_VERSION_STR` ###
 
 The cargo version as a string. Example: `"0.2.0"`.
 
-# `const char *cargo_get_version()`
+### cargo_get_version ###
 
+### `const char *cargo_get_version()` ###
+ 
 Function that gets the cargo version as a string. Example: `"0.2.0"`.
+
+## Function pointers ##
+
+`typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv);`
 
 
