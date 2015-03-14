@@ -720,7 +720,7 @@ typedef struct cargo_s
 	const char *description;
 	const char *epilog;
 	size_t max_width;
-	cargo_format_t format;
+	cargo_usage_t usage_flags;
 	cargo_flags_t flags;
 
 	int i;	// argv index.
@@ -2103,7 +2103,7 @@ static int _cargo_print_options(cargo_t ctx,
 								size_t *opt_indices, size_t opt_count,
 								int show_positional, cargo_astr_t *str,
 								int max_name_len, int indent,
-								cargo_format_t flags)
+								cargo_usage_t flags)
 {
 	#define NAME_PADDING 2
 	size_t i = 0;
@@ -2153,7 +2153,7 @@ static int _cargo_print_options(cargo_t ctx,
 		}
 
 		// Option description.
-		if ((flags & CARGO_FORMAT_RAW_OPT_DESCRIPTIONS)
+		if ((flags & CARGO_USAGE_RAW_OPT_DESCRIPTIONS)
 			|| (opt->flags & CARGO_OPT_RAW_DESCRIPTION)
 			|| (strlen(opt->description) < ctx->max_width))
 		{
@@ -3013,7 +3013,7 @@ static void _cargo_parse_show_error(cargo_t ctx)
 
 	if (!(ctx->flags & CARGO_NOERR_USAGE))
 	{
-		cargo_fprint_usage(ctx, fd, ctx->format);
+		cargo_fprint_usage(ctx, fd, ctx->usage_flags);
 	}
 
 	// Show errors automatically?
@@ -3136,10 +3136,10 @@ fail:
 	return ret;
 }
 
-void cargo_set_internal_usage_format(cargo_t ctx, cargo_format_t format)
+void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags)
 {
 	assert(ctx);
-	ctx->format = format;
+	ctx->usage_flags = flags;
 }
 
 // -----------------------------------------------------------------------------
@@ -3204,7 +3204,7 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
 
 	// By default we show only short usage on errors.
-	c->format = CARGO_FORMAT_SHORT_USAGE;
+	c->usage_flags = CARGO_USAGE_SHORT_USAGE;
 
 	// Add the default group.
 	cargo_add_group(c, 0, "", "", "");
@@ -3313,12 +3313,6 @@ void cargo_set_epilog(cargo_t ctx, const char *epilog)
 {
 	assert(ctx);
 	ctx->epilog = epilog;
-}
-
-void cargo_set_format(cargo_t ctx, cargo_format_t format)
-{
-	assert(ctx);
-	ctx->format = format;
 }
 
 typedef struct cargo_phighlight_s
@@ -3823,7 +3817,7 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	return 0;
 }
 
-const char *cargo_get_short_usage(cargo_t ctx)
+static const char *_cargo_get_short_usage(cargo_t ctx)
 {
 	char *b = NULL;
 	size_t indent = 0;
@@ -3863,7 +3857,7 @@ const char *cargo_get_short_usage(cargo_t ctx)
 	return b;
 }
 
-const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
+const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 {
 	char *ret = NULL;
 	size_t i;
@@ -3879,9 +3873,9 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	int is_default_group = 1;
 	assert(ctx);
 
-	if (!(flags & CARGO_FORMAT_HIDE_SHORT))
+	if (!(flags & CARGO_USAGE_HIDE_SHORT))
 	{
-		if (!(short_usage = cargo_get_short_usage(ctx)))
+		if (!(short_usage = _cargo_get_short_usage(ctx)))
 		{
 			CARGODBG(1, "Failed to get short usage\n");
 			return NULL;
@@ -3889,7 +3883,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	}
 
 	// Only show short usage.
-	if (flags & CARGO_FORMAT_SHORT_USAGE)
+	if (flags & CARGO_USAGE_SHORT_USAGE)
 	{
 		return short_usage;
 	}
@@ -3916,15 +3910,15 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	str.l = 1024;
 	str.offset = 0;
 
-	if (short_usage && !(flags & CARGO_FORMAT_HIDE_SHORT))
+	if (short_usage && !(flags & CARGO_USAGE_HIDE_SHORT))
 	{
 		cargo_aappendf(&str, "%s\n", short_usage);
 	}
 
 	if(ctx->description && strlen(ctx->description)
-	   && !(flags & CARGO_FORMAT_HIDE_DESCRIPTION))
+	   && !(flags & CARGO_USAGE_HIDE_DESCRIPTION))
 	{
-		if (flags & CARGO_FORMAT_RAW_DESCRIPTION)
+		if (flags & CARGO_USAGE_RAW_DESCRIPTION)
 		{
 			if (cargo_aappendf(&str, "\n%s\n", ctx->description) < 0) goto fail;
 		}
@@ -4007,9 +4001,9 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 	}
 
 	if(ctx->epilog && strlen(ctx->epilog)
-	   && !(flags & CARGO_FORMAT_HIDE_EPILOG))
+	   && !(flags & CARGO_USAGE_HIDE_EPILOG))
 	{
-		if (flags & CARGO_FORMAT_RAW_EPILOG)
+		if (flags & CARGO_USAGE_RAW_EPILOG)
 		{
 			if (cargo_aappendf(&str, "\n%s\n", ctx->epilog) < 0) goto fail;
 		}
@@ -4051,7 +4045,7 @@ fail:
 	return ret;
 }
 
-int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_format_t flags)
+int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_usage_t flags)
 {
 	const char *s;
 	assert(ctx);
@@ -4066,29 +4060,9 @@ int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_format_t flags)
 	return 0;
 }
 
-int cargo_print_usage(cargo_t ctx, cargo_format_t flags)
+int cargo_print_usage(cargo_t ctx, cargo_usage_t flags)
 {
 	return cargo_fprint_usage(ctx, stderr, flags);
-}
-
-int cargo_fprint_short_usage(cargo_t ctx, FILE *f)
-{
-	const char *s;
-	assert(ctx);
-
-	if (!(s = cargo_get_short_usage(ctx)))
-	{
-		return -1;
-	}
-
-	fprintf(f, "%s\n", s);
-
-	return 0;
-}
-
-int cargo_print_short_usage(cargo_t ctx)
-{
-	return cargo_fprint_short_usage(ctx, stderr);
 }
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
@@ -5071,7 +5045,7 @@ _TEST_START(TEST_get_usage_settings)
 {
 	typedef struct _test_usage_settings_s
 	{
-		cargo_format_t fmt;
+		cargo_usage_t fmt;
 		char *expect[4];
 		size_t expect_count;
 	} _test_usage_settings_t;
@@ -5086,8 +5060,8 @@ _TEST_START(TEST_get_usage_settings)
 	_test_usage_settings_t tus[] =
 	{
 		{ 0,								{ DESCRIPT, EPILOG, OPT_TXT }, 3},
-		{ CARGO_FORMAT_HIDE_EPILOG,			{ DESCRIPT, OPT_TXT }, 2},
-		{ CARGO_FORMAT_HIDE_DESCRIPTION,	{ EPILOG, OPT_TXT }, 2}
+		{ CARGO_USAGE_HIDE_EPILOG,			{ DESCRIPT, OPT_TXT }, 2},
+		{ CARGO_USAGE_HIDE_DESCRIPTION,		{ EPILOG, OPT_TXT }, 2}
 	};
 
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", OPT_TXT, "i", &i);
