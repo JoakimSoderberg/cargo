@@ -4006,9 +4006,23 @@ const char *cargo_get_usage(cargo_t ctx, cargo_format_t flags)
 		}
 	}
 
-	if (ctx->epilog && !(flags & CARGO_FORMAT_HIDE_EPILOG))
+	if(ctx->epilog && strlen(ctx->epilog)
+	   && !(flags & CARGO_FORMAT_HIDE_EPILOG))
 	{
-		if (cargo_aappendf(&str, "%s\n", ctx->epilog) < 0) goto fail;
+		if (flags & CARGO_FORMAT_RAW_EPILOG)
+		{
+			if (cargo_aappendf(&str, "\n%s\n", ctx->epilog) < 0) goto fail;
+		}
+		else
+		{
+			char *lb_epilog;
+			if (!(lb_epilog = _cargo_linebreak(ctx, ctx->epilog, ctx->max_width)))
+			{
+				goto fail;
+			}
+			cargo_aappendf(&str, "\n%s\n", lb_epilog);
+			free(lb_epilog);
+		}
 	}
 
 	ret = b;
@@ -6207,6 +6221,11 @@ _TEST_START(TEST_group)
 
 	cargo_print_usage(cargo, 0);
 
+	// Make sure the group can be hidden.
+	cargo_assert(strstr(cargo_get_usage(cargo, 0), "Group 2") != NULL, "Did not find Group 2");
+	cargo_group_set_flags(cargo, "group2", CARGO_GROUP_HIDE);
+	cargo_assert(strstr(cargo_get_usage(cargo, 0), "Group 2") == NULL, "Found Group 2");
+
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -6376,6 +6395,7 @@ _TEST_START(TEST_cargo_set_max_width)
 	char *args[] = { "program", "--alpha", "789", "--beta", "123" };
 
 	cargo_set_description(cargo, LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
+	cargo_set_epilog(cargo, LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
 
 	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM, "i", &j);
 	ret |= cargo_add_option(cargo, 0, "--beta -b", LOREM_IPSUM, "i", &i);

@@ -122,9 +122,10 @@ typedef enum cargo_format_e
 	CARGO_FORMAT_SHORT_USAGE			= (1 << 0),
 	CARGO_FORMAT_RAW_DESCRIPTION 		= (1 << 1),
 	CARGO_FORMAT_RAW_OPT_DESCRIPTIONS	= (1 << 2),
-	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 3),
-	CARGO_FORMAT_HIDE_EPILOG			= (1 << 4),
-	CARGO_FORMAT_HIDE_SHORT				= (1 << 5)
+	CARGO_FORMAT_RAW_EPILOG				= (1 << 3),
+	CARGO_FORMAT_HIDE_DESCRIPTION		= (1 << 4),
+	CARGO_FORMAT_HIDE_EPILOG			= (1 << 5),
+	CARGO_FORMAT_HIDE_SHORT				= (1 << 6)
 } cargo_format_t;
 
 typedef enum cargo_fprint_flags_e
@@ -194,8 +195,6 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
-// TODO: Enable setting group flags after this? Group hide doesn't make much
-// sense otherwise...
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
 
