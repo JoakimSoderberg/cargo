@@ -141,7 +141,10 @@ comes with a small helper program `cargo_helper` that can help you with this.
 See [getting started](gettingstarted.md) on how to compile this.
 
 For a full description of the formatting language, please see the
-[API reference](api.md).
+[API reference](api.md#format). In short, you specify a type specifier such as
+`i` for and `int`, `s` for a string (`char *`), `d` for `double` and so on.
+As well as specifiers that tells us if you're parsing a list, a single value,
+one or more values etc.
 
 Here's an example of using [`cargo_add_option`](api.md#cargo_add_option)
 to parse an integer:
@@ -286,6 +289,225 @@ ret |= cargo_group_add_option(cargo, "group1", "--integers");
 
 Mutually exclusive groups
 =========================
+If you have a set of options that cannot be used together, you can put them
+in a mutually exclusive group (mutex group).
+
+For example, say you have three options `--alpha`, `--beta` and `--centauri`.
+The user will only be allowed to specify one of them at one time.
+
+You can create a mutex group by using
+[`cargo_add_mutex_group`](api.md#cargo_add_mutex_group):
+
+```c
+int cargo_add_mutex_group(cargo_t ctx,
+                        cargo_mutex_group_flags_t flags,
+                        const char *name);
+```
+
+And then add options to it using
+[`cargo_mutex_group_add_option`](api.md#cargo_mutex_group_add_option):
+
+```c
+int cargo_mutex_group_add_option(cargo_t ctx,
+                                const char *group,
+                                const char *opt);
+```
+
+So here we create the three options and put them in a mutex group:
+
+```c
+int i = 0;
+int j = 0;
+int k = 0;
+ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
+
+ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
+
+ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
+ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
+
+ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
+ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--centauri");
+
+cargo_assert(ret == 0, "Failed to add options");
+```
+
+Here is the resulting output:
+
+```
+$ program --alpha --beta 123 456
+Usage: program [--alpha ALPHA [ALPHA ...]] [--beta BETA]
+               [--centauri CENTAURI [CENTAURI ...]] [--help ]
+--alpha --beta 123 456
+~~~~~~~ ~~~~~~
+Only one of these variables allowed at the same time:
+--alpha, --beta, --centauri
+```
+
+One required
+------------
+
+If you want to require that one of the options is always picked, you can pass
+the flag [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#CARGO_MUTEXGRP_ONE_REQUIRED) to
+[`cargo_add_mutex_group`](api.md#cargo_add_mutex_group).
+
+```c
+ret = cargo_add_mutex_group(cargo,
+                            CARGO_MUTEXGRP_ONE_REQUIRED,
+                            "mutex_group1");
+cargo_assert(ret == 0, "Failed to add mutex group");
+
+ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i", &j);
+ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
+
+ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
+ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
+
+// Don't add this to the mutex group.
+ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
+
+cargo_assert(ret == 0, "Failed to add options");
+```
+
+And the resulting output if we don't at least specify one of `--alpha` or
+`--beta`:
+
+```bash
+$ program --centauri 123 456
+Usage: program [--alpha ALPHA] [--beta BETA]
+               [--centauri CENTAURI [CENTAURI ...]] [--help ]
+One of these variables is required:
+--alpha, --beta
+```
+
+Custom parsing
+==============
+As you have seen in the previous examples, parsing native types such as `int`,
+`float`, `double` or a string is possible. But what if you want to parse
+something more advanced, a timestamp for example?
+
+Here's where custom callbacks come in to play. Instead of simply passing the
+address to the variable you want cargo to put whatever it parses into, you
+also specify a custom callback that cargo should call when it parses an option.
+
+The callback function of type [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t)
+looks like this:
+
+```c
+typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+                                 int argc, char **argv);
+```
+
+The `void *user` is a user defined pointer that will be passed on to the
+callback function by cargo.
+
+`char *optname` is the option name of the variable being parsed.
+
+`argc` and `argv` are the arguments that cargo has parsed for the option
+being parsed (it is not the entire command line). So for instance if cargo is
+given the command line `--alpha --beta 1 2 3 --sigma 4 5` and we're parsing
+the `--beta` option. Then `argc` will be `3` and `argv` will contain
+`[1, 2, 3]`.
+
+Note that any memory you allocate in this callback, you will have to free,
+even if [`CARGO_AUTOCLEAN`](api.md#CARGO_AUTOCLEAN) is enabled. Since cargo does
+not have any knowledge where this is stored or how to free it.
+
+Example
+-------
+So let's say we want to parse a rectangle value wher the dimensions are
+specified by the width and height in this format: `WxH`. And we want to put
+it in our struct `rect_t`:
+
+```c
+typedef struct rect_s
+{
+    int width;
+    int height;
+} rect_t;
+```
+
+So let use define a callback that parses such a rectangle:
+
+```c
+static int parse_rect_cb(cargo_t ctx, void *user, const char *optname,
+                    int argc, char **argv)
+{
+    assert(ctx);
+    assert(user);
+
+    // We expect a rect_t structure to be passed to us.
+    rect_t *u = (rect_ *)user;
+    memset(u, 0, sizeof(rect_t));
+
+    if (argc > 0)
+    {
+        if (sscanf(argv[0], "%dx%d", &u->width, &u->height) != 2)
+        {
+            return -1;
+        }
+
+        return 1; // We ate 1 argument.
+    }
+
+    return -1; // Error.
+}
+```
+
+If an error occurs `-1` should be returned. Otherwise, how many of the
+arguments that you were given that were parsed should be returned.
+
+So now we have a callback that can parse our rectangle. Let's use it.
+Instead of specifying the type such as `i` for `int` we instead add a `c`
+for **custom callback**.
+
+As arguments we first pass our `parse_rect_cb` callback function, and then
+the `user` data we want cargo to pass to it at parse time.
+
+```c
+rect_t rect;
+
+ret = cargo_add_option(cargo, 0, "--rect","The rect",
+                        "c", parse_rect_cb, &rect);
+
+ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+```
+
+List example
+------------
+This works just like any other type, so you can of course parse a list of 
+values usign a custom callback as well, and using a `[c]+` format string
+for the example above. This time allocating an array of `rect_t`:s.
+
+```c
+static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
+                                int argc, char **argv)
+{
+    int i;
+    assert(ctx);
+    assert(user);
+    rect_t **u = (rect_t **)user;
+    rect_t *rect;
+
+    if (!(*u = calloc(argc, sizeof(_test_data_t))))
+    {
+        return -1;
+    }
+
+    rect = *u;
+
+    for (i = 0; i < argc; i++)
+    {
+        if (sscanf(argv[i], "%dx%d", &rect[i].width, &rect[i].height) != 2)
+        {
+            return -1;
+        }
+    }
+
+    return i; // How many arguments we ate.
+}
+```
 
 Help with format strings
 ========================

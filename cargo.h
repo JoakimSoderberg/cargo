@@ -221,6 +221,7 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
 
+// TODO: cargo_option_set_metavar
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);

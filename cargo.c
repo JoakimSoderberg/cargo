@@ -2861,7 +2861,7 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 		else if ((parsed_count == 0)
 				&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
 		{
-			fprintf(stderr, "One of these variables is required:\n");
+			cargo_aappendf(&str, "One of these variables is required:\n");
 			_cargo_print_mutex_group(ctx, &str, g);
 			goto fail;
 		}

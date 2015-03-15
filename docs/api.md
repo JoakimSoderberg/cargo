@@ -1,3 +1,7 @@
+Table of contents
+=================
+
+[TOC]
 
 API reference
 =============
@@ -105,13 +109,95 @@ The cargo version as a string. Example: `"0.2.0"`.
 
 ### cargo_get_version ###
 
-### `const char *cargo_get_version()` ###
+```c
+const char *cargo_get_version()
+```
  
 Function that gets the cargo version as a string. Example: `"0.2.0"`.
 
 ## Function pointers ##
 
-`typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
-								int argc, char **argv);`
+### cargo_custom_cb_t ###
 
+```c
+typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+                                 int argc, char **argv);
+```
 
+This is the callback function for doing custom parsing as specified when using
+[`cargo_add_option`](api.md#cargo_add_option) and giving the `c` type specifier
+in the **format** string.
+
+You can read more about adding custom parser callbacks in the
+[add options guide](adding.md#custom-parsing).
+
+## Functions ##
+
+Here you find the core API for cargo.
+
+### cargo_init ###
+
+### cargo_destroy ###
+
+### cargo_set_flags ###
+
+### cargo_get_flags ###
+
+### cargo_add_optionv ###
+
+### cargo_add_option ###
+
+### cargo_add_alias ###
+
+### cargo_add_group ###
+
+### cargo_group_add_option ###
+
+### cargo_group_set_flags ###
+
+### cargo_add_mutex_group ###
+
+### cargo_mutex_group_add_option ###
+
+### cargo_set_metavar ###
+
+### cargo_set_internal_usage_flags ###
+
+### cargo_parse ###
+
+### cargo_set_option_count_hint ###
+
+### cargo_set_prefix ###
+
+### cargo_set_max_width ###
+### cargo_set_description ###
+### cargo_set_epilog ###
+### cargo_fprint_usage ###
+
+### cargo_print_usage ###
+
+### cargo_get_usage ###
+
+### cargo_get_error ###
+
+### cargo_get_unknown ###
+
+### cargo_get_args ###
+
+## Utility functions ##
+
+These are not a part of the core, but are nice to have.
+
+### cargo_get_fprint_args ###
+
+### cargo_get_fprintl_args ###
+
+### cargo_get_vfprint_args ###
+
+### cargo_fprint_args ###
+
+### cargo_fprintl_args ###
+
+### cargo_split_commandline ###
+
+### cargo_free_commandline ###
