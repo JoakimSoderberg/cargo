@@ -137,15 +137,123 @@ Here you find the core API for cargo.
 
 ### cargo_init ###
 
+```c
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
+```
+
+Initializes a [`cargo_t`](api.md#cargo_t) context.
+See [Initializing cargo](api.md#initializing_cargo) for an example.
+You need to free this context using [`cargo_destroy`](api.md#cargo_destroy).
+
+---
+
+**Return value**: -1 on fatal error. 0 on success.
+
+**ctx**: A pointer to a [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: Flags for setting global behavior for cargo.
+           See [`cargo_flags_t`](api.md#cargo_flags_t).
+
+**progname**: The name of the executable. Usually this will be set to `argv[0]`.
+
+---
+
 ### cargo_destroy ###
+
+```c
+void cargo_destroy(cargo_t *ctx)
+```
+
+Destroys a [`cargo_t`](api.md#cargo_t) context.
+
+---
+
+**ctx**: A pointer to a [`cargo_t`](api.md#cargo_t) context.
+
+---
 
 ### cargo_set_flags ###
 
+```c
+void cargo_set_flags(cargo_t ctx, cargo_flags_t flags)
+```
+
+Sets the flags of the [`cargo_t`](api.md#cargo_t) context.
+See [`cargo_flags_t`](api.md#cargo_flags_t).
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: The flags [`cargo_flags_t`](api.md#cargo_flags_t).
+
+---
+
 ### cargo_get_flags ###
+
+```c
+cargo_flags_t cargo_get_flags(cargo_t ctx)
+```
+
+Gets the flags of the [`cargo_t`](api.md#cargo_t) context.
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+---
 
 ### cargo_add_optionv ###
 
+```c
+int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
+					  const char *optnames, 
+					  const char *description,
+					  const char *fmt, va_list ap)
+```
+
+Variable arguments version of [`cargo_add_option`](api.md#cargo_add_option)
+
 ### cargo_add_option ###
+
+```c
+int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
+					 const char *optnames, const char *description,
+					 const char *fmt, ...)
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: Option flags [`cargo_option_flags_t`](api.md#cargo_option_flags_t).
+
+**optnames**: Option names in the form `"--alpha --al -a"`.
+The first will become the option name `--alpha`, the ones following will become
+aliases, `--al` and `-a`. It is also possible to add aliases using
+[`cargo_add_alias`](api.md#cargo_add_alias).
+Max [`CARGO_NAME_COUNT`](api.md#cargo_name_count) names allowed.
+
+The names and aliases that start with a **prefix character** will become an
+option, the default one is [`CARGO_DEFAULT_PREFIX`](api.md#cargo_default_prefix) which is `"-"` unless it has been overridden. This can also be set with
+[`cargo_set_prefix`](api.md#cargo_set_prefix). Options are optional by default
+this can be changed by setting the
+[`CARGO_OPT_REQUIRED`](api.md#cargo_opt_required) flag.
+
+If the name is not prepended with a prefix, it will become
+a **positional argument**. Positional arguments are required by default, this
+can be changed by setting
+[`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required).
+
+**description**: Description of the option.
+
+**fmt**: Format string that tells cargo what arguments it should expect it will
+be passed. Just like how `printf` works.
+
+cargo will use this format definition when it parses the command line.
+
+
+---
 
 ### cargo_add_alias ###
 
@@ -170,8 +278,11 @@ Here you find the core API for cargo.
 ### cargo_set_prefix ###
 
 ### cargo_set_max_width ###
+
 ### cargo_set_description ###
+
 ### cargo_set_epilog ###
+
 ### cargo_fprint_usage ###
 
 ### cargo_print_usage ###
