@@ -3138,15 +3138,29 @@ fail:
 	return ret;
 }
 
-void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags)
+void _cargo_invalid_format_char(cargo_t ctx,
+									const char *optname, const char *fmt,
+									cargo_fmt_scanner_t *s)
 {
 	assert(ctx);
-	ctx->usage_flags = flags;
+	assert(optname);
+	assert(s);
+
+	CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
+			optname, _cargo_fmt_token(s), s->column);
+	CARGODBG(1, "      \"%s\"\n", fmt);
+	CARGODBG(1, "       %*s\n", s->column, "^");
 }
 
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
+
+void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags)
+{
+	assert(ctx);
+	ctx->usage_flags = flags;
+}
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width)
 {
@@ -4266,14 +4280,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		case 'b': o->type = CARGO_BOOL;   o->target = va_arg(ap, void *); break;
 		case 'u': o->type = CARGO_UINT;   o->target = va_arg(ap, void *); break;
 		case 'f': o->type = CARGO_FLOAT;  o->target = va_arg(ap, void *); break;
-		default:
-		{
-			CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-					o->name[0], _cargo_fmt_token(&s), s.column);
-			CARGODBG(1, "      \"%s\"\n", fmt);
-			CARGODBG(1, "       %*s\n", s.column, "^");
-			goto fail;
-		}
+		default: _cargo_invalid_format_char(ctx, o->name[0], fmt, &s);goto fail;
 	}
 
 	if (o->array)
@@ -4287,6 +4294,8 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		}
 		else
 		{
+			// This is where we return the number of arguments
+			// we have parsed for this option.
 			o->target_count = va_arg(ap, size_t *);
 			*o->target_count = 0;
 		}
@@ -4303,19 +4312,38 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 		_cargo_fmt_next_token(&s);
 
-		switch (_cargo_fmt_token(&s))
+		if (o->alloc)
 		{
-			case '*': o->nargs = CARGO_NARGS_ZERO_OR_MORE; break;
-			case '+': o->nargs = CARGO_NARGS_ONE_OR_MORE;  break;
-			case 'N': // Fall through. Python uses N so lets allow that...
-			case '#': o->nargs = va_arg(ap, int); break;
-			default:
+			switch (_cargo_fmt_token(&s))
 			{
-				CARGODBG(1, "  %s: Unknown format character '%c' at index %d\n",
-						optname_list[0], _cargo_fmt_token(&s), s.column);
-				CARGODBG(1, "      \"%s\"\n", fmt);
-				CARGODBG(1, "       %*s\n", s.column, "^");
-				goto fail;
+				case '*': o->nargs = CARGO_NARGS_ZERO_OR_MORE; break;
+				case '+': o->nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+				case 'N': // Fall through. Python uses N so lets allow that...
+				case '#': o->nargs = va_arg(ap, int); break;
+				default: _cargo_invalid_format_char(ctx, o->name[0], fmt, &s);
+						goto fail;
+			}
+
+			// By default "nargs" is the max number of arguments the option should parse.
+			o->max_target_count = (o->nargs >= 0) ? o->nargs : (size_t)(-1);
+		}
+		else
+		{
+			assert(*fmt == '.');
+			// If we have a static array. For example:
+			// "int val[4];"
+			// The max target count must still always be specified
+			// if we use "+" or "*" when in static mode.
+			o->max_target_count = va_arg(ap, int);
+
+			switch (_cargo_fmt_token(&s))
+			{
+				case '*': o->nargs = CARGO_NARGS_ZERO_OR_MORE; break;
+				case '+': o->nargs = CARGO_NARGS_ONE_OR_MORE;  break;
+				case 'N': // Fall through. Python uses N so lets allow that...
+				case '#': o->nargs = o->max_target_count; break;
+				default: _cargo_invalid_format_char(ctx, o->name[0], fmt, &s);
+						goto fail;
 			}
 		}
 	}
@@ -4345,14 +4373,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 		// Never allocate single values (unless it's a string).
 		o->alloc = (o->type != CARGO_STRING) ? 0 : o->alloc;
-	}
-
-	if (!o->alloc && o->array && (o->nargs < 0))
-	{
-		CARGODBG(1, "  %s: Static list requires a fixed size (#)\n", o->name[0]);
-		CARGODBG(1, "      \"%s\"\n", fmt);
-		CARGODBG(1, "       %*s\n", s.column, "^");
-		goto fail;
+		o->max_target_count = 1;
 	}
 
 	o->flags = flags;
@@ -4369,9 +4390,6 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		CARGODBG(2, "Positional argument %s required by default\n", o->name[0]);
 		o->flags |= CARGO_OPT_REQUIRED;
 	}
-
-	// By default "nargs" is the max number of arguments the option should parse.
-	o->max_target_count = (o->nargs >= 0) ? o->nargs : (size_t)(-1);
 
 	if (o->alloc)
 	{
@@ -4937,6 +4955,29 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option)
 
 	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
 						"[s#]#", &a, LENSTR, &count, 3);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from int array: %s, %s, %s\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == 3, "Array count is not 3 as expected");
+	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
+	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
+	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&a, &count);
+}
+_TEST_END()
+
+_TEST_START(TEST_add_alloc_fixed_string_array_option2)
+{
+	char **a = NULL;
+	size_t count;
+	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+						"[s]#", &a, &count, 3);
 
 	cargo_assert(a != NULL, "Array is null");
 	cargo_assert(count == 3, "Array count is not 3");
@@ -6591,7 +6632,7 @@ _TEST_START(TEST_cargo_fprintf)
 	cargo_assert(s, "Got NULL string");
 
 	_TEST_CLEANUP();
-	free(s);
+	if (s) free(s);
 }
 _TEST_END()
 
@@ -6631,7 +6672,67 @@ _TEST_START(TEST_cargo_bool_count_compact)
 }
 _TEST_END()
 
-// TODO: Refactor cargo_get_usage
+_TEST_START(TEST_fixed_one_or_more_array)
+{
+	/*
+	int vals[4];
+	int vals_expect[] = { 1, 2 };
+	size_t val_count = 0;
+	char *args[] = { "program ", "--alpha", "1", "2" };
+
+	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM,
+							".[i]+", &vals, &val_count, 4);
+
+	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("vals[0] == %d\n", vals[0]);
+	printf("vals[1] == %d\n", vals[1]);
+
+	cargo_assert(vals[0] == 1, "Expected vals[0] to be 1");
+	cargo_assert(vals[1] == 2, "Expected vals[1] to be 2");
+
+	cargo_assert_array(val_count,
+						sizeof(vals_expect) / sizeof(vals_expect[0]),
+						vals, vals_expect);
+	*/
+	int a[4];
+	int a_expect[2] = { 1, 2 };
+	char *args[] = { "program", "--beta", "1", "2" };
+	_ADD_TEST_FIXED_ARRAY(".[i]+", "%d");
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_fixed_zero_or_more_array)
+{
+	int a[4];
+	int a_expect[2] = { 1, 2 };
+	char *args[] = { "program", "--beta", "1", "2" };
+	_ADD_TEST_FIXED_ARRAY(".[i]*", "%d");
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_fixed_fail_array)
+{
+	int i;
+	int vals[4];
+	int vals_expect[] = { 1, 2 };
+	size_t val_count = 0;
+	char *args[] = { "program ", "--alpha", "1", "2", "--beta", "4" };
+
+	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM,
+							".[i]#", &vals, &val_count, 4);
+	//ret |= cargo_add_option(cargo, 0, "--beta", LOREM_IPSUM, "i", &i);
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Parse succeeded when it should fail");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
 // TODO: Test autoclean with string of arrays
@@ -6674,6 +6775,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_float_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option2),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option_noargs),
 	CARGO_ADD_TEST(TEST_print_usage),
@@ -6726,7 +6828,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
 	CARGO_ADD_TEST(TEST_cargo_fprintf),
 	CARGO_ADD_TEST(TEST_cargo_bool_count),
-	CARGO_ADD_TEST(TEST_cargo_bool_count_compact)
+	CARGO_ADD_TEST(TEST_cargo_bool_count_compact),
+	CARGO_ADD_TEST(TEST_fixed_one_or_more_array),
+	CARGO_ADD_TEST(TEST_fixed_zero_or_more_array),
+	CARGO_ADD_TEST(TEST_fixed_fail_array)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -6854,7 +6959,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "\n%sStart Test %2d:%s - %s\n",
 			CARGO_COLOR_CYAN, test_index + 1, CARGO_COLOR_RESET, t->name);
 
-		fprintf(stderr, "%s", CARGO_COLOR_DARK_GRAY);
+		//fprintf(stderr, "%s", CARGO_COLOR_DARK_GRAY);
 		t->error = t->f();
 		fprintf(stderr, "%s", CARGO_COLOR_RESET);
 
