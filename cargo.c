@@ -768,6 +768,12 @@ static void _cargo_set_error(cargo_t ctx, char *error)
 	ctx->error = error;
 }
 
+static cargo_fprint_flags_t _cargo_get_cflag(cargo_t ctx)
+{
+	assert(ctx);
+	return (ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
+}
+
 static size_t _cargo_get_type_size(cargo_type_t t)
 {
 	assert((t >= CARGO_BOOL) && (t <= CARGO_STRING));
@@ -2841,11 +2847,9 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 		if (parsed_count > 1)
 		{
 			char *s;
-			size_t fprint_flags =
-				(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 
 			if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
-				fprint_flags, parsed_count, parse_highlights)))
+						_cargo_get_cflag(ctx), parsed_count, parse_highlights)))
 			{
 				CARGODBG(1, "Out of memory\n");
 				goto fail;
@@ -2953,8 +2957,6 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 	{
 		const char *suggestion = NULL;
 		char *s = NULL;
-		size_t fprint_flags =
-				(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		cargo_aappendf(&str, "Unknown options:\n");
@@ -2972,7 +2974,7 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		}
 
 		if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
-			fprint_flags, ctx->unknown_opts_count, highlights)))
+			_cargo_get_cflag(ctx), ctx->unknown_opts_count, highlights)))
 		{
 			CARGODBG(1, "Out of memory\n");
 			goto fail;
