@@ -1513,24 +1513,13 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	}
 
 	assert(args_to_look_for >= 0);
-	CARGODBG(3, "Looking for %d args\n", args_to_look_for);
 
-	// Look for arguments for this option.
-	if (((start + args_to_look_for) > argc) && !_cargo_zero_args_allowed(opt))
+	if (start + args_to_look_for >= ctx->argc)
 	{
-		cargo_astr_t str;
-		char *error = NULL;
-		int expected = (opt->nargs != CARGO_NARGS_ONE_OR_MORE) ? opt->nargs : 1;
-		memset(&str, 0, sizeof(cargo_astr_t));
-		str.s = &error;
-
-		cargo_aappendf(&str, "Not enough arguments for %s."
-						" %d expected but got only %d\n", 
-						name, expected, argc - start);
-		_cargo_set_error(ctx, error);
-		return -1;
+		args_to_look_for = ctx->argc - start;
 	}
 
+	CARGODBG(3, "Looking for %d args\n", args_to_look_for);
 	CARGODBG(3, "Start %d, End %d (argc %d, nargs %d)\n",
 			start, (start + args_to_look_for), argc, opt->nargs);
 
