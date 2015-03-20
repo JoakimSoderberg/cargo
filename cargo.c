@@ -1454,6 +1454,21 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 	return 0;
 }
 
+static const char *_cargo_nargs_str(int nargs)
+{
+	static char s[32];
+
+	*s = '\0';
+
+	switch (nargs)
+	{
+		case CARGO_NARGS_ZERO_OR_ONE: return "0 or 1";
+		case CARGO_NARGS_ONE_OR_MORE: return "1 or more";
+		case CARGO_NARGS_ZERO_OR_MORE: return "0 or more";
+		default: cargo_snprintf(s, sizeof(s), "%d", nargs); return s;
+	}
+}
+
 static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 								int argc, char **argv)
 {
@@ -1582,11 +1597,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	// Number of arguments eaten.
 	opt->num_eaten = (ctx->j - start);
 
-	if (!opt->positional)
-	{
-		opt->num_eaten++;
-	}
-
 	CARGODBG(2, "_cargo_parse_option ate %d\n", opt->num_eaten);
 
 	// If we're parsing using a custom callback, pass it onto that.
@@ -1615,7 +1625,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		CARGODBG(2, "Custom call back ate: %d\n", custom_eaten);
 	}
 
-	return opt->num_eaten;
+	return (opt->positional) ? opt->num_eaten : (opt->num_eaten + 1);
 }
 
 static int _cargo_compare_strlen(const void *a, const void *b)
@@ -3725,6 +3735,20 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 
 			_cargo_set_error(ctx, error);
 			goto fail;
+		}
+
+		if (opt->parsed)
+		{
+			if (((opt->nargs == CARGO_NARGS_ONE_OR_MORE) && (opt->num_eaten == 0))
+			 || ((opt->nargs >= 0) && (opt->num_eaten != opt->nargs)))
+			{
+				CARGODBG(1, "Not enough arguments\n");
+				cargo_aappendf(&str, "Not enough arguments for \"%s\" expected %s "
+							 "but got only %lu\n", opt->name[0],
+							 _cargo_nargs_str(opt->nargs), opt->num_eaten);
+				_cargo_set_error(ctx, error);
+				goto fail;
+			}
 		}
 	}
 
@@ -6674,28 +6698,6 @@ _TEST_END()
 
 _TEST_START(TEST_fixed_one_or_more_array)
 {
-	/*
-	int vals[4];
-	int vals_expect[] = { 1, 2 };
-	size_t val_count = 0;
-	char *args[] = { "program ", "--alpha", "1", "2" };
-
-	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM,
-							".[i]+", &vals, &val_count, 4);
-
-	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret == 0, "Parse failed");
-
-	printf("vals[0] == %d\n", vals[0]);
-	printf("vals[1] == %d\n", vals[1]);
-
-	cargo_assert(vals[0] == 1, "Expected vals[0] to be 1");
-	cargo_assert(vals[1] == 2, "Expected vals[1] to be 2");
-
-	cargo_assert_array(val_count,
-						sizeof(vals_expect) / sizeof(vals_expect[0]),
-						vals, vals_expect);
-	*/
 	int a[4];
 	int a_expect[2] = { 1, 2 };
 	char *args[] = { "program", "--beta", "1", "2" };
@@ -6724,7 +6726,7 @@ _TEST_START(TEST_fixed_fail_array)
 
 	ret |= cargo_add_option(cargo, 0, "--alpha", LOREM_IPSUM,
 							".[i]#", &vals, &val_count, 4);
-	//ret |= cargo_add_option(cargo, 0, "--beta", LOREM_IPSUM, "i", &i);
+	ret |= cargo_add_option(cargo, 0, "--beta", LOREM_IPSUM, "i", &i);
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Parse succeeded when it should fail");
