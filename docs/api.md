@@ -140,7 +140,7 @@ These examples is what you would pass as `fmt` string, and the `...` variable ar
 * `"[f]+", &vals, &count`
   Parse and allocate **one or more** floats into `float *vals` and store the number parsed into `size_t count`
 * `"[s]+", &strs, &count`
-  Parse and allocaet **one or more** strings into `char **strs` and store the number parsed into `size_t count`
+  Parse and allocate **one or more** strings into `char **strs` and store the number parsed into `size_t count`
 * `"[i]#", &vals, &count, 4`
   Parse and allocate max 4 integers into `int *vals` and store the number parsed into `size_t count`
 * `"[s]#", &strs, &count, 5`
@@ -148,6 +148,8 @@ These examples is what you would pass as `fmt` string, and the `...` variable ar
 * `"[s#]#", &strs, 32, &count, 5`
   Parse and allocate max 5 strings of max 32 length, and store the number parsed into `size_t count`.
 * `".[i]#", &vals, &count, 4`
+  Parse max 4 integers into `int vals[4]` and store the number parsed into `size_t count`.
+* `".[i]+", &vals, &count, 4`
   Parse max 4 integers into `int vals[4]` and store the number parsed into `size_t count`.
 
 ### Type ###
@@ -178,6 +180,26 @@ Parse a string (note that the memory for this will be allocated):
 char *str;
 ..., "s", &str);
 ```
+
+If an option expects an optional value, you can prepend it with `?`:
+```c
+float val = 0.3f;
+cargo_add_option(cargo, 0, "--opt", "description", "f?", &val);
+```
+
+### Arrays
+
+To parse an array/list of values you specify enclose the type into brackets like this: `[` type `]`.
+
+Then to tell cargo how many elements you want to parse, you must append a size specifier:
+
+- `+` 1 or more values.
+- `*` 0 or more values.
+- `#` or `N` This means we will pass the expected number of values as a variable argument.
+
+So to parse **1 or more** `int`: `"[i]+"`
+Or parsing **0 or more** `float`: `"[f]*"`
+Or parsing **4** `double`: `"[d]#"`
 
 ### Allocation, fixed size and strings ###
 
