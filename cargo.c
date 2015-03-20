@@ -3162,6 +3162,46 @@ void _cargo_invalid_format_char(cargo_t ctx,
 	CARGODBG(1, "       %*s\n", s->column, "^");
 }
 
+static int _cargo_check_required_options(cargo_t ctx)
+{
+	cargo_astr_t errstr;
+	char *error = NULL;
+	size_t i;
+	cargo_opt_t *opt = NULL;
+	memset(&errstr, 0, sizeof(cargo_astr_t));
+	errstr.s = &error;
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		opt = &ctx->options[i];
+
+		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
+		{
+			CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
+			cargo_aappendf(&errstr, "Missing required argument \"%s\"\n", opt->name[0]);
+
+			_cargo_set_error(ctx, error);
+			return -1;
+		}
+
+		if (opt->parsed)
+		{
+			if (((opt->nargs == CARGO_NARGS_ONE_OR_MORE) && (opt->num_eaten == 0))
+			 || ((opt->nargs >= 0) && (opt->num_eaten != opt->nargs)))
+			{
+				CARGODBG(1, "Not enough arguments\n");
+				cargo_aappendf(&errstr, "Not enough arguments for \"%s\" expected %s "
+							 "but got only %lu\n", opt->name[0],
+							 _cargo_nargs_str(opt->nargs), opt->num_eaten);
+				_cargo_set_error(ctx, error);
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3591,10 +3631,6 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	char *arg = NULL;
 	const char *name = NULL;
 	cargo_opt_t *opt = NULL;
-	cargo_astr_t str;
-	char *error = NULL;
-	memset(&str, 0, sizeof(cargo_astr_t));
-	str.s = &error;
 
 	CARGODBG(2, "============ Cargo Parse =============\n");
 
@@ -3724,32 +3760,9 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 		return 1;
 	}
 
-	for (i = 0; i < ctx->opt_count; i++)
+	if (_cargo_check_required_options(ctx))
 	{
-		opt = &ctx->options[i];
-
-		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
-		{
-			CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
-			cargo_aappendf(&str, "Missing required argument \"%s\"\n", opt->name[0]);
-
-			_cargo_set_error(ctx, error);
-			goto fail;
-		}
-
-		if (opt->parsed)
-		{
-			if (((opt->nargs == CARGO_NARGS_ONE_OR_MORE) && (opt->num_eaten == 0))
-			 || ((opt->nargs >= 0) && (opt->num_eaten != opt->nargs)))
-			{
-				CARGODBG(1, "Not enough arguments\n");
-				cargo_aappendf(&str, "Not enough arguments for \"%s\" expected %s "
-							 "but got only %lu\n", opt->name[0],
-							 _cargo_nargs_str(opt->nargs), opt->num_eaten);
-				_cargo_set_error(ctx, error);
-				goto fail;
-			}
-		}
+		goto fail;
 	}
 
 	if (_cargo_check_mutex_groups(ctx))
