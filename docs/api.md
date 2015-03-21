@@ -345,21 +345,35 @@ If the name is not prepended with a prefix, it will become a **positional argume
 
 ---
 
+Adds an option for cargo to parse.
+
 ### cargo_add_alias ###
 
 ```c
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 ```
 
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The name of the option that the alias should be added to.
+
+**alias**: The name of the alias.
+
+---
+
 This can be used to add an alias to an option name. So if you have an option with the name `"--option"`, you can add an alias `"-o"` for it by doing:
 
 ```c
-cargo_add_alias(cargo, "--option", "-o");
+ret = cargo_add_alias(cargo, "--option", "-o");
 ```
 
-Note that you can have max `CARGO_NAME_COUNT - 1` aliases for an option name.
+Note that you can have max [`CARGO_NAME_COUNT - 1`](api.md#CARGO_NAME_COUNT) aliases for an option name.
 
 Also note that this is usually best done directly when calling [`cargo_add_option`](api.md#cargo_add_option) instead.
+
+You cannot aliases to positional arguments (options starting without a prefix character).
 
 ### cargo_add_group ###
 
@@ -367,6 +381,20 @@ Also note that this is usually best done directly when calling [`cargo_add_optio
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description)
 ```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: See [`cargo_group_flags_t`](api.md#cargo_group_flags_t) for flags.
+
+**name**: The group name used to identify the group, `group_name`.
+
+**title**: The title shown in the usage output `Group Name`.
+
+**description**: The description shown in the usage for the group.
+
+---
 
 Adds a new option group. This can be used to group options together in the usage output.
 
@@ -379,9 +407,23 @@ ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
 Both the group `title` and `description` can be `NULL`. If the `title` isn't
 set the `name` will be used instead.
 
-See [`cargo_group_flags_t`](api.md#cargo_group_flags_t) for flags. You can add options to the group by either using [`cargo_group_add_option`](api.md#cargo_group_add_option) or inline in [`cargo_add_option`](api.md#cargo_add_option).
+ You can add options to the group by either using [`cargo_group_add_option`](api.md#cargo_group_add_option) or inline in [`cargo_add_option`](api.md#cargo_add_option).
 
 ### cargo_group_add_option ###
+
+```c
+int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The group name you want to add the option to.
+
+**opt**: The name of the option you want to add to the group.
+
+---
 
 Use this to add an option to a group.
 
@@ -398,37 +440,352 @@ ret = cargo_add_option(cargo, 0, "<group1> --option",
 
 ### cargo_group_set_flags ###
 
+```c
+int cargo_group_set_flags(cargo_t ctx, const char *group,
+						   cargo_group_flags_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The group name you want to change the flags for.
+
+**flags**: See [`cargo_group_flags_t`](api.md#cargo_group_flags_t) for flags.
+
+---
+
+Sets the flags for a group.
+
 ### cargo_add_mutex_group ###
+
+```c
+int cargo_add_mutex_group(cargo_t ctx,
+						cargo_mutex_group_flags_t flags,
+						const char *name);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: See [`cargo_mutex_group_flags_t`](api.md#cargo_mutex_group_flags_t) for flags.
+
+**name**: The name of the mutex group.
+
+---
+
+This creates a mutually exclusive group. Only one of the options in this group is allowed to be specified as an argument.
+
+If you specify the `CARGO_MUTEXGRP_ONE_REQUIRED` flag, one of the flag *has* to be specified.
 
 ### cargo_mutex_group_add_option ###
 
+```c
+int cargo_mutex_group_add_option(cargo_t ctx,
+								const char *group,
+								const char *opt);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The name of the mutex group.
+
+**opt**: The name of the option to add to the mutex group.
+
+---
+
+Adds an option to a mutex group.
+
 ### cargo_set_metavar ###
+
+```c
+int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The option name you want to set the metavar for.
+
+**metavar**: The meta variable name.
+
+---
+
+Change the default "metavar" that is shown in the usage output to identify the values for an option.
+
+The default is to simply use the option name in uppercase:
+
+```c
+--option OPTION 
+```
+
+So you can change this to whatever you want:
+
+```c
+ret = cargo_set_metavar(cargo, "--option", "THEVALUE");
+```
+
+Which gives:
+
+```c
+--option THEVALUE
+```
 
 ### cargo_set_internal_usage_flags ###
 
+```c
+void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: See [`cargo_usage_t`](api.md#cargo_usage_t).
+
+---
+
+This sets the internal usage flags used when cargo automatically outputs errors and shows the usage when it gets invalid input in [`cargo_parse`](api.md#cargo_parse).
+
+These are the same flags that you set when calling [`cargo_get_usage`](api.md#cargo_get_usage).
+
+By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL_USAGE`](api.md#CARGO_USAGE_FULL_USAGE) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
+
 ### cargo_parse ###
+
+```c
+int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**start_index**: What index into `argv` should cargo start parsing from.
+
+**argc**: The number of arguments in `argv`.
+
+**argv**: A list of strings containing the arguments to parse.
+
+---
+
+This is where cargo does its business parsing the command line arguments passed to it.
+
+Usually the first argument in `argv` contains the program executable, but you can pass anything to cargo, so you can specify the `start_index` into `argv` that cargo should start parsing from. Usually this will be at index `1`.
+
+```c
+argv = { "the/program", "--option", "5" };
+  // Start parsing here ^
+argc = 3;
+...
+ret = cargo_parse(cargo, 1, argc, argv);
+```
+
+By default cargo will try to parse the arguments it is given, and if there is an error it will output it to `stderr` including a short usage message.
+
+If you want to override this behaviour, you can change this behaviour by setting the [`cargo_flags_t`](api.md#cargo_flags_t).
+
+You can turn it off completely and instead use [`cargo_get_usage`](api.md#cargo_get_usage), [`cargo_get_error`](api.md#cargo_get_error) and [`cargo_get_unknown`](api.md#cargo_get_unknown) to customize the output however you want.
 
 ### cargo_set_option_count_hint ###
 
+```c
+void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**option_count**: The number of options you will add to cargo.
+
+---
+
+This gives cargo a hint about how many options you will be adding so that it can allocate the correct number of options right away instead of having to do a reallocation.
+
 ### cargo_set_prefix ###
+
+```c
+void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**prefix_chars**: A string containing the prefix characters.
+
+---
+
+This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"="` unless it has been overriden in `"cargo_config.h"`.
+
+For instance you can allow both `"-"` and `"+"` by setting this to `"-+"`. So then you can add an option such as `"--option"` or `"++option"`.
 
 ### cargo_set_max_width ###
 
+```c
+void cargo_set_max_width(cargo_t ctx, size_t max_width);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**max_width**: The max width for the usage output.
+
+---
+
+Sets the max width that the usage output must fit inside. By default this is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#CARGO_AUTO_MAX_WIDTH) or `0`. In this mode cargo will attempt to set the max width to the current width of the console it is running in.
+
+If it fails to get the console width from the operating system it will fall back to using [`CARGO_DEFAULT_MAX_WIDTH`](api.md#CARGO_DEFAULT_MAX_WIDTH) which is `80` characters unless it has been overridden.
+
+The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#CARGO_MAX_MAX_WIDTH). 
+
 ### cargo_set_description ###
+
+```c
+void cargo_set_description(cargo_t ctx, const char *description);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**description**: The usage description.
+
+---
+
+This sets the description shown first in the usage output, before the list of options.
 
 ### cargo_set_epilog ###
 
+```c
+void cargo_set_epilog(cargo_t ctx, const char *epilog);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**epilog**: The usage epilog.
+
+---
+
+This sets the epilog, the text shown after the list of options.
+
 ### cargo_fprint_usage ###
+
+```c
+int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_usage_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**f**: A file pointer to print to.
+
+**flags**: See [`cargo_usage_t`](api.md#cargo_usage_t).
+
+---
+
+This is a convenience function and does the same thing as doing:
+
+```c
+fprintf(f, "%s\n", cargo_get_usage(cargo, flags));
+```
 
 ### cargo_print_usage ###
 
+```c
+int cargo_print_usage(cargo_t ctx, cargo_usage_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: See [`cargo_usage_t`](api.md#cargo_usage_t).
+
+---
+
+This is a convenience function and does the same thing as doing:
+
+```c
+printf("%s\n", cargo_get_usage(cargo, flags));
+```
+
 ### cargo_get_usage ###
+
+```c
+const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: See [`cargo_usage_t`](api.md#cargo_usage_t).
+
+---
+
+This returns a string containing the usage for the given cargo context. 
+
+Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
 
 ### cargo_get_error ###
 
+```c
+const char *cargo_get_error(cargo_t ctx);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+---
+
+This will return any error that was set by [`cargo_parse`](api.md#cargo_parse) in the last call to it. This is useful if you want to customize exactly how the error is shown. By default this will be printed to `stderr`. See [`cargo_flags_t`](api.md#cargo_flags_t) to turn that behaviour off.
+
+Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
+
 ### cargo_get_unknown ###
 
+```c
+const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**unknown_count**: A pointer to a `size_t` where the number of unknown options passed to [`cargo_parse`](api.md#cargo_parse) will be returned.
+
+---
+
+This will return a list of strings containing the unknown options that were passed to the last call to [`cargo_parse`](api.md#cargo_parse).
+
+Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy of each string in the returned array.
+
 ### cargo_get_args ###
+
+```c
+const char **cargo_get_args(cargo_t ctx, size_t *argc);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**argc**: A pointer to a `size_t` where the number of arguments passed to [`cargo_parse`](api.md#cargo_parse) that were not consumed is retruned.
+
+---
+
+This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
 
 ## Utility functions ##
 
@@ -436,14 +793,167 @@ These are not a part of the core, but are nice to have.
 
 ### cargo_get_fprint_args ###
 
+```c
+char *cargo_get_fprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
+							size_t highlight_count, ...);
+```
+---
+
+**argc**: The number of arguments in `argv`.
+
+**argv**: A list of arguments.
+
+**start**: At what index into `argv` to start printing the arguments.
+
+**flags**: See [`cargo_fprint_flags_t`](api.md#cargo_fprint_flags_t).
+
+**highlight_count**: The number of highlights to print. This must match the number of varargs combinations following.
+
+**...**: A set of pairs of arguments containing an index and a highlight character in a `char *` string. After the highlight character you can optionally specify an ANSI color string that decides the color of the highlight.
+
+---
+
+This will return a string containing the output from an `argv` array as well as highlight characters under a set of specified arguments in this array.
+
+This is used by cargo internally to output useful error messages, highlighting exactly what arguments are invalid.
+
+For example:
+
+```bash
+Usage: bin/process_integers [--sum ] [--help ] INTEGERS [INTEGERS ...]
+Unknown options:
+--sum --nonsense 1 2 3
+      ~~~~~~~~~~
+```
+
+You do this by passing a variable set of arguments containing an index into `argv` as well as a highlight character, in the example above `"~"`.
+
+Here is an example of how it is called:
+
+```c
+char *s;
+s = cargo_get_fprint_args(argc, argv,
+							start,	// start index into argv.
+							0,		// flags.
+							3,		// highlight_count
+							        // (how many highlights below).
+							0, "^"CARGO_COLOR_RED,    // 1. Highlight index 0
+							2 ,"~",                   // 2. Highlight index 2
+							4, "*"CARGO_COLOR_CYAN);  // 3. Highlight index 4
+```
+
+This will produce the following output:
+
+```c
+program first second --third 123
+^^^^^^^       ~~~~~~         ***
+```
+
+As you can see, you pass it an index, for instance `4`, as well as a highlight character `"*"`. In the example above, by appending a color after the highlight character this will be used when printing the highlight character.
+
+Cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But please not that any ANSI color code can be used.
+
+Note that cargo internally also supports outputting these ANSI colors on **Windows** which does not have native ANSI console color support normally.
+
+If you prefer to return the output the result without any colors applied you can pass the [`CARGO_FPRINT_NOCOLOR`](api.md#CARGO_FPRINT_NOCOLOR) flag.
+
 ### cargo_get_fprintl_args ###
+
+```c
+char *cargo_get_fprintl_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
+							size_t highlight_count,
+							const cargo_highlight_t *highlights);
+```
+
+---
+
+**argc**: The number of arguments in `argv`.
+
+**argv**: A list of arguments.
+
+**start**: At what index into `argv` to start printing the arguments.
+
+**flags**: See [`cargo_fprint_flags_t`](api.md#cargo_fprint_flags_t).
+
+**highlight_count**: The number of highlights to print. This must match the number of varargs combinations following.
+
+**highlights**: An array of [`cargo_highlight_t`](api.md#cargo_highlight_t) structs containing an index and a highlight character in a `char *` string. After the highlight character you can optionally specify an ANSI color string that decides the color of the highlight.
+
+---
+
+This does the same things as [`cargo_get_fprint_args`](api.md#cargo_get_fprint_args) except that it takes an array of [`cargo_highlight_t`](api.md#cargo_highlight_t) as arguments instead.
+
+This allows you to dynamically highlight any number of arguments in the given `argv` array.
+
+---
 
 ### cargo_get_vfprint_args ###
 
+```c
+char *cargo_get_vfprint_args(int argc, char **argv, int start,
+							cargo_fprint_flags_t flags,
+							size_t highlight_count, va_list ap);
+```
+
+The var args version of [`cargo_get_fprint_args`](api.md#cargo_get_fprint_args).
+
 ### cargo_fprint_args ###
+
+```c
+int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
+					  cargo_fprint_flags_t flags,
+					  size_t highlight_count, ...);
+```
+
+Convenience function for [`cargo_get_fprint_args`](api.md#cargo_get_fprint_args) that prints to a given `FILE *` instead.
+
+This will print the proper ANSI color even on **Windows**.
 
 ### cargo_fprintl_args ###
 
+```c
+int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
+					   cargo_fprint_flags_t flags, size_t highlight_count,
+					   const cargo_highlight_t *highlights);
+```
+
+Convenience function for [`cargo_get_fprintl_args`](api.md#cargo_get_fprintl_args) that prints to a given `FILE *` instead.
+
+This will print the proper ANSI color even on **Windows**.
+
 ### cargo_split_commandline ###
 
+```c
+char **cargo_split_commandline(const char *args, int *argc);
+```
+
+---
+
+**args**: A string containing a list of arguments you want to split into an `argv` array.
+
+**argc**: A pointer to an `int` that the number of arguments found in `args`.
+
+---
+
+This can be used to split a command line string into an `argv` array that you then can pass to [`cargo_parse`](api.md#cargo_parse).
+
+Internally this uses [`wordexp`](http://linux.die.net/man/3/wordexp) on Unix systems and [`CommandLineToArgvW`](https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391%28v=vs.85%29.aspx) on Windows.
+
 ### cargo_free_commandline ###
+
+```c
+void cargo_free_commandline(char ***argv, int argc);
+```
+
+---
+
+**argv**: A pointer to an array of arguments strings.
+
+**argc**: The number of argument strings fround in `argv`.
+
+---
+
+This can be used to free and `NULL` an `argv` array that was split using [`cargo_split_commandline`](api.md#cargo_split_commandline)
+

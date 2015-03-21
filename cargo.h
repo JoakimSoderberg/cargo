@@ -205,6 +205,8 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
+int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
 
@@ -220,9 +222,6 @@ int cargo_add_mutex_group(cargo_t ctx,
 int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
-
-// TODO: cargo_option_set_metavar
-int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
