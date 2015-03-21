@@ -347,9 +347,54 @@ If the name is not prepended with a prefix, it will become a **positional argume
 
 ### cargo_add_alias ###
 
+```c
+int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
+```
+
+This can be used to add an alias to an option name. So if you have an option with the name `"--option"`, you can add an alias `"-o"` for it by doing:
+
+```c
+cargo_add_alias(cargo, "--option", "-o");
+```
+
+Note that you can have max `CARGO_NAME_COUNT - 1` aliases for an option name.
+
+Also note that this is usually best done directly when calling [`cargo_add_option`](api.md#cargo_add_option) instead.
+
 ### cargo_add_group ###
 
+```c
+int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
+					const char *title, const char *description)
+```
+
+Adds a new option group. This can be used to group options together in the usage output.
+
+To add a group:
+
+```c
+ret = cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
+```
+
+Both the group `title` and `description` can be `NULL`. If the `title` isn't
+set the `name` will be used instead.
+
+See [`cargo_group_flags_t`](api.md#cargo_group_flags_t) for flags. You can add options to the group by either using [`cargo_group_add_option`](api.md#cargo_group_add_option) or inline in [`cargo_add_option`](api.md#cargo_add_option).
+
 ### cargo_group_add_option ###
+
+Use this to add an option to a group.
+
+```c
+ret = cargo_group_add_option(cargo, "group1", "--option");
+```
+
+It is also possible to do the same directly in [`cargo_add_option`](api.md#cargo_add_option):
+
+```c
+ret = cargo_add_option(cargo, 0, "<group1> --option",
+                       "Description", "i", &val);
+```
 
 ### cargo_group_set_flags ###
 
