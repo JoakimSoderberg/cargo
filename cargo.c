@@ -3422,6 +3422,11 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	{
 		arglen = (i >= start) ? strlen(argv[i]) : 0;
 
+		if (arglen + global_indent >= max_width)
+		{
+			break;
+		}
+
 		if (j < (int)highlight_count)
 		{
 			cargo_phighlight_t *h = &highlights[j];
@@ -3481,6 +3486,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	{
 		for (i = start; i < argc; i++)
 		{
+			// The highlight will be incorrect if we allow a line break.
 			if (str.offset + strlen(argv[i]) >= max_width)
 			{
 				break;
@@ -6694,11 +6700,12 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	cargo_assert(strstr(s, "^"), "Missing \"^\" highlight");
 	cargo_assert(strstr(s, "~"), "Missing \"~\" highlight");
 	cargo_assert(strstr(s, "*"), "Missing \"*\" highlight");
+	free(s);
 
 	s = cargo_get_fprint_args(argc, argv,
 							0,		// start.
 							0,		// flags.
-							CARGO_AUTO_MAX_WIDTH,
+							150,
 							3,		// highlight_count (how many follows).
 							0, "^"CARGO_COLOR_RED, // Should not be shown.
 							2 ,"~",
@@ -6709,7 +6716,7 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	printf("%s\n", s);
 	cargo_assert(strstr(s, "^"), "Missing \"^\" highlight");
 	cargo_assert(strstr(s, "~"), "Missing \"~\" highlight");
-	cargo_assert(strstr(s, "*"), "Missing \"*\" highlight");
+	cargo_assert(!strstr(s, "*"), "Got \"*\" highlight when it should be off screen");
 
 	_TEST_CLEANUP();
 	if (s) free(s);
