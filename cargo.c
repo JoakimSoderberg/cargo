@@ -1308,16 +1308,14 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		char *error = NULL;
 		char *s = NULL;
 		size_t i;
-		// TODO: Make helper function instead.
-		size_t fprint_flags =
-			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 				val, _cargo_type_map[opt->type]);
 
-		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start, fprint_flags,
+		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
+						_cargo_get_cflag(ctx), ctx->max_width,
 						2,
 						ctx->i - 1, "^"CARGO_COLOR_YELLOW, 
 						ctx->j, "~"CARGO_COLOR_RED);
@@ -1411,7 +1409,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		{
 			CARGODBG(2, "%s: Parsing option as unique\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
-							fprint_flags,
+							fprint_flags, ctx->max_width,
 							2, // Number of highlights.
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
@@ -1434,7 +1432,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		{
 			CARGODBG(2, "%s: Parsing option that has already been parsed\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
-							fprint_flags,
+							fprint_flags, ctx->max_width,
 							2,
 							opt->parsed, "^"CARGO_COLOR_DARK_GRAY,
 							ctx->i, "~"CARGO_COLOR_YELLOW);
@@ -2848,7 +2846,8 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 			char *s;
 
 			if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
-						_cargo_get_cflag(ctx), parsed_count, parse_highlights)))
+						_cargo_get_cflag(ctx), ctx->max_width,
+						parsed_count, parse_highlights)))
 			{
 				CARGODBG(1, "Out of memory\n");
 				goto fail;
@@ -2973,7 +2972,8 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		}
 
 		if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
-			_cargo_get_cflag(ctx), ctx->unknown_opts_count, highlights)))
+			_cargo_get_cflag(ctx), ctx->max_width,
+			ctx->unknown_opts_count, highlights)))
 		{
 			CARGODBG(1, "Out of memory\n");
 			goto fail;
@@ -3383,6 +3383,7 @@ typedef struct cargo_phighlight_s
 
 char *cargo_get_fprintl_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
+							size_t max_width,
 							size_t highlight_count,
 							const cargo_highlight_t *highlights_in)
 {
@@ -3447,7 +3448,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 
 				// If we use color, we must include the ANSI color code length
 				// in the buffer length as well.
-				out_size += + strlen(h->c);
+				out_size += strlen(h->c);
 
 				j++;
 			}
@@ -3533,6 +3534,7 @@ fail:
 
 char *cargo_get_vfprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
+							size_t max_width,
 							size_t highlight_count, va_list ap)
 {
 	char *ret = NULL;
@@ -3553,7 +3555,7 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start,
 		highlights[i].c = va_arg(ap, char *);
 	}
 
-	ret = cargo_get_fprintl_args(argc, argv, start, flags,
+	ret = cargo_get_fprintl_args(argc, argv, start, flags, max_width,
 								highlight_count, highlights);
 
 fail:
@@ -3564,23 +3566,27 @@ fail:
 
 char *cargo_get_fprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
+							size_t max_width,
 							size_t highlight_count, ...)
 {
 	char *ret;
 	va_list ap;
 	va_start(ap, highlight_count);
-	ret = cargo_get_vfprint_args(argc, argv, start, flags, highlight_count, ap);
+	ret = cargo_get_vfprint_args(argc, argv, start, flags,
+								max_width, highlight_count, ap);
 	va_end(ap);
 	return ret;
 }
 
 int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
-					  cargo_fprint_flags_t flags, size_t highlight_count, ...)
+					  cargo_fprint_flags_t flags, size_t max_width,
+					  size_t highlight_count, ...)
 {
 	char *ret;
 	va_list ap;
 	va_start(ap, highlight_count);
-	ret = cargo_get_vfprint_args(argc, argv, start, flags, highlight_count, ap);
+	ret = cargo_get_vfprint_args(argc, argv, start, flags,
+								max_width, highlight_count, ap);
 	va_end(ap);
 
 	if (!ret)
@@ -3594,12 +3600,13 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 }
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
-					   cargo_fprint_flags_t flags, size_t highlight_count,
+					   cargo_fprint_flags_t flags,
+					   size_t max_width, size_t highlight_count,
 					   const cargo_highlight_t *highlights)
 {
 	char *ret;
 	if (!(ret = cargo_get_fprintl_args(argc, argv, start, flags,
-								highlight_count, highlights)))
+								max_width, highlight_count, highlights)))
 	{
 		return -1;
 	}
@@ -5632,6 +5639,7 @@ _TEST_START(TEST_highlight_args)
 						args,
 						1, // Start index.
 						0, // flags
+						CARGO_DEFAULT_MAX_WIDTH,
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED,
 						3, "~"CARGO_COLOR_GREEN,
@@ -5645,6 +5653,7 @@ _TEST_START(TEST_highlight_args)
 						args,
 						1, // Start index.
 						CARGO_FPRINT_NOCOLOR, // flags
+						CARGO_DEFAULT_MAX_WIDTH,
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED,
 						3, "~"CARGO_COLOR_GREEN,
@@ -5658,6 +5667,7 @@ _TEST_START(TEST_highlight_args)
 						args,
 						1, // Start index.
 						CARGO_FPRINT_NOARGS, // flags
+						CARGO_DEFAULT_MAX_WIDTH,
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
 	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
@@ -5669,6 +5679,7 @@ _TEST_START(TEST_highlight_args)
 						args,
 						1, // Start index.
 						CARGO_FPRINT_NOHIGHLIGHT, // flags
+						CARGO_DEFAULT_MAX_WIDTH,
 						3, // Highlight count.
 						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
 	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
@@ -6550,6 +6561,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 	s = cargo_get_fprint_args(argc, argv,
 							start,	// start.
 							0,		// flags.
+							CARGO_DEFAULT_MAX_WIDTH,
 							3,		// highlight_count (how many follows).
 							0, "^"CARGO_COLOR_RED,
 							2 ,"~",
@@ -6575,6 +6587,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 	s = cargo_get_fprint_args(argc, argv,
 							start,	// start.
 							0,		// flags.
+							CARGO_DEFAULT_MAX_WIDTH,
 							3,		// highlight_count (how many follows).
 							0, "^"CARGO_COLOR_RED, // Should not be shown.
 							2 ,"~",
@@ -6602,6 +6615,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		s = cargo_get_fprintl_args(argc, argv,
 								start,	// start.
 								0,		// flags
+								CARGO_DEFAULT_MAX_WIDTH,
 								sizeof(highlights) / sizeof(highlights[0]),
 								highlights);
 		printf("%s\n", s);
@@ -6636,10 +6650,37 @@ _TEST_START(TEST_cargo_get_fprint_args)
 		s = NULL;
 	}
 
-	ret = cargo_fprintl_args(stdout, argc, argv, 0, 0,
+	ret = cargo_fprintl_args(stdout, argc, argv, 0, 0, CARGO_DEFAULT_MAX_WIDTH,
 							sizeof(highlights) / sizeof(highlights[0]),
 							highlights);
 	cargo_assert(ret == 0, "Expected success");
+
+	_TEST_CLEANUP();
+	if (s) free(s);
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_get_fprint_args2)
+{
+	char *s = NULL;
+	char **argv = NULL;
+	int argc = 0;
+
+	argv = cargo_split_commandline(LOREM_IPSUM, &argc);
+
+	cargo_assert(argv, "Got NULL argv");
+
+	s = cargo_get_fprint_args(argc, argv,
+							0,		// start.
+							0,		// flags.
+							3,		// highlight_count (how many follows).
+							0, "^"CARGO_COLOR_RED, // Should not be shown.
+							2 ,"~",
+							4, "*"CARGO_COLOR_CYAN);
+
+	cargo_assert(s, "Got NULL string");
+
+	printf("%s\n", s);
 
 	_TEST_CLEANUP();
 	if (s) free(s);
@@ -6830,6 +6871,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
 	CARGO_ADD_TEST(TEST_cargo_aapendf),
 	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
+	CARGO_ADD_TEST(TEST_cargo_get_fprint_args2),
 	CARGO_ADD_TEST(TEST_cargo_fprintf),
 	CARGO_ADD_TEST(TEST_cargo_bool_count),
 	CARGO_ADD_TEST(TEST_cargo_bool_count_compact),

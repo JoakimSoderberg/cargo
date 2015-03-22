@@ -255,23 +255,28 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 char *cargo_get_fprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
+							size_t max_width,
 							size_t highlight_count, ...);
 
 char *cargo_get_fprintl_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
 							size_t highlight_count,
+							size_t max_width,
 							const cargo_highlight_t *highlights);
 
 char *cargo_get_vfprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
+							size_t max_width,
 							size_t highlight_count, va_list ap);
 
 int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 					  cargo_fprint_flags_t flags,
+					  size_t max_width,
 					  size_t highlight_count, ...);
 
 int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
-					   cargo_fprint_flags_t flags, size_t highlight_count,
+					   cargo_fprint_flags_t flags,
+					   size_t max_width, size_t highlight_count,
 					   const cargo_highlight_t *highlights);
 
 char **cargo_split_commandline(const char *args, int *argc);
