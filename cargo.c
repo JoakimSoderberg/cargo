@@ -6660,7 +6660,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 }
 _TEST_END()
 
-_TEST_START(TEST_cargo_get_fprint_args2)
+_TEST_START(TEST_cargo_get_fprint_args_long)
 {
 	char *s = NULL;
 	char **argv = NULL;
@@ -6684,6 +6684,7 @@ _TEST_START(TEST_cargo_get_fprint_args2)
 
 	_TEST_CLEANUP();
 	if (s) free(s);
+	cargo_free_commandline(&argv, argc);
 }
 _TEST_END()
 
@@ -6871,7 +6872,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
 	CARGO_ADD_TEST(TEST_cargo_aapendf),
 	CARGO_ADD_TEST(TEST_cargo_get_fprint_args),
-	CARGO_ADD_TEST(TEST_cargo_get_fprint_args2),
+	CARGO_ADD_TEST(TEST_cargo_get_fprint_args_long),
 	CARGO_ADD_TEST(TEST_cargo_fprintf),
 	CARGO_ADD_TEST(TEST_cargo_bool_count),
 	CARGO_ADD_TEST(TEST_cargo_bool_count_compact),
