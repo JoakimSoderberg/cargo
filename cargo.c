@@ -3191,6 +3191,45 @@ static int _cargo_check_required_options(cargo_t ctx)
 	return 0;
 }
 
+static size_t _cargo_process_max_width(size_t max_width)
+{
+	int console_width;
+	size_t maxw = CARGO_DEFAULT_MAX_WIDTH;
+
+	if (max_width == CARGO_AUTO_MAX_WIDTH)
+	{
+		CARGODBG(2, "User specified CARGO_AUTO_MAX_WIDTH\n");
+
+		if ((console_width = cargo_get_console_width()) > 0)
+		{
+			CARGODBG(2, "Max width based on console width: %d\n", console_width);
+			maxw = console_width;
+		}
+		else
+		{
+			CARGODBG(2, "Max width set to CARGO_DEFAULT_MAX_WIDTH = %d\n",
+					CARGO_DEFAULT_MAX_WIDTH);
+		}
+	}
+	else
+	{
+		CARGODBG(2, "User specified max width: %lu\n", max_width);
+		maxw = max_width;
+	}
+
+	// Since we allocate memory based on this later on, make sure this
+	// is something sane. Anything above 1024 characters is more than enough.
+	// Also some systems might have a really big console width for instance.
+	// (This happened on drone.io continous integration service).
+	if (maxw > CARGO_MAX_MAX_WIDTH)
+	{
+		CARGODBG(2, "Max width too large, capping at: %d\n", CARGO_MAX_MAX_WIDTH);
+		maxw = CARGO_MAX_MAX_WIDTH;
+	}
+
+	return maxw;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -3203,41 +3242,7 @@ void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags)
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width)
 {
-	int console_width;
-
-	ctx->max_width = CARGO_DEFAULT_MAX_WIDTH;
-
-	if (max_width == CARGO_AUTO_MAX_WIDTH)
-	{
-		CARGODBG(2, "User specified CARGO_AUTO_MAX_WIDTH\n");
-
-		if ((console_width = cargo_get_console_width()) > 0)
-		{
-			CARGODBG(2, "Max width based on console width: %d\n", console_width);
-			ctx->max_width = console_width;
-		}
-		else
-		{
-			CARGODBG(2, "Max width set to CARGO_DEFAULT_MAX_WIDTH = %d\n",
-					CARGO_DEFAULT_MAX_WIDTH);
-		}
-	}
-	else
-	{
-		CARGODBG(2, "User specified max width: %lu\n", max_width);
-		ctx->max_width = max_width;
-	}
-
-	// Since we allocate memory based on this later on, make sure this
-	// is something sane. Anything above 1024 characters is more than enough.
-	// Also some systems might have a really big console width for instance.
-	// (This happened on drone.io continous integration service).
-	if (ctx->max_width > CARGO_MAX_MAX_WIDTH)
-	{
-		CARGODBG(2, "Max width too large, capping at: %d\n", CARGO_MAX_MAX_WIDTH);
-		ctx->max_width = CARGO_MAX_MAX_WIDTH;
-	}
-
+	ctx->max_width = _cargo_process_max_width(max_width);
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
@@ -3398,9 +3403,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	cargo_phighlight_t *highlights = NULL;
 	assert(highlights_in);
 
-	// TODO: If the buffer we return is bigger than the console width, 
-	// try to show only the relevant parts. If we get a line break
-	// the indentation and highlight gets completely screwed.
+	max_width = _cargo_process_max_width(max_width);
 
 	if (!(highlights = calloc(highlight_count, sizeof(cargo_phighlight_t))))
 	{
@@ -3473,10 +3476,16 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	str.l = out_size;
 	str.offset = 0;
 
+	// TODO: Try adding an "..." and try to fit all highlights on screen if possible.
 	if (!(flags & CARGO_FPRINT_NOARGS))
 	{
 		for (i = start; i < argc; i++)
 		{
+			if (str.offset + strlen(argv[i]) >= max_width)
+			{
+				break;
+			}
+
 			cargo_appendf(&str, "%s ", argv[i]);
 		}
 
@@ -6673,6 +6682,7 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	s = cargo_get_fprint_args(argc, argv,
 							0,		// start.
 							0,		// flags.
+							CARGO_AUTO_MAX_WIDTH,
 							3,		// highlight_count (how many follows).
 							0, "^"CARGO_COLOR_RED, // Should not be shown.
 							2 ,"~",
@@ -6681,6 +6691,25 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	cargo_assert(s, "Got NULL string");
 
 	printf("%s\n", s);
+	cargo_assert(strstr(s, "^"), "Missing \"^\" highlight");
+	cargo_assert(strstr(s, "~"), "Missing \"~\" highlight");
+	cargo_assert(strstr(s, "*"), "Missing \"*\" highlight");
+
+	s = cargo_get_fprint_args(argc, argv,
+							0,		// start.
+							0,		// flags.
+							CARGO_AUTO_MAX_WIDTH,
+							3,		// highlight_count (how many follows).
+							0, "^"CARGO_COLOR_RED, // Should not be shown.
+							2 ,"~",
+							25, "*"CARGO_COLOR_CYAN);
+
+	cargo_assert(s, "Got NULL string");
+
+	printf("%s\n", s);
+	cargo_assert(strstr(s, "^"), "Missing \"^\" highlight");
+	cargo_assert(strstr(s, "~"), "Missing \"~\" highlight");
+	cargo_assert(strstr(s, "*"), "Missing \"*\" highlight");
 
 	_TEST_CLEANUP();
 	if (s) free(s);
