@@ -795,8 +795,9 @@ These are not a part of the core, but are nice to have.
 
 ```c
 char *cargo_get_fprint_args(int argc, char **argv, int start,
-							cargo_fprint_flags_t flags,
-							size_t highlight_count, ...);
+              cargo_fprint_flags_t flags,
+              size_t max_width,
+              size_t highlight_count, ...);
 ```
 ---
 
@@ -807,6 +808,8 @@ char *cargo_get_fprint_args(int argc, char **argv, int start,
 **start**: At what index into `argv` to start printing the arguments.
 
 **flags**: See [`cargo_fprint_flags_t`](api.md#cargo_fprint_flags_t).
+
+**max_width**: The max width to use for the arguments. This is so that we don't try to show a list of arguments that wraps on to a new line, because then the highlights would point to the wrong thing. This works the same as for [`cargo_set_max_width`](api.md#cargo_set_max_width).
 
 **highlight_count**: The number of highlights to print. This must match the number of varargs combinations following.
 
@@ -876,6 +879,8 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 **start**: At what index into `argv` to start printing the arguments.
 
 **flags**: See [`cargo_fprint_flags_t`](api.md#cargo_fprint_flags_t).
+
+**max_width**: The max width to use for the arguments. This is so that we don't try to show a list of arguments that wraps on to a new line, because then the highlights would point to the wrong thing. This works the same as for [`cargo_set_max_width`](api.md#cargo_set_max_width).
 
 **highlight_count**: The number of highlights to print. This must match the number of varargs combinations following.
 
