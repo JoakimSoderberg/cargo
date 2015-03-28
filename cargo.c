@@ -696,6 +696,9 @@ typedef struct cargo_opt_s
 	int parsed;
 	cargo_option_flags_t flags;
 	int num_eaten;
+
+	int bool_store;
+	int bool_count;
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
@@ -993,7 +996,8 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 
 	// This looks for the format -vvv when we have
 	// an option "--verbosity -v" of type CARGO_BOOL
-	// that has the CARGO_OPT_BOOL_COUNT flag set.
+	// that has 'b!' format specifier set.
+	// Which means to count each flag occurance.
 	// Then "-v -v -v" and "-vvv" is equivalent and should
 	// parse the bool as 3.
 
@@ -1018,7 +1022,7 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 		if (!strncmp(name, arg, strlen(name)))
 		{
 			// We must have the bool count flag set for this to be allowed.
-			if (opt->flags & CARGO_OPT_BOOL_COUNT)
+			if (opt->bool_count)
 			{
 				CARGODBG(3, "  Found matching option \"%s\", alias \"%s\"\n",
 						opt->name[0], opt->name[i]);
@@ -1211,7 +1215,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	
 			// If BOOL COUNT is turned on, we allow multiple occurances of
 			// a bool option. "-v -v -v" will be parsed as 3.
-			if (opt->flags & CARGO_OPT_BOOL_COUNT)
+			if (opt->bool_count)
 			{
 				char *arg = ctx->argv[ctx->i];
 				CARGODBG(2, "        bool count enabled\n");
@@ -1236,7 +1240,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			else
 			{
 				CARGODBG(2, "       No bool count\n");
-				*val = 1;
+				*val = opt->bool_store;
 			}
 			break;
 		}
@@ -1419,7 +1423,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			return -1;
 		}
 		else if ((opt->type == CARGO_BOOL)
-			  && (opt->flags & CARGO_OPT_BOOL_COUNT))
+			  && opt->bool_count)
 		{
 			// This is for parsing multiple arguments of the same type
 			// for instance -v -v -v.
@@ -4326,9 +4330,33 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 			break;
 		}
+		case 'b':
+		{
+			o->type = CARGO_BOOL;
+			o->target = va_arg(ap, void *);
+
+			// Look for any modifier tokens.
+			_cargo_fmt_next_token(&s);
+
+			switch (_cargo_fmt_token(&s))
+			{
+				// Read an int that will be stored in the bool value (Default 1)
+				case '=': o->bool_store = va_arg(ap, int); break;
+				// Count flag occurances.
+				case '!': o->bool_count = 1; break;
+				default:
+				{
+					// Got no flag modifier token.
+					o->bool_store = 1;
+					o->bool_count = 0;
+					_cargo_fmt_prev_token(&s);
+				}
+			}
+
+			break;
+		}
 		case 'i': o->type = CARGO_INT;    o->target = va_arg(ap, void *); break;
 		case 'd': o->type = CARGO_DOUBLE; o->target = va_arg(ap, void *); break;
-		case 'b': o->type = CARGO_BOOL;   o->target = va_arg(ap, void *); break;
 		case 'u': o->type = CARGO_UINT;   o->target = va_arg(ap, void *); break;
 		case 'f': o->type = CARGO_FLOAT;  o->target = va_arg(ap, void *); break;
 		default: _cargo_invalid_format_char(ctx, o->name[0], fmt, &s);goto fail;
@@ -6748,8 +6776,8 @@ _TEST_START(TEST_cargo_bool_count)
 	int i = 0;
 	char *args[] = { "program ", "123", "-v", "3", "-v", "-v" };
 
-	ret |= cargo_add_option(cargo, CARGO_OPT_BOOL_COUNT,
-								"--verbose -v", LOREM_IPSUM, "b", &i);
+	ret |= cargo_add_option(cargo, 0,
+							"--verbose -v", LOREM_IPSUM, "b!", &i);
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
@@ -6766,8 +6794,8 @@ _TEST_START(TEST_cargo_bool_count_compact)
 	int i = 0;
 	char *args[] = { "program ", "-vvv", "123", "-vv" };
 
-	ret |= cargo_add_option(cargo, CARGO_OPT_BOOL_COUNT,
-								"--verbose -v", LOREM_IPSUM, "b", &i);
+	ret |= cargo_add_option(cargo, 0,
+							"--verbose -v", LOREM_IPSUM, "b!", &i);
 
 	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
