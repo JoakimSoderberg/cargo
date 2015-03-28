@@ -3012,13 +3012,16 @@ static void _cargo_parse_show_error(cargo_t ctx)
 	FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
 	assert(ctx);
 
+	if (!ctx->error)
+		return;
+
 	if (!(ctx->flags & CARGO_NOERR_USAGE))
 	{
 		cargo_fprint_usage(ctx, fd, ctx->usage_flags);
 	}
 
 	// Show errors automatically?
-	if (!(ctx->flags & CARGO_NOERR_OUTPUT) && ctx->error)
+	if (!(ctx->flags & CARGO_NOERR_OUTPUT))
 	{
 		fprintf(fd, "%s\n", ctx->error);
 	}
