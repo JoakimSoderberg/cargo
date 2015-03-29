@@ -4196,6 +4196,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	cargo_opt_t *o = NULL;
 	char *optname = NULL;
 	char *grpname = NULL;
+	int nargs_is_set = 0;
 	assert(ctx);
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
@@ -4288,13 +4289,29 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			o->target_count = &o->custom_target_count;
 
 			o->lenstr = 0;
-			o->nargs = 1;
 
 			if (!o->custom)
 			{
 				CARGODBG(1, "Got NULL custom callback pointer\n");
 				goto fail;
 			}
+
+			_cargo_fmt_next_token(&s);
+
+			switch (_cargo_fmt_token(&s))
+			{
+				// A shortcut to "[c]#", cbfunc, NULL, NULL, 0.
+				// which makes a custom callback a bool flag basically.
+				case '0': o->nargs = 0; break;
+				default:
+				{
+					_cargo_fmt_prev_token(&s);
+					o->nargs = 1;
+					break;
+				}
+			}
+
+			nargs_is_set = 1;
 
 			break;
 		}
@@ -4446,7 +4463,11 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			else
 			{
 				_cargo_fmt_prev_token(&s);
-				o->nargs = 1;
+
+				if (!nargs_is_set)
+				{
+					o->nargs = 1;
+				}
 			}
 		}
 
