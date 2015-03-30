@@ -1404,8 +1404,6 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		cargo_astr_t str;
 		char *error = NULL;
 		char *s = NULL;
-		size_t fprint_flags =
-			(ctx->flags & CARGO_NOCOLOR) ? CARGO_FPRINT_NOCOLOR : 0;
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
@@ -1413,7 +1411,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		{
 			CARGODBG(2, "%s: Parsing option as unique\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
-							fprint_flags, ctx->max_width,
+							_cargo_get_cflag(ctx), ctx->max_width,
 							2, // Number of highlights.
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
@@ -1436,7 +1434,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		{
 			CARGODBG(2, "%s: Parsing option that has already been parsed\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
-							fprint_flags, ctx->max_width,
+							_cargo_get_cflag(ctx), ctx->max_width,
 							2,
 							opt->parsed, "^"CARGO_COLOR_DARK_GRAY,
 							ctx->i, "~"CARGO_COLOR_YELLOW);
@@ -3185,10 +3183,26 @@ static int _cargo_check_required_options(cargo_t ctx)
 			if (((opt->nargs == CARGO_NARGS_ONE_OR_MORE) && (opt->num_eaten == 0))
 			 || ((opt->nargs >= 0) && (opt->num_eaten != opt->nargs)))
 			{
-				CARGODBG(1, "Not enough arguments\n");
-				cargo_aappendf(&errstr, "Not enough arguments for \"%s\" expected %s "
-							 "but got only %lu\n", opt->name[0],
-							 _cargo_nargs_str(opt->nargs), opt->num_eaten);
+				CARGODBG(1, "Not enough arguments. Expected %s, got %d\n",
+						_cargo_nargs_str(opt->nargs), opt->num_eaten);
+
+				// TODO: Highlight option (Problem is that we don't know at what index the option was found at)
+
+				if (opt->num_eaten == 0)
+				{
+					cargo_aappendf(&errstr,
+						"Not enough arguments for \"%s\" expected %s "
+						"but got none\n", opt->name[0],
+						_cargo_nargs_str(opt->nargs));
+				}
+				else
+				{
+					cargo_aappendf(&errstr,
+						"Not enough arguments for \"%s\" expected %s "
+						"but got only %d\n", opt->name[0],
+						_cargo_nargs_str(opt->nargs), opt->num_eaten);
+				}
+
 				_cargo_set_error(ctx, error);
 				return -1;
 			}
