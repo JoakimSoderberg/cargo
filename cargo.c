@@ -2507,14 +2507,21 @@ static void _cargo_fmt_prev_token(cargo_fmt_scanner_t *s)
 	CARGODBG(4, " %*s\n", s->token.column, "^");
 }
 
-static const char *_cargo_get_option_group_name(cargo_t ctx,
+static const char *_cargo_get_option_group_names(cargo_t ctx,
 										const char *optnames,
-										char **grpname)
+										char **grpname,
+										char **mutex_grpname)
 {
 	int len = 0;
 	char *end = NULL;
+	char *tmp = NULL;
+	char **groups = NULL;
+	const char *ret = NULL;
+	size_t count;
+	size_t i;
 	assert(ctx);
 	assert(grpname);
+	assert(mutex_grpname);
 
 	*grpname = NULL;
 
@@ -2536,15 +2543,53 @@ static const char *_cargo_get_option_group_name(cargo_t ctx,
 
 	len = (end - optnames);
 
-	if (!(*grpname = cargo_strndup(&optnames[1], len)))
+	if (!(tmp = cargo_strndup(&optnames[1], len)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return NULL;
 	}
 
-	optnames += len + 2;
+	if (!(groups = _cargo_split(tmp, ",", &count)))
+	{
+		CARGODBG(1, "Failed to split group names\n");
+		goto fail;
+	}
 
-	return optnames;
+	if (count > 2)
+	{
+		CARGODBG(1, "Invalid number of groups specified. "
+				    "1 normal and 1 mutex group allowed\n");
+		goto fail;
+	}
+
+	for (i = 0; i < count; i++)
+	{
+		if (groups[i][0] == '!')
+		{
+			if (!(*mutex_grpname = strdup(&groups[i][1])))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				return NULL;
+			}
+		}
+		else
+		{
+			if (!(*grpname = strdup(groups[i])))
+			{
+				CARGODBG(1, "Out of memory!\n");
+				return NULL;
+			}
+		}
+	}
+
+	optnames += len + 2;
+	ret = optnames;
+
+fail:
+	if (tmp) free(tmp);
+	_cargo_free_str_list(&groups, &count);
+
+	return ret;
 }
 
 static void _cargo_group_destroy(cargo_group_t *g)
@@ -4210,12 +4255,14 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	cargo_opt_t *o = NULL;
 	char *optname = NULL;
 	char *grpname = NULL;
+	char *mutex_grpname = NULL;
 	int nargs_is_set = 0;
 	assert(ctx);
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
 
-	if (!(optnames = _cargo_get_option_group_name(ctx, optnames, &grpname)))
+	if (!(optnames = _cargo_get_option_group_names(ctx, optnames,
+						&grpname, &mutex_grpname)))
 	{
 		CARGODBG(1, "Failed to parse group name\n");
 		return -1;
