@@ -4286,13 +4286,24 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	{
 		if (cargo_group_add_option(ctx, grpname, o->name[0]))
 		{
-			CARGODBG(1, "Failed to add option to group \"%s\"\n", grpname);
+			CARGODBG(1, "Failed to add option \"%s\" to group \"%s\"\n",
+					o->name[0], grpname);
 			goto fail;
 		}
 	}
 	else
 	{
 		o->group_index = -1;
+	}
+
+	if (mutex_grpname)
+	{
+		if (cargo_mutex_group_add_option(ctx, mutex_grpname, o->name[0]))
+		{
+			CARGODBG(1, "Failed to add option \"%s\" to mutex group \"%s\"",
+					o->name[0], mutex_grpname);
+			goto fail;
+		}
 	}
 
 	// Start parsing the format string.
