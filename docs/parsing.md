@@ -105,12 +105,12 @@ Here are some examples on how this looks:
 ### Default behaviour:
 
 ```bash
-$ process_integers
-Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints
+Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 Missing required argument "integers"
 
-$ process_integers 1 2 3 --sam
-Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints 1 2 3 --sam
+Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 Unknown options:
 1 2 3 --sam
       ~~~~~
@@ -123,11 +123,11 @@ Unknown options:
 [`CARGO_NOERR_OUTPUT`](api.md#CARGO_NOERR_OUTPUT)
 
 ```bash
-$ process_integers
-Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints
+Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 
-$ process_integers 1 2 3 --sam
-Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints 1 2 3 --sam
+Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 
 ```
 
@@ -136,8 +136,8 @@ Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
 `cargo_set_internal_usage_flags(cargo, CARGO_USAGE_FULL_USAGE);`
 
 ```bash
-$ process_integers
-Usage: bin/process_integers [--sum] [--help] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints
+Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 
 Process some integers.
 
@@ -150,8 +150,8 @@ Options:
 
 Missing required argument "integers"
 
-$ process_integers 1 2 3 --sam
-Usage: bin/process_integers [--sum ] [--help ] INTEGERS [INTEGERS ...]
+$ cargo_ex_ints 1 2 3 --sam
+Usage: bin/cargo_ex_ints [--sum ] [--help ] INTEGERS [INTEGERS ...]
 
 Process some integers.
 

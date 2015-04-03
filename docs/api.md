@@ -824,7 +824,7 @@ This is used by cargo internally to output useful error messages, highlighting e
 For example:
 
 ```bash
-Usage: bin/process_integers [--sum ] [--help ] INTEGERS [INTEGERS ...]
+Usage: bin/cargo_ex_ints [--sum ] [--help ] INTEGERS [INTEGERS ...]
 Unknown options:
 --sum --nonsense 1 2 3
       ~~~~~~~~~~
