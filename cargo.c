@@ -660,10 +660,12 @@ static const char *_cargo_type_map[] =
 {
 	"bool",
 	"int",
-	"uint",
+	"unsigned int",
 	"float",
 	"double",
-	"string"
+	"string",
+	"long long",
+	"unsigned long long"
 };
 
 typedef struct cargo_group_s cargo_group_t;

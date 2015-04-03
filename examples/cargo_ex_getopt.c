@@ -17,7 +17,7 @@ static int print_command(cargo_t ctx, void *user, const char *optname,
 
 int main(int argc, char **argv)
 {
-	int i;
+	size_t i;
 	cargo_t cargo;
 	int ret = 0;
 	const char **remain;
