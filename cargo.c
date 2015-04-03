@@ -651,7 +651,9 @@ typedef enum cargo_type_e
 	CARGO_UINT = 2,
 	CARGO_FLOAT = 3,
 	CARGO_DOUBLE = 4,
-	CARGO_STRING = 5
+	CARGO_STRING = 5,
+	CARGO_LONGLONG = 6,
+	CARGO_ULONGLONG = 7
 } cargo_type_t;
 
 static const char *_cargo_type_map[] = 
@@ -779,7 +781,7 @@ static cargo_fprint_flags_t _cargo_get_cflag(cargo_t ctx)
 
 static size_t _cargo_get_type_size(cargo_type_t t)
 {
-	assert((t >= CARGO_BOOL) && (t <= CARGO_STRING));
+	assert((t >= CARGO_BOOL) && (t <= CARGO_ULONGLONG));
 
 	switch (t)
 	{
@@ -789,6 +791,8 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 		case CARGO_FLOAT: return sizeof(float);
 		case CARGO_DOUBLE: return sizeof(double);
 		case CARGO_STRING: return sizeof(char *);
+		case CARGO_LONGLONG: return sizeof(long long int);
+		case CARGO_ULONGLONG: return sizeof(unsigned long long int);
 	}
 
 	return 0;
@@ -1137,7 +1141,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	void *target;
 	char *end = NULL;
 	assert(ctx);
-	assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_STRING));
+	assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_ULONGLONG));
 
 	if ((opt->type != CARGO_BOOL) 
 		&& (opt->target_idx >= opt->max_target_count))
@@ -1254,6 +1258,18 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		{
 			CARGODBG(2, "      uint %s\n", val);
 			((unsigned int *)target)[opt->target_idx] = strtoul(val, &end, 10);
+			break;
+		}
+		case CARGO_LONGLONG:
+		{
+			CARGODBG(2, "      long long %s\n", val);
+			((long long int *)target)[opt->target_idx] = strtoll(val, &end, 10);
+			break;
+		}
+		case CARGO_ULONGLONG:
+		{
+			CARGODBG(2, "      unsigned long long %s\n", val);
+			((unsigned long long int *)target)[opt->target_idx] = strtoull(val, &end, 10);
 			break;
 		}
 		case CARGO_FLOAT:
@@ -2962,7 +2978,9 @@ static int _cargo_add_orphans_to_default_group(cargo_t ctx)
 
 static int _cargo_is_arg_negative_integer(const char *arg)
 {
-	return (atoi(arg) < 0);
+	char *end = NULL;
+	long long int i = strtoll(arg, &end, 10);
+	return (i < 0);
 }
 
 static int _cargo_check_unknown_options(cargo_t ctx)
@@ -4448,6 +4466,8 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		case 'd': o->type = CARGO_DOUBLE; o->target = va_arg(ap, void *); break;
 		case 'u': o->type = CARGO_UINT;   o->target = va_arg(ap, void *); break;
 		case 'f': o->type = CARGO_FLOAT;  o->target = va_arg(ap, void *); break;
+		case 'L': o->type = CARGO_LONGLONG;   o->target = va_arg(ap, void *); break;
+		case 'U': o->type = CARGO_ULONGLONG;  o->target = va_arg(ap, void *); break;
 		default: _cargo_invalid_format_char(ctx, o->name[0], fmt, &s);goto fail;
 	}
 
@@ -5013,6 +5033,26 @@ _TEST_START(TEST_add_static_uint_array_option)
 	unsigned int a_expect[3] = { 1, 2, 3 };
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	_ADD_TEST_FIXED_ARRAY(".[u]#", "%u");
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_add_static_long_long_int_array_option)
+{
+	long long int a[3];
+	long long int a_expect[3] = { 9223372036854775807, -9223372036854775807, 3 };
+	char *args[] = { "program", "--beta", "9223372036854775807", "-9223372036854775807", "3" };
+	_ADD_TEST_FIXED_ARRAY(".[L]#", "%lld");
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_add_static_unsigned_long_long_int_array_option)
+{
+	long long int a[3];
+	long long int a_expect[3] = { 1844674407370955161, 9223372036854775807, 3 };
+	char *args[] = { "program", "--beta", "1844674407370955161", "9223372036854775807", "3" };
+	_ADD_TEST_FIXED_ARRAY(".[U]#", "%llu");
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -6972,6 +7012,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_string_option),
 	CARGO_ADD_TEST(TEST_add_static_int_array_option),
 	CARGO_ADD_TEST(TEST_add_static_uint_array_option),
+	CARGO_ADD_TEST(TEST_add_static_long_long_int_array_option),
+	CARGO_ADD_TEST(TEST_add_static_unsigned_long_long_int_array_option),
 	CARGO_ADD_TEST(TEST_add_static_bool_array_option),
 	CARGO_ADD_TEST(TEST_add_static_float_array_option),
 	CARGO_ADD_TEST(TEST_add_static_double_array_option),
@@ -7273,6 +7315,16 @@ int main(int argc, char **argv)
 		types[type_count++] = CARGO_INT;
 		types[type_count++] = CARGO_BOOL;
 		fmt += 3;
+	}
+	else if (!strncmp(fmt, "long long", 9))
+	{
+		types[type_count++] = CARGO_LONGLONG;
+		fmt += 9;
+	}
+	else if (!strncmp(fmt, "unsigned long long", 18))
+	{
+		types[type_count++] = CARGO_ULONGLONG;
+		fmt += 18;
 	}
 	else if (!strncmp(fmt, "char", 4))
 	{

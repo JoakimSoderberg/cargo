@@ -159,6 +159,8 @@ The basis of the format is a type specifier:
 - `b` boolean `int` (used for flags without arguments).
 - `i` integer `int`
 - `u` unsigned integer `unsigned int`
+- `L` long long integer `long long int`
+- `U` unsigned long long integer `unsigned long long int`
 - `f` float `float`
 - `d` double `double`
 - `s` string `char *`
@@ -844,6 +846,8 @@ s = cargo_get_fprint_args(argc, argv,
 							0, "^"CARGO_COLOR_RED,    // 1. Highlight index 0
 							2 ,"~",                   // 2. Highlight index 2
 							4, "*"CARGO_COLOR_CYAN);  // 3. Highlight index 4
+...
+free(s);
 ```
 
 This will produce the following output:
