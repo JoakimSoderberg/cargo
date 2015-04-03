@@ -996,7 +996,6 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 {
 	size_t i;
 	const char *name;
-	const char *s;
 
 	// This looks for the format -vvv when we have
 	// an option "--verbosity -v" of type CARGO_BOOL
@@ -1209,7 +1208,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	{
 		case CARGO_BOOL:
 		{
-			int amount;
 			int *val = &((int *)target)[opt->target_idx];
 			CARGODBG(2, "      bool\n");
 
@@ -1327,7 +1325,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		cargo_astr_t str;
 		char *error = NULL;
 		char *s = NULL;
-		size_t i;
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
@@ -1901,7 +1898,7 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	p = strrchr(s, '\n');
 	if (!p) p = s;
 
-	if (((s + strlen(s)) - p) > width)
+	if ((size_t)((s + strlen(s)) - p) > width)
 	{
 		*prev = '\n';
 	}
@@ -3720,7 +3717,6 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 // or just ignore them.
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 {
-	size_t i;
 	int start = 0;
 	int opt_arg_count = 0;
 	char *arg = NULL;
@@ -4010,7 +4006,6 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	char *ret = NULL;
 	size_t i;
 	char *b = NULL;
-	int namelen;
 	int max_name_len = 0;
 	size_t positional_count = 0;
 	size_t option_count = 0;
@@ -6565,7 +6560,6 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_split_commandline)
 {
-	size_t i;
 	const char *cmd = "abc def \"ghi jkl\"";
 	char *argv_expect[] =
 	{
