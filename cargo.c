@@ -2785,7 +2785,8 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 										cargo_group_t *groups,
 										size_t group_count,
 										const char *group,
-										const char *opt)
+										const char *opt,
+										int is_mutex)
 {
 	size_t opt_i;
 	cargo_group_t *g = NULL;
@@ -2813,7 +2814,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	assert(opt_i < ctx->opt_count);
 	o = &ctx->options[opt_i];
 
-	if (o->group_index > 0)
+	if (!is_mutex && (o->group_index > 0))
 	{
 		CARGODBG(1, "\"%s\" is already in another group \"%s\"\n",
 				o->name[0], ctx->groups[o->group_index].name);
@@ -2836,7 +2837,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	}
 
 	g->option_indices[g->opt_count] = opt_i;
-	o->group_index = grp_i;
+	if (!is_mutex) o->group_index = grp_i;
 	g->opt_count++;
 
 	CARGODBG(2, "   Group \"%s\" option count: %lu\n", g->name, g->opt_count);
@@ -4221,7 +4222,7 @@ int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
 {
 	return _cargo_group_add_option_ex(ctx,
-				ctx->groups, ctx->group_count, group, opt);
+				ctx->groups, ctx->group_count, group, opt, 0);
 }
 
 int cargo_group_set_flags(cargo_t ctx, const char *group,
@@ -4255,7 +4256,7 @@ int cargo_add_mutex_group(cargo_t ctx,
 int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt)
 {
 	return _cargo_group_add_option_ex(ctx,
-				ctx->mutex_groups, ctx->mutex_group_count, group, opt);
+				ctx->mutex_groups, ctx->mutex_group_count, group, opt, 1);
 }
 
 int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
@@ -4268,7 +4269,6 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	size_t i = 0;
 	cargo_fmt_scanner_t s;
 	cargo_opt_t *o = NULL;
-	char *optname = NULL;
 	char *grpname = NULL;
 	char *mutex_grpname = NULL;
 	int nargs_is_set = 0;
@@ -4299,6 +4299,8 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 	if (grpname)
 	{
+		CARGODBG(2, "Add \"%s\" to group \"%s\"\n", o->name[0], grpname);
+
 		if (cargo_group_add_option(ctx, grpname, o->name[0]))
 		{
 			CARGODBG(1, "Failed to add option \"%s\" to group \"%s\"\n",
@@ -4308,11 +4310,14 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	}
 	else
 	{
+		CARGODBG(2, "Add \"%s\" to default group\n", o->name[0]);
 		o->group_index = -1;
 	}
 
 	if (mutex_grpname)
 	{
+		CARGODBG(2, "Add \"%s\" to mutex group \"%s\"\n", o->name[0], mutex_grpname);
+
 		if (cargo_mutex_group_add_option(ctx, mutex_grpname, o->name[0]))
 		{
 			CARGODBG(1, "Failed to add option \"%s\" to mutex group \"%s\"",
@@ -4603,7 +4608,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		}
 	}
 
-	CARGODBG(2, " Option %s:\n", optname);
+	CARGODBG(2, " Option %s:\n", o->name[0]);
 	CARGODBG(2, "   max_target_count = %lu\n", o->max_target_count);
 	CARGODBG(2, "   alloc = %d\n", o->alloc);
 	CARGODBG(2, "   lenstr = %lu\n", o->lenstr);

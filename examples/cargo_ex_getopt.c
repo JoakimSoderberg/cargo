@@ -36,11 +36,11 @@ int main(int argc, char **argv)
 	ret |= cargo_add_option(cargo, 0, "--brief -b", "Be more brief",
 							"b=", &verbose_flag, 0);
 
-	ret |= cargo_add_mutex_group(cargo, 0, "command");
-	ret |= cargo_add_option(cargo, 0, "--add -a", "Add", "[c]#", print_command, NULL, NULL, 0);
-	ret |= cargo_add_option(cargo, 0, "--append", "Append", "c0", print_command);
-	ret |= cargo_add_option(cargo, 0, "--delete -d", "Delete", "c", print_command);
-	ret |= cargo_add_option(cargo, 0, "--create -c", "Create", "c", print_command);
+	ret |= cargo_add_mutex_group(cargo, 0, "cmd");
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --add -a", "Add", "[c]#", print_command, NULL, NULL, 0);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --append", "Append", "c0", print_command);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --delete -d", "Delete", "c", print_command);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --create -c", "Create", "c", print_command);
 	ret |= cargo_add_option(cargo, 0, "--file -f", "File", "s", &filename);
 
 	assert(ret == 0);
