@@ -803,7 +803,7 @@ void cargo_set_user_context(cargo_t ctx, void *user);
 
 ---
 
-This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_set_user_context`](api.md#cargo_set_user_context)
+This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_get_user_context`](api.md#cargo_get_user_context)
 
 ### cargo_get_user_context ###
 
