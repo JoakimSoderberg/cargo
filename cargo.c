@@ -1561,23 +1561,6 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 
 			if (_cargo_is_another_option(ctx, argv[ctx->j]))
 			{
-				if ((ctx->j == ctx->i) && !_cargo_zero_args_allowed(opt))
-				{
-					cargo_astr_t str;
-					char *error = NULL;
-					memset(&str, 0, sizeof(cargo_astr_t));
-					str.s = &error;
-
-					// TODO: Highlight arg.
-					cargo_aappendf(&str, "No argument specified for %s. "
-									"%d expected.\n",
-									name, 
-									(opt->nargs > 0) ? opt->nargs : 1);
-
-					_cargo_set_error(ctx, error);
-					return -1;
-				}
-
 				// We found another option, stop parsing arguments
 				// for this option.
 				CARGODBG(3, "%s", "    Found other option\n");
