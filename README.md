@@ -19,6 +19,17 @@ Designed to be small and easy to drop into any program without much configuratio
 
 cargo is license under the [MIT License](http://opensource.org/licenses/mit-license.php)
 
+Documentation
+-------------
+
+Documentation is available at http://cargo.readthedocs.org/en/latest
+
+It was generated using [mkdocs][mkdocs] and can be found under the
+[docs/](https://github.com/JoakimSoderberg/cargo/tree/master/docs) directory.
+
+If you'd rather learn by example see
+[examples/](https://github.com/JoakimSoderberg/cargo/tree/master/examples)
+
 Compiling
 ---------
 
@@ -75,3 +86,4 @@ $ ctest           # Run the tests.
 [codeship_img]: https://codeship.com/projects/a953df40-a586-0132-a1eb-3aaa69fc7edf/status?branch=master
 [docs]: http://cargo.readthedocs.org/en/latest/
 [docs_img]: https://readthedocs.org/projects/cargo/badge/?version=latest
+[mkdocs]: http://www.mkdocs.org/
