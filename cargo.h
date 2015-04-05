@@ -248,6 +248,10 @@ const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
+void cargo_set_user_context(cargo_t ctx, void *user);
+
+void *cargo_get_user_context(cargo_t ctx);
+
 //
 // Utility functions.
 //

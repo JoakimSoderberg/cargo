@@ -789,6 +789,36 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
 
+### cargo_set_user_context ###
+
+```c
+void cargo_set_user_context(cargo_t ctx, void *user);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**user**: A `void` pointer to user context data.
+
+---
+
+This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_set_user_context`](api.md#cargo_set_user_context)
+
+### cargo_get_user_context ###
+
+```c
+void *cargo_get_user_context(cargo_t ctx);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+---
+
+This returns the global user context set using [`cargo_set_user_context`](api.md#cargo_set_user_context)
+
 ## Utility functions ##
 
 These are not a part of the core, but are nice to have.

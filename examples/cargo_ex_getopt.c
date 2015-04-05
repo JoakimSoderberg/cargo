@@ -4,16 +4,16 @@
 #include <string.h>
 #include "cargo.h"
 
-typedef enum command_s
+typedef enum cmd_s
 {
 	NONE,
 	ADD,
 	APPEND,
 	DELETE,
 	CREATE
-} command_t;
+} cmd_t;
 
-const char *cmd_to_str(command_t cmd)
+const char *cmd_to_str(cmd_t cmd)
 {
 	switch (cmd)
 	{
@@ -29,7 +29,7 @@ const char *cmd_to_str(command_t cmd)
 
 typedef struct args_s
 {
-	command_t cmd;
+	cmd_t cmd;
 	char *value;
 	char *filename;
 	int verbose_flag;
@@ -38,13 +38,10 @@ typedef struct args_s
 static int print_command(cargo_t ctx, void *user, const char *optname,
 						int argc, char **argv)
 {
-	args_t *a = (args_t *)user;
+	args_t *a = (args_t *)cargo_get_user_context(ctx);
 	assert(a);
 
-	if (!strcmp(optname, "--add"))    a->cmd = ADD;
-	if (!strcmp(optname, "--append")) a->cmd = APPEND;
-	if (!strcmp(optname, "--delete")) a->cmd = DELETE;
-	if (!strcmp(optname, "--create")) a->cmd = CREATE;
+	a->cmd = (cmd_t)user;
 	if (argc > 0) a->value = argv[0];
 
 	return argc;
@@ -59,13 +56,14 @@ int main(int argc, char **argv)
 	size_t remain_count;
 	args_t args;
 
-	memset(&args, 0, sizeof(args));
-
 	if (cargo_init(&cargo, 0, argv[0]))
 	{
 		fprintf(stderr, "Failed to init command line parsing\n");
 		return -1;
 	}
+
+	memset(&args, 0, sizeof(args));
+	cargo_set_user_context(cargo, &args);
 
 	ret |= cargo_add_option(cargo, 0, "--verbose -v", "Be more verbose",
 							"b!", &args.verbose_flag);
@@ -74,10 +72,10 @@ int main(int argc, char **argv)
 							"b=", &args.verbose_flag, 0);
 
 	ret |= cargo_add_mutex_group(cargo, 0, "cmd");
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --add -a", "Add", "[c]#", print_command, &args, NULL, 0);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --append", "Append", "c0", print_command, &args);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --delete -d", "Delete", "c", print_command, &args);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --create -c", "Create", "c", print_command, &args);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --add -a", "Add", "[c]#", print_command, ADD, NULL, 0);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --append", "Append", "c0", print_command, APPEND);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --delete -d", "Delete", "c", print_command, DELETE);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --create -c", "Create", "c", print_command, CREATE);
 	ret |= cargo_add_option(cargo, 0, "--file -f", "File", "s", &args.filename);
 
 	assert(ret == 0);

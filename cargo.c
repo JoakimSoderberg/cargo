@@ -761,6 +761,8 @@ typedef struct cargo_s
 	char *error;
 	char *short_usage;
 	char *usage;
+
+	void *user;
 } cargo_s;
 
 static void _cargo_set_error(cargo_t ctx, char *error)
@@ -4786,6 +4788,18 @@ const char *cargo_get_version()
 	return CARGO_VERSION_STR;
 }
 
+void cargo_set_user_context(cargo_t ctx, void *user)
+{
+	assert(ctx);
+	ctx->user = user;
+}
+
+void *cargo_get_user_context(cargo_t ctx)
+{
+	assert(ctx);
+	return ctx->user;
+}
+
 // -----------------------------------------------------------------------------
 // Tests.
 // -----------------------------------------------------------------------------
@@ -6980,6 +6994,17 @@ _TEST_START(TEST_fixed_fail_array)
 }
 _TEST_END()
 
+_TEST_START(TEST_user_context)
+{
+	int i = 3;
+	cargo_set_user_context(cargo, &i);
+	cargo_assert(&i == cargo_get_user_context(cargo), "Got invalid user context");
+	cargo_assert(i == 3, "Got invalid user context value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
 // TODO: Test autoclean with string of arrays
@@ -7082,7 +7107,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_bool_count_compact),
 	CARGO_ADD_TEST(TEST_fixed_one_or_more_array),
 	CARGO_ADD_TEST(TEST_fixed_zero_or_more_array),
-	CARGO_ADD_TEST(TEST_fixed_fail_array)
+	CARGO_ADD_TEST(TEST_fixed_fail_array),
+	CARGO_ADD_TEST(TEST_user_context)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
