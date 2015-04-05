@@ -33,6 +33,25 @@ If you'd rather learn by example see
 Compiling
 ---------
 
+The recommended way to compile and run the tests is to use the CMake project on all
+platforms. This will also build libraries and the examples.
+
+Both for Windows and Linux
+###########################
+
+```bash
+$ mkdir build && cd build
+$ cmake ..        # Add -DCARGO_DEBUG=<level> for debugging output.
+$ cmake --build . # You can use 'make' also, but not with Visual Studio.
+$ ctest           # Run the tests.
+```
+
+Compiling manually
+------------------
+
+If you'd rather compile manually without using CMake, either simply add it to your
+own build system, or follow the steps below.
+
 Simply drop into your project and compile, no configuration needed.
 
 To compile the tests simply define `CARGO_TEST`. For example using `gcc`:
@@ -45,23 +64,6 @@ Or on Windows using the visual studio command line:
 
 ```bash
 > cl.exe /DCARGO_TEST cargo.c
-```
-
-More advanced compiling
------------------------
-
-To enable running the tests easily on any platform there's also a CMake
-project that can be used to generate `Make` files or a `Visual Studio`
-project for instance.
-
-Both for Windows and Linux
-###########################
-
-```bash
-$ mkdir build && cd build
-$ cmake ..        # Add -DCARGO_DEBUG=<level> for debugging output.
-$ cmake --build . # You can use 'make' also, but not with Visual Studio.
-$ ctest           # Run the tests.
 ```
 
 [travis]: https://travis-ci.org/JoakimSoderberg/cargo
