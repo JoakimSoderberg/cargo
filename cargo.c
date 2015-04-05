@@ -1573,6 +1573,8 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 									"%d expected.\n",
 									name, 
 									(opt->nargs > 0) ? opt->nargs : 1);
+
+					_cargo_set_error(ctx, error);
 					return -1;
 				}
 
@@ -6585,6 +6587,21 @@ _TEST_START(TEST_cargo_split_commandline)
 }
 _TEST_END()
 
+_TEST_START(TEST_missing_last_arg)
+{
+	int k = 0;
+	char *args[] = { "program", "--centauri" };
+
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i", &k);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Succesfully parsed option without argument");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 static const char *_cargo_test_verify_usage_length(const char *usage, int width)
 {
 	char *ret = NULL;
@@ -7070,6 +7087,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_guard),
 	CARGO_ADD_TEST(TEST_mutex_group_require_one),
 	CARGO_ADD_TEST(TEST_cargo_split_commandline),
+	CARGO_ADD_TEST(TEST_missing_last_arg),
 	CARGO_ADD_TEST(TEST_cargo_set_max_width),
 	CARGO_ADD_TEST(TEST_cargo_snprintf),
 	CARGO_ADD_TEST(TEST_cargo_set_prefix),
