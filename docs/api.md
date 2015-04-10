@@ -1,10 +1,9 @@
-Table of contents
-=================
+cargo API reference
+===================
+
+## Table of contents ##
 
 [TOC]
-
-API reference
-=============
 
 ## Default defines ##
 
@@ -240,6 +239,14 @@ size_t count;
 cargo_add_option(cargo, 0, "--opt", "description",
                  ".[s#]#", &str, 32, &count, 5);
 ```
+
+## Types ##
+
+### cargo_t ###
+
+This is the type of the cargo context. This type is opague and should never be manipulated directly, only by using the cargo API functions.
+
+To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
 ## Functions ##
 
@@ -889,7 +896,7 @@ program first second --third 123
 
 As you can see, you pass it an index, for instance `4`, as well as a highlight character `"*"`. In the example above, by appending a color after the highlight character this will be used when printing the highlight character.
 
-Cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But please not that any ANSI color code can be used.
+Cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But any ANSI color code can be used.
 
 Note that cargo internally also supports outputting these ANSI colors on **Windows** which does not have native ANSI console color support normally.
 
