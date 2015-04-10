@@ -248,9 +248,21 @@ const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
 const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
-void cargo_set_user_context(cargo_t ctx, void *user);
+void cargo_set_context(cargo_t ctx, void *user);
 
-void *cargo_get_user_context(cargo_t ctx);
+void *cargo_get_context(cargo_t ctx);
+
+int cargo_set_group_context(cargo_t ctx, const char *group, void *user);
+
+void *cargo_get_group_context(cargo_t ctx, const char *group);
+
+int cargo_set_mutex_group_context(cargo_t ctx, const char *mutex_group, void *user);
+
+void *cargo_get_mutex_group_context(cargo_t ctx, const char *mutex_group);
+
+const char *cargo_get_option_group(cargo_t ctx, const char *opt);
+
+const char *cargo_get_option_mutex_group(cargo_t ctx, const char *opt);
 
 //
 // Utility functions.

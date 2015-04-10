@@ -719,6 +719,7 @@ struct cargo_group_s
 	size_t *option_indices;
 	size_t opt_count;
 	size_t max_opt_count;
+	void *user;
 };
 
 typedef struct cargo_s
@@ -2637,7 +2638,6 @@ static void _cargo_groups_destroy(cargo_t ctx)
 	}
 }
 
-// TODO: Make this return the group_index of the found group also.
 static cargo_group_t *_cargo_find_group(cargo_t ctx,
 					cargo_group_t *groups, size_t group_count,
 					const char *name, size_t *grp_i)
@@ -3299,6 +3299,61 @@ static size_t _cargo_process_max_width(size_t max_width)
 	}
 
 	return maxw;
+}
+
+static int _cargo_set_group_context(cargo_t ctx,
+		const char *group, cargo_group_t *groups, size_t group_count, void *user)
+{
+	cargo_group_t *grp = NULL;
+	assert(ctx);
+	assert(group);
+
+	grp = _cargo_find_group(ctx, groups, group_count, group, NULL);
+
+	if (!grp)
+	{
+		CARGODBG(1, "No such group \"%s\"\n", group);
+		return -1;
+	}
+
+	grp->user = user;
+
+	return 0;
+}
+
+static void * _cargo_get_group_context(cargo_t ctx, const char *group,
+				cargo_group_t *groups, size_t group_count)
+{
+	cargo_group_t *grp = NULL;
+	assert(ctx);
+	assert(group);
+
+	grp = _cargo_find_group(ctx, groups, group_count, group, NULL);
+
+	if (!grp)
+	{
+		CARGODBG(1, "No such group \"%s\"\n", group);
+		return NULL;
+	}
+
+	return grp->user;
+}
+
+static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
+						cargo_group_t *groups, size_t group_count)
+{
+	cargo_group_t *grp = NULL;
+	size_t opt_i;
+	assert(ctx);
+	assert(opt);
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL) < 0)
+	{
+		CARGODBG(1, "No such option \"%s\"\n", opt);
+		return NULL;
+	}
+
+	return groups[ctx->options[opt_i].group_index].name;
 }
 
 // -----------------------------------------------------------------------------
@@ -4788,16 +4843,50 @@ const char *cargo_get_version()
 	return CARGO_VERSION_STR;
 }
 
-void cargo_set_user_context(cargo_t ctx, void *user)
+void cargo_set_context(cargo_t ctx, void *user)
 {
 	assert(ctx);
 	ctx->user = user;
 }
 
-void *cargo_get_user_context(cargo_t ctx)
+void *cargo_get_context(cargo_t ctx)
 {
 	assert(ctx);
 	return ctx->user;
+}
+
+int cargo_set_group_context(cargo_t ctx, const char *group, void *user)
+{
+	return _cargo_set_group_context(ctx, group,
+				ctx->groups, ctx->group_count, user);
+}
+
+void *cargo_get_group_context(cargo_t ctx, const char *group)
+{
+	return _cargo_get_group_context(ctx, group, ctx->groups, ctx->group_count);
+}
+
+int cargo_set_mutex_group_context(cargo_t ctx, const char *mutex_group, void *user)
+{
+	return _cargo_set_group_context(ctx, mutex_group,
+				ctx->mutex_groups, ctx->mutex_group_count, user);
+}
+
+void *cargo_get_mutex_group_context(cargo_t ctx, const char *mutex_group)
+{
+	return _cargo_get_group_context(ctx, mutex_group,
+				ctx->mutex_groups, ctx->mutex_group_count);
+}
+
+const char *cargo_get_option_group(cargo_t ctx, const char *opt)
+{
+	return _cargo_option_get_group(ctx, opt, ctx->groups, ctx->group_count);
+}
+
+const char *cargo_get_option_mutex_group(cargo_t ctx, const char *opt)
+{
+	return _cargo_option_get_group(ctx, opt,
+				ctx->mutex_groups, ctx->mutex_group_count);
 }
 
 // -----------------------------------------------------------------------------
@@ -6997,8 +7086,8 @@ _TEST_END()
 _TEST_START(TEST_user_context)
 {
 	int i = 3;
-	cargo_set_user_context(cargo, &i);
-	cargo_assert(&i == cargo_get_user_context(cargo), "Got invalid user context");
+	cargo_set_context(cargo, &i);
+	cargo_assert(&i == cargo_get_context(cargo), "Got invalid user context");
 	cargo_assert(i == 3, "Got invalid user context value");
 
 	_TEST_CLEANUP();
@@ -7008,7 +7097,6 @@ _TEST_END()
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
 // TODO: Test autoclean with string of arrays
-// TODO: Test parsing option --alpha --beta, where --alpha should have an argument.
 
 //
 // List of all test functions to run:
