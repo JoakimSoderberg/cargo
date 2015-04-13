@@ -1672,6 +1672,10 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 			if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
 		}
 	}
+	else
+	{
+		if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+	}
 
 	return 0;
 }
@@ -1679,7 +1683,7 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	char *namebuf, size_t buf_size)
 {
-	int ret = 0;
+	int ret = -1;
 	size_t i;
 	char **sorted_names = NULL;
 	cargo_str_t str;
@@ -1690,7 +1694,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	str.s = namebuf;
 	str.l = buf_size;
 
-	CARGODBG(3, "Sorting %lu option names:\n", opt->name_count);
+	CARGODBG(3, "%s: Sorting %lu option names:\n", opt->name[0], opt->name_count);
 
 	// Sort the names by length.
 	{
@@ -1738,7 +1742,11 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		}
 		else
 		{
-			_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf));
+			if (_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf)))
+			{
+				CARGODBG(1, "Failed to generate metavar for %s\n", opt->name[0]);
+			}
+
 			metavar = metavarbuf;
 		}
 
