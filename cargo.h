@@ -59,6 +59,10 @@
 #define CARGO_MAX_MAX_WIDTH 1024
 #endif
 
+#ifndef CARGO_MAX_OPT_MUTEX_GROUP
+#define CARGO_MAX_OPT_MUTEX_GROUP 4
+#endif
+
 //
 // Colors.
 //
@@ -155,7 +159,10 @@ typedef enum cargo_option_flags_e
 
 typedef enum cargo_mutex_group_flags_e
 {
-	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0)
+	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0),
+	CARGO_MUTEXGRP_GROUP_USAGE			= (1 << 1),
+	CARGO_MUTEXGRP_GROUP_SHORT_USAGE	= (1 << 2),
+	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3)
 } cargo_mutex_group_flags_t;
 
 typedef enum cargo_group_flags_e
@@ -216,11 +223,15 @@ int cargo_group_set_flags(cargo_t ctx, const char *group,
 
 int cargo_add_mutex_group(cargo_t ctx,
 						cargo_mutex_group_flags_t flags,
-						const char *name);
+						const char *name,
+						const char *title,
+						const char *description);
 
 int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
+
+int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const char *metavar);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
@@ -256,14 +267,17 @@ int cargo_set_group_context(cargo_t ctx, const char *group, void *user);
 
 void *cargo_get_group_context(cargo_t ctx, const char *group);
 
-int cargo_set_mutex_group_context(cargo_t ctx, const char *mutex_group, void *user);
+int cargo_set_mutex_group_context(cargo_t ctx,
+								const char *mutex_group,
+								void *user);
 
 void *cargo_get_mutex_group_context(cargo_t ctx, const char *mutex_group);
 
 const char *cargo_get_option_group(cargo_t ctx, const char *opt);
 
-const char *cargo_get_option_mutex_group(cargo_t ctx, const char *opt);
-
+const char **cargo_get_option_mutex_groups(cargo_t ctx,
+										const char *opt,
+										size_t *count);
 //
 // Utility functions.
 //

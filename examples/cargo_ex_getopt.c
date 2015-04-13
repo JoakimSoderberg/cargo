@@ -58,7 +58,7 @@ typedef struct args_s
 	int verbose_flag;
 } args_t;
 
-static int print_command(cargo_t ctx, void *user, const char *optname,
+static int parse_command_cb(cargo_t ctx, void *user, const char *optname,
 						int argc, char **argv)
 {
 	args_t *a = (args_t *)cargo_get_context(ctx);
@@ -94,11 +94,11 @@ int main(int argc, char **argv)
 	ret |= cargo_add_option(cargo, 0, "--brief -b", "Be more brief",
 							"b=", &args.verbose_flag, 0);
 
-	ret |= cargo_add_mutex_group(cargo, 0, "cmd");
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --add -a", "Add", "[c]#", print_command, ADD, NULL, 0);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --append", "Append", "c0", print_command, APPEND);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --delete -d", "Delete", "c", print_command, DELETE);
-	ret |= cargo_add_option(cargo, 0, "<!cmd> --create -c", "Create", "c", print_command, CREATE);
+	ret |= cargo_add_mutex_group(cargo, 0, "cmd", NULL, NULL);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --add -a", "Add", "[c]#", parse_command_cb, ADD, NULL, 0);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --append", "Append", "c0", parse_command_cb, APPEND);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --delete -d", "Delete", "c", parse_command_cb, DELETE);
+	ret |= cargo_add_option(cargo, 0, "<!cmd> --create -c", "Create", "c", parse_command_cb, CREATE);
 	ret |= cargo_add_option(cargo, 0, "--file -f", "File", "s", &args.filename);
 
 	assert(ret == 0);

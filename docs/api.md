@@ -170,6 +170,7 @@ The basis of the format is a type specifier:
 - `d` double `double`
 - `s` string `char *`
 - `c` custom callback (you supply your own parse function).
+- `D` Parses nothing (can be useful together with mutex groups).
 
 Only one type specifier is allowed in a format string.
 
@@ -489,8 +490,10 @@ Sets the flags for a group.
 
 ```c
 int cargo_add_mutex_group(cargo_t ctx,
-						cargo_mutex_group_flags_t flags,
-						const char *name);
+            cargo_mutex_group_flags_t flags,
+            const char *name,
+            const char *title,
+            const char *description);
 ```
 
 ---
@@ -500,6 +503,10 @@ int cargo_add_mutex_group(cargo_t ctx,
 **flags**: See [`cargo_mutex_group_flags_t`](api.md#cargo_mutex_group_flags_t) for flags.
 
 **name**: The name of the mutex group.
+
+**title**: The title of the mutex group.
+
+**description**: A description of the mutex group.
 
 ---
 

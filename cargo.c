@@ -682,6 +682,9 @@ typedef struct cargo_opt_s
 	int alloc;
 
 	int group_index;
+	int mutex_group_idxs[CARGO_MAX_OPT_MUTEX_GROUP];
+	size_t mutex_group_count;
+	char **mutex_group_names;
 
 	cargo_custom_cb_t custom;
 	void *custom_user;
@@ -713,6 +716,7 @@ struct cargo_group_s
 	char *name;
 	char *title;
 	char *description;
+	const char *metavar;
 	size_t flags;			// This is either cargo_group_flags_t
 							// or cargo_mutex_group_flags_t depending on type.
 
@@ -2119,10 +2123,30 @@ fail:
 	return ret;
 }
 
+static int _cargo_mutex_group_should_be_grouped(cargo_t ctx, cargo_opt_t *opt)
+{
+	cargo_group_t *mgrp = NULL;
+	size_t i;
+	assert(opt);
+
+	for (i = 0; i < opt->mutex_group_count; i++)
+	{
+		assert(opt->mutex_group_idxs[i] < ctx->mutex_group_count);
+		mgrp = &ctx->mutex_groups[opt->mutex_group_idxs[i]];
+
+		if (mgrp->flags & CARGO_MUTEXGRP_GROUP_USAGE)
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static int _cargo_print_options(cargo_t ctx, 
 								size_t *opt_indices, size_t opt_count,
 								int show_positional, cargo_astr_t *str,
-								int max_name_len, int indent,
+								int max_name_len, int indent, int is_mutex,
 								cargo_usage_t flags)
 {
 	#define NAME_PADDING 2
@@ -2149,18 +2173,27 @@ static int _cargo_print_options(cargo_t ctx,
 		opt_i = opt_indices[i];
 		opt = &ctx->options[opt_i];
 
+		// We don't show this in its normal position since it is a member of
+		// a mutex group that should be grouped in the usage. 
+		if (_cargo_mutex_group_should_be_grouped(ctx, opt) && !is_mutex)
+		{
+			continue;
+		}
+
+		// Skip options depending on type so we can group them by
+		// calling this function multiple times.
+		if ((show_positional && !opt->positional)
+		 || (!show_positional && opt->positional))
+		{
+			continue;
+		}
+
 		// TODO: Hmmm maybe store option max length in the opt struct instead when adding?
 		namelen = _cargo_get_option_name_str(ctx, opt,
 											name, ctx->max_width);
 
 		// Is the option name so long we need a new line before the description?
 		option_causes_newline = (int)strlen(name) > max_name_len;
-
-		if ((show_positional && !opt->positional)
-		 || (!show_positional && opt->positional))
-		{
-			continue;
-		}
 
 		// Print the option names.
 		// "  --ducks [DUCKS ...]  "
@@ -2267,6 +2300,23 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	return 0;
 }
 
+static void _cargo_fit_on_short_usage_line(cargo_t ctx, cargo_astr_t *str,
+											size_t indent,
+											size_t cur_offset,
+											size_t opt_offset,
+											size_t *prev_offset)
+{
+	assert(ctx);
+	assert(prev_offset);
+	assert(str);
+
+	if ((cur_offset + opt_offset - (*prev_offset)) >= ctx->max_width)
+	{
+		*prev_offset = cur_offset;
+		cargo_aappendf(str, "\n%*s", indent, " ");
+	}
+}
+
 static int _cargo_get_short_option_usages(cargo_t ctx,
 										cargo_astr_t *str,
 										size_t indent,
@@ -2276,6 +2326,7 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	int ret;
 	cargo_astr_t opt_str;
 	size_t prev_offset = 0;
+	cargo_opt_t *opt = NULL;
 	char *opt_s = NULL;
 	assert(ctx);
 	assert(str);
@@ -2284,9 +2335,15 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	{
 		memset(&opt_str, 0, sizeof(opt_str));
 		opt_str.s = &opt_s;
+		opt = &ctx->options[i];
 
-		if ((ret = _cargo_get_short_option_usage(ctx,
-								&ctx->options[i],
+		// We display this seperately.
+		if (_cargo_mutex_group_should_be_grouped(ctx, opt))
+		{
+			continue;
+		}
+
+		if ((ret = _cargo_get_short_option_usage(ctx, opt,
 								&opt_str, is_positional)) < 0)
 		{
 			CARGODBG(1, "Failed to get option usage\n");
@@ -2299,11 +2356,8 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 		}
 
 		// Does the option fit on this line?
-		if ((str->offset + opt_str.offset - prev_offset) >= ctx->max_width)
-		{
-			prev_offset = str->offset;
-			cargo_aappendf(str, "\n%*s", indent, " ");
-		}
+		_cargo_fit_on_short_usage_line(ctx, str,
+			indent, str->offset, opt_str.offset, &prev_offset);
 
 		if (opt_s)
 		{
@@ -2449,6 +2503,8 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	{
 		_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
 	}
+
+	_cargo_free_str_list(&o->mutex_group_names, &o->mutex_group_count);
 }
 
 typedef struct cargo_fmt_token_s
@@ -2658,7 +2714,9 @@ static cargo_group_t *_cargo_find_group(cargo_t ctx,
 	cargo_group_t *g;
 	assert(ctx);
 	assert(name);
-	assert(groups);
+
+	if (!groups)
+		return NULL;
 
 	for (i = 0; i < group_count; i++)
 	{
@@ -2836,7 +2894,18 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	}
 
 	g->option_indices[g->opt_count] = opt_i;
-	if (!is_mutex) o->group_index = grp_i;
+
+	// Save index in option
+	// (since we might realloc the array of groups we must use the index)
+	if (is_mutex)
+	{
+		o->mutex_group_idxs[o->mutex_group_count++] = grp_i;
+	}
+	else
+	{
+		o->group_index = grp_i;
+	}
+
 	g->opt_count++;
 
 	CARGODBG(2, "   Group \"%s\" option count: %lu\n", g->name, g->opt_count);
@@ -3366,6 +3435,141 @@ static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 	}
 
 	return groups[ctx->options[opt_i].group_index].name;
+}
+
+static const void _cargo_mutex_group_short_usage(cargo_t ctx,
+						cargo_astr_t *str, size_t indent)
+{
+	size_t i;
+	size_t j;
+	size_t prev_offset = 0;
+	cargo_group_t *mgrp = NULL;
+	cargo_opt_t *opt = NULL;
+	cargo_astr_t opt_str;
+	char *opt_s = NULL;
+	assert(ctx);
+	assert(str);
+
+	for (i = 0; i < ctx->mutex_group_count; i++)
+	{
+		mgrp = &ctx->mutex_groups[i];
+
+		// Given by the user to override.
+		if (mgrp->metavar)
+		{
+			memset(&opt_str, 0, sizeof(opt_str));
+			opt_str.s = &opt_s;
+			cargo_aappendf(&opt_str, " %s", mgrp->metavar);
+
+			_cargo_fit_on_short_usage_line(ctx, str,
+				indent, str->offset, opt_str.offset, &prev_offset);
+
+			if (opt_s)
+			{
+				cargo_aappendf(str, "%s", opt_s);
+				free(opt_s);
+				opt_s = NULL;
+			}
+
+			continue;
+		}
+
+		// If we should group the options in the mutex group like this
+		// {opt1, opt2, opt3} or [opt1, opt2, opt3].
+		if (!(mgrp->flags & CARGO_MUTEXGRP_GROUP_USAGE))
+		{
+			continue;
+		}
+
+		// TODO: There is a risk that the {} signs here gives us an ugly
+		// linebreak... Fix this.
+		cargo_aappendf(str, " %s", 
+			(mgrp->flags & CARGO_MUTEXGRP_ONE_REQUIRED) ? "{" : "[");
+
+		for (j = 0; j < mgrp->opt_count; j++)
+		{
+			memset(&opt_str, 0, sizeof(opt_str));
+			opt_str.s = &opt_s;
+			opt = &ctx->options[mgrp->option_indices[j]];
+			cargo_aappendf(&opt_str, "%s%s",
+				opt->name[0], (j != (mgrp->opt_count - 1)) ? ", " : "");
+
+			_cargo_fit_on_short_usage_line(ctx, str,
+				indent, str->offset, opt_str.offset, &prev_offset);
+
+			if (opt_s)
+			{
+				cargo_aappendf(str, "%s", opt_s);
+				free(opt_s);
+				opt_s = NULL;
+			}
+		}
+
+		cargo_aappendf(str, "%s", 
+			(mgrp->flags & CARGO_MUTEXGRP_ONE_REQUIRED) ? "}" : "]");
+	}
+}
+
+static const char *_cargo_strip_path_from_progname(const char *org_progname)
+{
+	const char *progname;
+
+	// Strip any directory path from the program name.
+	if (!(progname = strrchr(org_progname, '/')))
+	{
+		if (!(progname = strrchr(org_progname, '\\')))
+		{
+			progname = org_progname;
+		}
+	}
+
+	progname += strspn(progname, "/\\");
+
+	return progname;
+}
+
+static const char *_cargo_get_short_usage(cargo_t ctx)
+{
+	char *b = NULL;
+	size_t indent = 0;
+	cargo_astr_t str;
+	const char *progname;
+	assert(ctx);
+
+	_cargo_add_help_if_missing(ctx);
+	_cargo_add_orphans_to_default_group(ctx);
+
+	memset(&str, 0, sizeof(str));
+	str.s = &b;
+	indent = str.offset;
+
+	cargo_aappendf(&str, "Usage: %s",
+		_cargo_strip_path_from_progname(ctx->progname));
+
+	// Options.
+	_cargo_get_short_option_usages(ctx, &str, indent, 0);
+
+	_cargo_mutex_group_short_usage(ctx, &str, indent);
+
+	// Positional arguments at the end.
+	_cargo_get_short_option_usages(ctx, &str, indent, 1);
+
+	// Reallocate the memory used for the string so it's too big.
+	if (!(b = realloc(b, str.offset + 1)))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return NULL;
+	}
+
+	// We are always responsible to free this.
+	if (ctx->short_usage)
+	{
+		free(ctx->short_usage);
+	}
+
+	ctx->short_usage = b;
+
+	return b;
 }
 
 // -----------------------------------------------------------------------------
@@ -4013,49 +4217,28 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	}
 
 	opt = &ctx->options[opt_i];
-	opt->metavar = metavar;
+	opt->metavar = metavar; // TODO: strdup?
 
 	return 0;
 }
 
-static const char *_cargo_get_short_usage(cargo_t ctx)
+int cargo_mutex_group_set_metavar(cargo_t ctx,
+		const char *mutex_group, const char *metavar)
 {
-	char *b = NULL;
-	size_t indent = 0;
-	cargo_astr_t str;
+	cargo_group_t *g = NULL;
 	assert(ctx);
+	assert(mutex_group);
 
-	_cargo_add_help_if_missing(ctx);
-	_cargo_add_orphans_to_default_group(ctx);
-
-	memset(&str, 0, sizeof(str));
-	str.s = &b;
-
-	cargo_aappendf(&str, "Usage: %s", ctx->progname);
-	indent = str.offset;
-
-	// Options.
-	_cargo_get_short_option_usages(ctx, &str, indent, 0);
-
-	// Positional arguments at the end.
-	_cargo_get_short_option_usages(ctx, &str, indent, 1);
-
-	// Reallocate the memory used for the string so it's too big.
-	if (!(b = realloc(b, str.offset + 1)))
+	if (!(g =_cargo_find_group(ctx,
+		ctx->mutex_groups, ctx->mutex_max_groups, mutex_group, NULL)))
 	{
-		CARGODBG(1, "Out of memory!\n");
-		return NULL;
+		CARGODBG(1, "No such mutex group \"%s\"\n", mutex_group);
+		return -1;
 	}
 
-	// We are always responsible to free this.
-	if (ctx->short_usage)
-	{
-		free(ctx->short_usage);
-	}
+	g->metavar = metavar; // TODO: strdup?
 
-	ctx->short_usage = b;
-
-	return b;
+	return 0;
 }
 
 const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
@@ -4145,12 +4328,50 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	}
 	#endif
 
+	// Start by priting mutually exclusive groups
+	for (i = 0; i < ctx->mutex_group_count; i++)
+	{
+		int indent = 0;
+		char *lb_desc;
+		const char *description;
+		grp = &ctx->mutex_groups[i];
+
+		if (!(grp->flags & CARGO_MUTEXGRP_GROUP_USAGE))
+		{
+			continue;
+		}
+
+		if (grp->title)
+		{
+			cargo_aappendf(&str, "\n%s:", grp->title);
+		}
+
+		grp->description = grp->description;
+		if (!grp->description)
+		{
+			description = "Specify one of the following.";
+		}
+
+		if (!(lb_desc = _cargo_linebreak(ctx, description, ctx->max_width)))
+		{
+			goto fail;
+		}
+		cargo_aappendf(&str, "\n%s\n", lb_desc);
+		free(lb_desc);
+
+		if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
+								1, &str, max_name_len, indent, 1, flags))
+		{
+			goto fail;
+		}
+	}
+
 	for (i = 0; i < ctx->group_count; i++)
 	{
 		int indent = 0;
 		grp = &ctx->groups[i];
 
-		if (grp->flags & CARGO_GROUP_HIDE)
+		if ((grp->flags & CARGO_GROUP_HIDE) || (grp->opt_count == 0)) 
 		{
 			continue;
 		}
@@ -4179,7 +4400,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 				if (cargo_aappendf(&str, "Positional arguments:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
-									1, &str, max_name_len, indent, flags))
+									1, &str, max_name_len, indent, 0, flags))
 			{
 				goto fail;
 			}
@@ -4193,7 +4414,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 				if (cargo_aappendf(&str, "Options:\n") < 0) goto fail;
 
 			if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
-									0, &str, max_name_len, indent, flags))
+									0, &str, max_name_len, indent, 0, flags))
 			{
 				goto fail;
 			}
@@ -4300,11 +4521,13 @@ int cargo_group_set_flags(cargo_t ctx, const char *group,
 
 int cargo_add_mutex_group(cargo_t ctx,
 						cargo_mutex_group_flags_t flags,
-						const char *name)
+						const char *name,
+						const char *title,
+						const char *description)
 {
 	return _cargo_add_group(ctx, &ctx->mutex_groups, &ctx->mutex_group_count,
 							&ctx->mutex_max_groups,
-							(size_t)flags, name, NULL, NULL);
+							(size_t)flags, name, title, description);
 }
 
 int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt)
@@ -4910,10 +5133,49 @@ const char *cargo_get_option_group(cargo_t ctx, const char *opt)
 	return _cargo_option_get_group(ctx, opt, ctx->groups, ctx->group_count);
 }
 
-const char *cargo_get_option_mutex_group(cargo_t ctx, const char *opt)
+const char **cargo_get_option_mutex_groups(cargo_t ctx,
+											const char *opt, size_t *count)
 {
-	return _cargo_option_get_group(ctx, opt,
-				ctx->mutex_groups, ctx->mutex_group_count);
+	size_t i;
+	cargo_opt_t *o = NULL;
+	cargo_group_t *mgrp = NULL;
+	size_t opt_i;
+	assert(ctx);
+	assert(opt);
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
+	{
+		CARGODBG(1, "No such options \"%s\"\n", opt);
+		return NULL;
+	}
+
+	o = &ctx->options[opt_i];
+
+	// Use cached version. Mutex group count should
+	// not be changed between calls anyway.
+	if (o->mutex_group_names)
+	{
+		return (const char **)o->mutex_group_names;
+	}
+
+	if (!(o->mutex_group_names = calloc(o->mutex_group_count, sizeof(char *))))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return NULL;
+	}
+
+	for (i = 0; i < o->mutex_group_count; i++)
+	{
+		mgrp = &ctx->mutex_groups[o->mutex_group_idxs[i]];
+		o->mutex_group_names[i] = strdup(mgrp->name);
+	}
+
+	if (count)
+	{
+		*count = o->mutex_group_count;
+	}
+
+	return (const char **)o->mutex_group_names;
 }
 
 // -----------------------------------------------------------------------------
@@ -6628,7 +6890,7 @@ _TEST_START(TEST_mutex_group_guard)
 	int k = 0;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 
-	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
+	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1", NULL, NULL);
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
 	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
@@ -6658,7 +6920,7 @@ _TEST_START(TEST_mutex_group_require_one)
 
 	ret = cargo_add_mutex_group(cargo,
 								CARGO_MUTEXGRP_ONE_REQUIRED,
-								"mutex_group1");
+								"mutex_group1", NULL, NULL);
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
 	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i", &j);
