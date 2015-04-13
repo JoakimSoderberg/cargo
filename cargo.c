@@ -4438,8 +4438,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 			if (!o->custom)
 			{
-				CARGODBG(1, "Got NULL custom callback pointer\n");
-				goto fail;
+				CARGODBG(2, "Warning: Got NULL custom callback pointer\n");
 			}
 
 			_cargo_fmt_next_token(&s);
@@ -4459,6 +4458,23 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 			nargs_is_set = 1;
 
+			break;
+		}
+		case 'D': // D as in Dummy.
+		{
+			// Shortcut for: "c0", NULL, NULL;
+			// That is a dummy callback. This is mostly useful
+			// for using in a mutex group.
+			o->array = 0;
+			o->alloc = 1;
+			o->type = CARGO_STRING;
+			o->custom = NULL;
+			o->custom_user = NULL;
+			o->lenstr = 0;
+			o->nargs = 0;
+			o->target = (void **)&o->custom_target;
+			o->target_count = &o->custom_target_count;
+			nargs_is_set = 1;
 			break;
 		}
 		case 's':
@@ -4541,7 +4557,6 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			// This is where we return the number of arguments
 			// we have parsed for this option.
 			o->target_count = va_arg(ap, size_t *);
-			*o->target_count = 0;
 		}
 
 		_cargo_fmt_next_token(&s);
@@ -4639,6 +4654,11 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		o->flags |= CARGO_OPT_REQUIRED;
 	}
 
+	if (_cargo_validate_option_args(ctx, o))
+	{
+		goto fail;
+	}
+
 	if (o->alloc)
 	{
 		*(o->target) = NULL;
@@ -4647,11 +4667,6 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	if (o->target_count)
 	{
 		*(o->target_count) = 0;
-	}
-
-	if (_cargo_validate_option_args(ctx, o))
-	{
-		goto fail;
 	}
 
 	for (i = 1; i < optcount; i++)
