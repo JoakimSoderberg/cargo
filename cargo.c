@@ -1691,6 +1691,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	assert(opt);
 
 	memset(&str, 0, sizeof(str));
+	namebuf[0] = '\0';
 	str.s = namebuf;
 	str.l = buf_size;
 
@@ -1722,7 +1723,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		if (opt->positional)
 			continue;
 
-		if (cargo_appendf(&str, "%s%s", 
+		if (cargo_appendf(&str, "%s%s",
 			sorted_names[i],
 			(i + 1 != opt->name_count) ? ", " : "") < 0)
 		{
@@ -1731,9 +1732,9 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	}
 
 	// If the option has an argument, add a "metavar".
-	if (!_cargo_zero_args_allowed(opt))
+	if ((opt->nargs != 0) || opt->positional)
 	{
-		char metavarbuf[256];
+		char metavarbuf[256] = {0};
 		const char *metavar = NULL;
 
 		if (opt->metavar)
@@ -1745,9 +1746,12 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 			if (_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf)))
 			{
 				CARGODBG(1, "Failed to generate metavar for %s\n", opt->name[0]);
+				metavar = opt->name[0];
 			}
-
-			metavar = metavarbuf;
+			else
+			{
+				metavar = metavarbuf;
+			}
 		}
 
 		cargo_appendf(&str, " %s", metavar);
