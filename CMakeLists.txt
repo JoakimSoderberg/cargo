@@ -34,6 +34,7 @@ option(CARGO_EXTRA_EXAMPLES "Builds the extra examples under the examples/ direc
 option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
 option(CARGO_BUILD_SHARED_LIB "Build a shared library" ON)
 option(CARGO_BUILD_STATIC_LIB "Build a static library" ON)
+option(CARGO_SHUTUP "Don't output adding of tests and stuff" OFF)
 
 # Add project cmake modules to path.
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
@@ -170,7 +171,9 @@ if (CARGO_TEST)
 				"${CARGO_LINE}")
 
 		if (TEST_NAME)
-			message("Adding test: '${TEST_NAME}'")
+			if (NOT CARGO_SHUTUP)
+				message("Adding test: '${TEST_NAME}'")
+			endif()
 
 			if (CARGO_WITH_MEMCHECK)
 				if (WIN32)
@@ -186,3 +189,24 @@ if (CARGO_TEST)
 		endif()
 	endforeach()
 endif()
+
+if (UNIX AND NOT CARGO_SHUTUP)
+	execute_process(COMMAND grep -o -E "cargo_.*?\\(" ${PROJECT_SOURCE_DIR}/cargo.h
+					OUTPUT_VARIABLE FUNCTION_NAMES
+					OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+	string(REPLACE "(" ";" FUNCTION_NAMES "${FUNCTION_NAMES}")
+
+	foreach (FUNC ${FUNCTION_NAMES})
+		string(REPLACE ")" "" FUNC "${FUNC}")
+		string(STRIP "${FUNC}" FUNC)
+
+		execute_process(COMMAND grep -o -E "${FUNC}" ${PROJECT_SOURCE_DIR}/docs/api.md
+					OUTPUT_VARIABLE API
+					RESULT_VARIABLE GREPRES)
+		if (GREPRES)
+			message(WARNING "Missing from API documentation '${FUNC}'")
+		endif()
+	endforeach()
+endif()
+
