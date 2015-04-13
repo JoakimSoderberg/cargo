@@ -101,7 +101,7 @@ Here is where you specify what this cargo option should look for when parsing th
 
 To make learning how this formatting language works as easy as possible, cargo comes with a small helper program `cargo_helper` that can help you with this. See [getting started](gettingstarted.md) on how to compile this.
 
-For a full description of the formatting language, please see the [API reference](api.md#format). In short, you specify a type specifier such as `i` for and `int`, `s` for a string (`char *`), `d` for `double` and so on. As well as specifiers that tells us if you're parsing a list, a single value, one or more values etc.
+For a full description of the formatting language, please see the [API reference](api.md#formatting-language). In short, you specify a type specifier such as `i` for and `int`, `s` for a string (`char *`), `d` for `double` and so on. As well as specifiers that tells us if you're parsing a list, a single value, one or more values etc.
 
 Here's an example of using [`cargo_add_option`](api.md#cargo_add_option) to parse an integer:
 
@@ -125,7 +125,7 @@ ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]+",
 assert(ret == 0);
 ```
 
-Other options instead of using [`+`](api.md#plus) is [`*`](api.md#star) and [`#`](api.md#hash).
+Other options instead of using [`+`](api.md#arrays) is [`*`](api.md#arrays) and [`#`](api.md#arrays).
 
 `*` works the same as `+` and means **zero or more** items. `#` means that we should parse a fixed amount of items. To do this we must specify the max number of items as an argument as well, in this example `4`:
 

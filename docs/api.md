@@ -114,7 +114,7 @@ You can read more about adding custom parser callbacks in the [add options guide
 
 ## Formatting language ##
 
-This is the language used by the [`cargo_add_option`](api.md#cargo_add_option) function.
+This is the language used by the [`cargo_add_option`](api.md#cargo_add_option) function. To help in learning this language cargo comes with a small helper program [`cargo_helper`](adding.md#help-with-format-strings) that lets you input a variable declaration such as `int *vals` and will give you examples of API calls you can use to parse it.
 
 ### Examples ###
 
@@ -124,6 +124,12 @@ These examples is what you would pass as `fmt` string, and the `...` variable ar
 
 * `"i", &val`
   Parse a single integer into `int val`.
+* `"b", &val`
+  Parse an option as a flag without any arguments. Stores `1` in `val` by default.
+* `"b=", &val, 5`
+  Parse an option as a flag. Stores 5 in `val`.
+* `"b!", &val`
+  Parse an option as a flag. Allow multiple occurances, count them and store the result in `val`.
 * `"f", &val`
   Parse a single float into `float val`.
 * `"d", &val`
@@ -187,6 +193,19 @@ If an option expects an optional value, you can prepend it with `?`:
 float val = 0.3f;
 cargo_add_option(cargo, 0, "--opt", "description", "f?", &val);
 ```
+
+### Booleans / flags
+
+The `b` specifier denotes a boolean value. By default you pass an `int` as the argument. If the flag is given in the commandline arguments, then a `1` will be stored in it.
+
+This behaviour can be changed by appending a set of specifiers after `b`:
+
+- `=` After the integer variable, specify a value that will be stored in it instead of the default `1`.
+- `!` Allow multiple occurances of the given flag, count how many times it occurs and store it in the specified integer variable. `-v -v -v` and `-vvv` is equivalent. This is useful for `verbosity` flags and such.
+
+Parse an ordinary flag and store `1` in `val` if set: `b, &val`
+Or parse the flag but store `5` in `val` if set: `b, &val, 5`
+Or count the number of occurrances of the flag: `b!, &val`
 
 ### Arrays
 
