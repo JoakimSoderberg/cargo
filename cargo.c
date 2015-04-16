@@ -4943,6 +4943,11 @@ fail:
 		free(grpname);
 	}
 
+	if (mutex_grpname)
+	{
+		free(mutex_grpname);
+	}
+
 	if (optname_list)
 	{
 		_cargo_free_str_list(&optname_list, &optcount);
