@@ -2588,6 +2588,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 	char *tmp = NULL;
 	char **groups = NULL;
 	const char *ret = NULL;
+	char *s = NULL;
 	size_t count;
 	size_t i;
 	assert(ctx);
@@ -2635,9 +2636,12 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 
 	for (i = 0; i < count; i++)
 	{
-		if (groups[i][0] == '!')
+		s = groups[i];
+		s += strspn(s, " \t");
+
+		if (s[0] == '!')
 		{
-			if (!(*mutex_grpname = strdup(&groups[i][1])))
+			if (!(*mutex_grpname = strdup(&s[1])))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				return NULL;
@@ -2645,7 +2649,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 		}
 		else
 		{
-			if (!(*grpname = strdup(groups[i])))
+			if (!(*grpname = strdup(s)))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				return NULL;
@@ -4565,6 +4569,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
 
+	// TODO: Allow multiple mutex groups...
 	if (!(optnames = _cargo_get_option_group_names(ctx, optnames,
 						&grpname, &mutex_grpname)))
 	{
@@ -5185,6 +5190,11 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 	if (count)
 	{
 		*count = o->mutex_group_count;
+	}
+
+	if (o->mutex_group_count == 0)
+	{
+		return NULL;
 	}
 
 	return (const char **)o->mutex_group_names;
@@ -7416,7 +7426,10 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 								const char *optname, int argc, char **argv)
 {
 	test_grp_ctx_t *grpctx = NULL;
+	test_grp_ctx_t *mgrpctx = NULL;
 	const char *group = NULL;
+	const char **mgroups = NULL;
+	size_t mgroup_count = 0;
 	cargo_cb_assert(ctx, "NULL context in callback");
 
 	group = cargo_get_option_group(ctx, optname);
@@ -7429,6 +7442,10 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 
 	printf("Group context contents: %s = %d\n", grpctx->name, grpctx->val);
 
+	mgroups = cargo_get_option_mutex_groups(ctx, optname, &mgroup_count);
+
+	printf("Mutex group count for %s: %lu\n", optname, mgroup_count);
+
 	if (!strcmp(optname, "--alpha"))
 	{
 		int *a = (int *)user;
@@ -7438,6 +7455,10 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 		cargo_cb_assert(*a == 15, "Got unexpected value for --alpha");
 		cargo_cb_assert(!strcmp(group, "group1"), "Expected group1 for --alpha");
 		cargo_cb_assert(!strcmp(grpctx->name, "hello"), "Invalid group context name");
+		cargo_cb_assert(grpctx->val == 20, "Unexpected group context value");
+
+		cargo_cb_assert(mgroup_count == 0, "Got non-zero mutex group count");
+		cargo_cb_assert(mgroups == NULL, "Got non-NULL mutex group");
 	}
 	else if (!strcmp(optname, "--delta"))
 	{
@@ -7446,8 +7467,15 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 		cargo_cb_assert(*d == NULL, "Got non-NULL char pointer for --delta");
 		cargo_cb_assert(!strcmp(group, "group2"), "Expected group2 for --delta");
 		cargo_cb_assert(!strcmp(grpctx->name, "world"), "Invalid group context name");
+
+		mgrpctx = cargo_get_mutex_group_context(ctx, mgroups[0]);
+		cargo_cb_assert(mgrpctx, "Got NULL mutex group 1 context");
+		cargo_cb_assert(!strcmp(mgrpctx->name, "great"), "--delta not member of mutex group 1");
+		cargo_cb_assert(mgrpctx->val == 60, "Got unexpected mutex group 1 value");
+
 		*d = strdup(argv[0]);
 		cargo_cb_assert(!strcmp(*d, "bla"), "Unexpected --delta value");
+		cargo_cb_assert(grpctx->val == 40, "Unexpected group context value");
 	}
 	else
 	{
@@ -7462,14 +7490,25 @@ _TEST_START(TEST_group_user_context)
 {
 	test_grp_ctx_t group_ctx1 = { "hello", 20 };
 	test_grp_ctx_t group_ctx2 = { "world", 40 };
+	test_grp_ctx_t mgroup_ctx1 = { "great", 60 };
+	test_grp_ctx_t mgroup_ctx2 = { "work", 80 };
 	int a = 0;
 	double b = 0.0;
 	float c = 0;
 	char *d = NULL;
+	int e = 123;
 	char *args[] = { "program", "--alpha", "15", "-b", "7.0", "-c", "5", "-d", "bla" };
 
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup1", "Mutex group 1", "Mutex group 1");
+	ret |= cargo_set_mutex_group_context(cargo, "mgroup1", &mgroup_ctx1);
+	cargo_assert(ret == 0, "Failed to add mutex group 1");
+
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup2", "Mutex group 2", "Mutex group 2");
+	ret |= cargo_set_mutex_group_context(cargo, "mgroup2", &mgroup_ctx2);
+	cargo_assert(ret == 0, "Failed to add mutex group 2");
+
 	ret |= cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
-	cargo_set_group_context(cargo, "group1", &group_ctx1);
+	ret |= cargo_set_group_context(cargo, "group1", &group_ctx1);
 	cargo_assert(ret == 0, "Failed to add group");
 
 	ret |= cargo_add_option(cargo, 0, "<group1> --alpha -a", "Alpha Description",
@@ -7478,13 +7517,17 @@ _TEST_START(TEST_group_user_context)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret |= cargo_add_group(cargo, 0, "group2", "The Group 2", LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
-	cargo_set_group_context(cargo, "group2", &group_ctx2);
+	ret |= cargo_set_group_context(cargo, "group2", &group_ctx2);
 	cargo_assert(ret == 0, "Failed to add group");
 
 	ret |= cargo_add_option(cargo, 0, "<group2> --centauri -c", "Centauri Description", "f", &c);
-	ret |= cargo_add_option(cargo, 0, "<group2> --delta -d", "Delta Description",
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1, group2> --delta -d", "Delta Description",
 			"c", _test_TEST_group_user_context_cb, &d);
 	cargo_assert(ret == 0, "Failed to add options");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --error -e", "Error Description", "i", &e);
+	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--error");
+	cargo_assert(ret == 0, "Failed to add option");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse");
@@ -7493,15 +7536,64 @@ _TEST_START(TEST_group_user_context)
 	cargo_assert(b == 7.0, "b unexpected");
 	cargo_assert(c == 5.0f, "c unexpected");
 	cargo_assert(!strcmp(d, "bla"), "d unexpected");
+	cargo_assert(e == 123, "e changed unexpectedly");
 
 	_TEST_CLEANUP();
 	if (d) free(d);
 }
 _TEST_END()
 
-// TODO: cargo_set_mutex_group_context
-// TODO: cargo_get_mutex_group_context
-// TODO: cargo_get_option_mutex_groups
+_TEST_START(TEST_mutex_group_context_fail)
+{
+	void *user = NULL;
+	test_grp_ctx_t mgroup_ctx1 = { "hello", 20 };
+	int i = 3;
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup1", NULL, NULL);
+	ret |= cargo_set_mutex_group_context(cargo, "mgroup1", &mgroup_ctx1);
+	cargo_assert(ret == 0, "Failed to add mutex group 1");
+
+	user = cargo_get_mutex_group_context(cargo, "mgroup2");
+	cargo_assert(user == NULL, "Got non-NULL mutex group context for non-existant group");
+
+	user = cargo_get_mutex_group_context(cargo, "mgroup1");
+	cargo_assert(user == &mgroup_ctx1, "Did not get correct mutex group context");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_get_option_mutex_groups)
+{
+	size_t i; 
+	size_t count = 0;
+	const char **mgroups = NULL;
+	int a = 0;
+
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup1", NULL, NULL);
+	cargo_assert(ret == 0, "Failed to add mutex group 1");
+
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup2", "hello", "world");
+	cargo_assert(ret == 0, "Failed to add mutex group 2");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --alpha -a", "Error Description", "i", &a);
+	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--alpha");
+	cargo_assert(ret == 0, "Failed to add option");
+
+	mgroups = cargo_get_option_mutex_groups(cargo, "--alpha", &count);
+	cargo_assert(mgroups != NULL, "Got NULL mutex group list");
+
+	for (i = 0; i < count; i++)
+	{
+		printf("%lu: \"%s\"\n", i, mgroups[i]);
+	}
+
+	cargo_assert(!strcmp(mgroups[0], "mgroup1"), "Mutex group 1 expected");
+	cargo_assert(!strcmp(mgroups[1], "mgroup2"), "Mutex group 2 expected");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test "D"
 // TODO: Test setting mutex group metavar
 // TODO: Test printing options with 
@@ -7610,7 +7702,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_fixed_zero_or_more_array),
 	CARGO_ADD_TEST(TEST_fixed_fail_array),
 	CARGO_ADD_TEST(TEST_user_context),
-	CARGO_ADD_TEST(TEST_group_user_context)
+	CARGO_ADD_TEST(TEST_group_user_context),
+	CARGO_ADD_TEST(TEST_mutex_group_context_fail),
+	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
