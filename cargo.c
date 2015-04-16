@@ -3424,6 +3424,7 @@ static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 						cargo_group_t *groups, size_t group_count)
 {
 	cargo_group_t *grp = NULL;
+	cargo_opt_t *o = NULL;
 	size_t opt_i;
 	assert(ctx);
 	assert(opt);
@@ -3434,7 +3435,18 @@ static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 		return NULL;
 	}
 
-	return groups[ctx->options[opt_i].group_index].name;
+	o = &ctx->options[opt_i];
+
+	if (o->group_index < 0)
+	{
+		CARGODBG(1, "%s: Group is not set\n", opt);
+		return NULL;
+	}
+
+	CARGODBG(3, "Opt idx: %lu, Group idx: %d, Group name: \"%s\"\n",
+			opt_i, o->group_index, groups[o->group_index].title);
+
+	return groups[o->group_index].name;
 }
 
 static const void _cargo_mutex_group_short_usage(cargo_t ctx,
@@ -5193,6 +5205,17 @@ do 									\
 		goto fail;					\
 	}								\
 } while (0)
+
+// Used for asserting in custom callbacks.
+#define cargo_cb_assert(cond, msg)		\
+do 										\
+{										\
+	if (!(cond))						\
+	{									\
+		fprintf(stderr, "%s\n", msg);	\
+		return -1;						\
+	}									\
+} while (0);
 
 #define cargo_assert_array(count, expected_count, array, array_expected)	\
 do 																			\
@@ -7383,6 +7406,101 @@ _TEST_START(TEST_user_context)
 }
 _TEST_END()
 
+typedef struct test_grp_ctx_s
+{
+	char name[32];
+	int val;
+} test_grp_ctx_t;
+
+static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
+								const char *optname, int argc, char **argv)
+{
+	test_grp_ctx_t *grpctx = NULL;
+	const char *group = NULL;
+	cargo_cb_assert(ctx, "NULL context in callback");
+
+	group = cargo_get_option_group(ctx, optname);
+	cargo_cb_assert(group, "Got NULL Group name");
+
+	printf("Group context callback %s: %s\n", optname, group);
+
+	grpctx = cargo_get_group_context(ctx, group);
+	cargo_cb_assert(grpctx, "Got NULL group context");
+
+	printf("Group context contents: %s = %d\n", grpctx->name, grpctx->val);
+
+	if (!strcmp(optname, "--alpha"))
+	{
+		int *a = (int *)user;
+		cargo_cb_assert(a, "Got NULL user context for --alpha");
+		*a = atoi(argv[0]);
+		printf("a == %d\n", *a);
+		cargo_cb_assert(*a == 15, "Got unexpected value for --alpha");
+		cargo_cb_assert(!strcmp(group, "group1"), "Expected group1 for --alpha");
+		cargo_cb_assert(!strcmp(grpctx->name, "hello"), "Invalid group context name");
+	}
+	else if (!strcmp(optname, "--delta"))
+	{
+		char **d = (char **)user;
+		cargo_cb_assert(d, "Got NULL user context for --delta");
+		cargo_cb_assert(*d == NULL, "Got non-NULL char pointer for --delta");
+		cargo_cb_assert(!strcmp(group, "group2"), "Expected group2 for --delta");
+		cargo_cb_assert(!strcmp(grpctx->name, "world"), "Invalid group context name");
+		*d = strdup(argv[0]);
+	}
+	else
+	{
+		fprintf(stderr, "Unexpected option: %s\n", optname);
+		return -1;
+	}
+
+	return argc;
+}
+
+_TEST_START(TEST_group_user_context)
+{
+	test_grp_ctx_t group_ctx1 = { "hello", 20 };
+	test_grp_ctx_t group_ctx2 = { "world", 40 };
+	int a = 0;
+	double b = 7.0;
+	float c = 5;
+	char *d = NULL;
+	char *args[] = { "program", "--alpha", "15", "-b", "7.0", "-c", "5", "-d", "" };
+
+	ret |= cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
+	cargo_set_group_context(cargo, "group1", &group_ctx1);
+	cargo_assert(ret == 0, "Failed to add group");
+
+	ret |= cargo_add_option(cargo, 0, "<group1> --alpha -a", "Alpha Description",
+			"c", _test_TEST_group_user_context_cb, &a);
+	ret |= cargo_add_option(cargo, 0, "<group1> --beta -b", "Alpha Description", "d", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret |= cargo_add_group(cargo, 0, "group2", "The Group 2", LOREM_IPSUM LOREM_IPSUM LOREM_IPSUM);
+	cargo_set_group_context(cargo, "group2", &group_ctx2);
+	cargo_assert(ret == 0, "Failed to add group");
+
+	ret |= cargo_add_option(cargo, 0, "<group2> --centauri -c", "Centauri Description", "i", &c);
+	ret |= cargo_add_option(cargo, 0, "<group2> --delta -d", "Delta Description",
+			"c", _test_TEST_group_user_context_cb, &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+
+	_TEST_CLEANUP();
+	if (d) free(d);
+}
+_TEST_END()
+
+// TODO: cargo_set_mutex_group_context
+// TODO: cargo_get_mutex_group_context
+// TODO: cargo_get_option_mutex_groups
+// TODO: Test "D"
+// TODO: Test setting mutex group metavar
+// TODO: Test printing options with 
+
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
 // TODO: Test autoclean with string of arrays
@@ -7485,7 +7603,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_fixed_one_or_more_array),
 	CARGO_ADD_TEST(TEST_fixed_zero_or_more_array),
 	CARGO_ADD_TEST(TEST_fixed_fail_array),
-	CARGO_ADD_TEST(TEST_user_context)
+	CARGO_ADD_TEST(TEST_user_context),
+	CARGO_ADD_TEST(TEST_group_user_context)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
