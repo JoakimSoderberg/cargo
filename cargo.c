@@ -7447,6 +7447,7 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 		cargo_cb_assert(!strcmp(group, "group2"), "Expected group2 for --delta");
 		cargo_cb_assert(!strcmp(grpctx->name, "world"), "Invalid group context name");
 		*d = strdup(argv[0]);
+		cargo_cb_assert(!strcmp(*d, "bla"), "Unexpected --delta value");
 	}
 	else
 	{
@@ -7462,10 +7463,10 @@ _TEST_START(TEST_group_user_context)
 	test_grp_ctx_t group_ctx1 = { "hello", 20 };
 	test_grp_ctx_t group_ctx2 = { "world", 40 };
 	int a = 0;
-	double b = 7.0;
-	float c = 5;
+	double b = 0.0;
+	float c = 0;
 	char *d = NULL;
-	char *args[] = { "program", "--alpha", "15", "-b", "7.0", "-c", "5", "-d", "" };
+	char *args[] = { "program", "--alpha", "15", "-b", "7.0", "-c", "5", "-d", "bla" };
 
 	ret |= cargo_add_group(cargo, 0, "group1", "The Group 1", "This group is 1st");
 	cargo_set_group_context(cargo, "group1", &group_ctx1);
@@ -7480,13 +7481,18 @@ _TEST_START(TEST_group_user_context)
 	cargo_set_group_context(cargo, "group2", &group_ctx2);
 	cargo_assert(ret == 0, "Failed to add group");
 
-	ret |= cargo_add_option(cargo, 0, "<group2> --centauri -c", "Centauri Description", "i", &c);
+	ret |= cargo_add_option(cargo, 0, "<group2> --centauri -c", "Centauri Description", "f", &c);
 	ret |= cargo_add_option(cargo, 0, "<group2> --delta -d", "Delta Description",
 			"c", _test_TEST_group_user_context_cb, &d);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse");
+
+	cargo_assert(a == 15, "a unexpected");
+	cargo_assert(b == 7.0, "b unexpected");
+	cargo_assert(c == 5.0f, "c unexpected");
+	cargo_assert(!strcmp(d, "bla"), "d unexpected");
 
 	_TEST_CLEANUP();
 	if (d) free(d);
