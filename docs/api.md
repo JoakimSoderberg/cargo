@@ -268,6 +268,163 @@ This is the type of the cargo context. This type is opague and should never be m
 
 To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
+
+
+## Flags ##
+
+### cargo_flags_t ###
+
+These flags are global for the cargo instance and set when calling [`cargo_init`](api.md#cargo_init) or [`cargo_set_flags`](api.md#cargo_set_flags)
+
+#### `CARGO_AUTOCLEAN` ####
+By default it is up to the caller to free any option values that are returned by cargo when parsing.
+
+This flag makes cargo `free` the variables that it has allocated while parsing automatically.
+
+Note that this does not include any variables parsed in custom callbacks.
+
+Default behaviour:
+
+```c
+char *str = NULL;
+cargo_t cargo;
+cargo_init(&cargo, 0, argv[0]);
+cargo_add_option(cargo, 0, "--opt", "Some string", "s", &str);
+cargo_destroy(&cargo);
+if (str) free(str); // We must free!
+```
+
+Autoclean:
+
+```c
+char *str = NULL;
+cargo_t cargo;
+cargo_init(&cargo, 0, argv[0]);
+cargo_add_option(cargo, CARGO_AUTOCLEAN, "--opt", "Some string", "s", &str);
+cargo_destroy(&cargo); // str is freed here.
+```
+
+#### `CARGO_NOCOLOR` ####
+Turn off color output for any cargo output.
+
+#### `CARGO_NOERR_OUTPUT` ####
+By default cargo will print any parse error automatically to `stderr`.
+
+This turns this off. Use this if you want to customize the error output.
+
+[`cargo_get_error`](api.md#cargo_get_error) can be used to get the error.
+
+#### `CARGO_NOERR_USAGE` ####
+Whenever cargo prints parse errors internally it will also print the short usage information.
+
+This flags does not print the short usage on error.
+
+Note if you simply want to customize the usage output printed by cargo on internal errors you can set the usage flags using [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags).
+
+#### `CARGO_ERR_STDOUT` ####
+cargo prints errors to `stderr` by default. This flag changes so that it prints to `stdout` instead.
+
+#### `CARGO_NO_AUTOHELP` ####
+This flag turns off the automatic creating of the `--help` option.
+
+### cargo_usage_t ###
+
+This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
+
+#### `CARGO_USAGE_FULL_USAGE` ####
+Show the full usage. This is the default, same as specifying `0`.
+
+Note that this includes the short usage as well. If you want the full usage but excluding the short usage you can use [`CARGO_USAGE_HIDE_SHORT`](api.md#cargo_usage_hide_short)
+
+#### `CARGO_USAGE_SHORT_USAGE` ####
+Show only the short usage.
+
+#### `CARGO_USAGE_RAW_DESCRIPTION` ####
+The description passed to [`cargo_init`](api.md#cargo_init) or set using [`cargo_set_description`](api.md#cargo_set_description) will be displayed as is, and no automatic formatting is done by cargo.
+
+#### `CARGO_USAGE_RAW_OPT_DESCRIPTIONS` ####
+All option descriptions will be treated as raw. Note that this can be set on a per option basis as well using [`CARGO_OPT_RAW_DESCRIPTION`](api.md#cargo_opt_raw_description). Cargo will not perform any automatic formatting on the option descriptions.
+
+#### `CARGO_USAGE_RAW_EPILOG` ####
+The epilog (text after all option descriptions) set using [`cargo_set_epilog`](api.md#cargo_set_epilog) will be displayed as is, and no automatic formatting is done by cargo.
+
+#### `CARGO_USAGE_HIDE_DESCRIPTION` ####
+Hides the description.
+
+#### `CARGO_USAGE_HIDE_EPILOG` ####
+Hides the epilog.
+
+#### `CARGO_USAGE_HIDE_SHORT` ####
+Hide the short usage information but show the rest.
+
+
+### cargo_option_flags_t ###
+
+These flags are passed to [`cargo_add_option`](api.md#cargo_add_option) when adding a new option.
+
+#### `CARGO_OPT_UNIQUE` ####
+The default behaviour for an option that is specified more than once is to use the last value specified. So `-a 1 -b 2 -a 3` results in `-a` containing `3` after parsing.
+
+This setting makes cargo not allow this, and instead give an error when specifying an option more than once.
+
+#### `CARGO_OPT_REQUIRED` ####
+By default any option prepended with prefix characters `--option` are considered optional (hence the name option), this flag turns off this behavior and makes it required.
+
+#### `CARGO_OPT_NOT_REQUIRED` ####
+When adding an option that is not prepended by any prefix characters `argument` it is considered to be a **positional** argument, and required.
+
+This flag turns off this behaviour and makes it not required.
+
+#### `CARGO_OPT_RAW_DESCRIPTION` ####
+This makes the option description considered literal by cargo, and no automatic formatting will be performed.
+
+To enable this for all options instead the [`CARGO_USAGE_RAW_OPT_DESCRIPTIONS`](api.md#cargo_usage_raw_opt_descriptions) flag can be passed to [`cargo_init`](api.md#cargo_init)
+
+
+### cargo_mutex_group_flags_t ###
+
+These flags control how a mutex group created using [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group) behaves.
+
+#### `CARGO_MUTEXGRP_ONE_REQUIRED` ####
+By default none of the options in a mutex group is required.
+
+This flag will require that at one of the members of the group is specified (but only one of course), otherwise an error is given.
+
+Note that you probably want to make sure that the [`CARGO_OPT_NOT_REQUIRED`](api.md#CARGO_OPT_NOT_REQUIRED) flag is set for all options that are part of the mutex group, otherwise you will get conflicting requirements.
+
+#### `CARGO_MUTEXGRP_GROUP_USAGE` ####
+By default any members that are part of a mutex group are not shown together, but rather in whatever order they were added in.
+
+This flag will instead group them and show the description given to the group in [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group).
+
+Note that the options grouped like this will not be shown in their normal group/position.
+
+#### `CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE` ####
+Mutex group variables are by default shown grouped together like this `{--opt1, --opt2, --opt3}` to indicate only one of them should be picked.
+
+This flag turns off this behaviour and shows the variables in the normal way `--opt1 --opt2 --opt3`.
+
+Note that when having options in multiple mutex groups this flag might be useful, since otherwise options will show up multiple times in the short usage. When for example `--opt1` is in two mutex groups: `{--opt1, --opt2, --opt3} {--opt1, --opt4, --opt5}` compared to `--opt1 --opt2 --opt3 --opt4 --opt5`.
+
+Another way of overriding this is to simply display the variables in the mutex group completely as you like by setting it manually using [`cargo_mutex_group_set_metavar`](api.md#cargo_mutex_group_set_metavar)
+
+#### `CARGO_MUTEXGRP_RAW_DESCRIPTION` ####
+This turns of any automatic formatting for the mutex group description.
+
+
+### cargo_group_flags_t ###
+
+These flags are used to specify the behaviour of groups added using [`cargo_add_group`](api.md#cargo_add_group)
+
+#### `CARGO_GROUP_HIDE` ####
+This hides the group in the usage.
+
+A use case for this might be an `--advanced_help` that unhides the group and prints the usage.
+
+#### `CARGO_GROUP_RAW_DESCRIPTION` ####
+This turns of any automatic formatting for the group description.
+
+
 ## Functions ##
 
 Here you find the core API for cargo.
@@ -573,6 +730,8 @@ which yields:
 ```
 Usage: program [--alpha ALPHA] VARS
 ```
+
+For another setting related how the mutex group is shown in the usage see [`CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE`](api.md#cargo_mutexgrp_no_group_short_usage).
 
 ### cargo_set_metavar ###
 
@@ -968,7 +1127,7 @@ int cargo_set_mutex_group_context(cargo_t ctx,
 
 This sets a user context for a given mutex group, just like [`cargo_set_group_context`](api.md#cargo_set_group_context) does for normal groups.
 
-The only difference is that there is no default mutex group, so passing a `NULL` group is not valid.
+The only difference is that there is no default mutex group, so passing a `NULL group is not valid.
 
 ### cargo_get_mutex_group_context ###
 
@@ -1026,6 +1185,47 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 This will get the list of mutex groups associated with a given option.
 
 Note that the list is kept internally in cargo and should not be freed by the caller.
+
+## Utility flags ##
+
+### cargo_fprint_flags_t ###
+
+These flags are used by the `fprint_args` family of functions used to highlight errors in the command line.
+
+#### `CARGO_FPRINT_NOCOLOR` ####
+This turns off the ANSI color output.
+
+#### `CARGO_FPRINT_NOARGS` ####
+If the command line arguments should be shown or not in the output. That is, if only the highlight should be shown.
+
+Without this flag:
+
+```
+--alpha abc --beta def ghi --crazy banans
+^^^^^^^     ~~~~~~ ---
+```
+
+With this flag:
+
+```
+^^^^^^^     ~~~~~~ ---
+```
+
+#### `CARGO_FPRINT_NOHIGHLIGHT` ####
+If the highlight should be hidden.
+
+With this flag:
+
+```
+--alpha abc --beta def ghi --crazy banans
+```
+
+Without this flag:
+
+```
+--alpha abc --beta def ghi --crazy banans
+^^^^^^^     ~~~~~~ ---
+```
 
 ## Utility functions ##
 

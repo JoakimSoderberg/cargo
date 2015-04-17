@@ -1429,6 +1429,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
+		// TODO: Have a global flag for this as well, so it applies to all options.
 		if (opt->flags & CARGO_OPT_UNIQUE)
 		{
 			CARGODBG(2, "%s: Parsing option as unique\n", name);

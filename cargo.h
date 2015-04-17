@@ -124,11 +124,9 @@ const char *cargo_get_version();
 
 typedef struct cargo_s *cargo_t;
 
-typedef struct cargo_highlight_s
-{
-	int i;				// Index of highlight in argv.
-	char *c;			// Highlight character (followed by color).
-} cargo_highlight_t;
+//
+// Flags.
+//
 
 typedef enum cargo_format_e
 {
@@ -141,13 +139,6 @@ typedef enum cargo_format_e
 	CARGO_USAGE_HIDE_EPILOG				= (1 << 5),
 	CARGO_USAGE_HIDE_SHORT				= (1 << 6)
 } cargo_usage_t;
-
-typedef enum cargo_fprint_flags_e
-{
-	CARGO_FPRINT_NOCOLOR				= (1 << 0),
-	CARGO_FPRINT_NOARGS					= (1 << 1),
-	CARGO_FPRINT_NOHIGHLIGHT			= (1 << 2)
-} cargo_fprint_flags_t;
 
 typedef enum cargo_option_flags_e
 {
@@ -211,6 +202,7 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
+// TODO: Add flag. So one can set flag "per item" or "all".
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
@@ -278,6 +270,24 @@ const char *cargo_get_option_group(cargo_t ctx, const char *opt);
 const char **cargo_get_option_mutex_groups(cargo_t ctx,
 										const char *opt,
 										size_t *count);
+
+//
+// Utility types.
+//
+
+typedef struct cargo_highlight_s
+{
+	int i;				// Index of highlight in argv.
+	char *c;			// Highlight character (followed by color).
+} cargo_highlight_t;
+
+typedef enum cargo_fprint_flags_e
+{
+	CARGO_FPRINT_NOCOLOR				= (1 << 0),
+	CARGO_FPRINT_NOARGS					= (1 << 1),
+	CARGO_FPRINT_NOHIGHLIGHT			= (1 << 2)
+} cargo_fprint_flags_t;
+
 //
 // Utility functions.
 //
