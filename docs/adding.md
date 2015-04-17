@@ -316,7 +316,16 @@ The `void *user` is a user defined pointer that will be passed on to the callbac
 
 `argc` and `argv` are the arguments that cargo has parsed for the option being parsed (it is not the entire command line). So for instance if cargo is given the command line `--alpha --beta 1 2 3 --sigma 4 5` and we're parsing the `--beta` option. Then `argc` will be `3` and `argv` will contain `[1, 2, 3]`.
 
-Note that any memory you allocate in this callback, you will have to free, even if [`CARGO_AUTOCLEAN`](api.md#CARGO_AUTOCLEAN) is enabled. Since cargo does not have any knowledge where this is stored or how to free it.
+Note that any memory you allocate in this callback, you will have to free, even if [`CARGO_AUTOCLEAN`](api.md#CARGO_AUTOCLEAN) is enabled, since cargo does not have any knowledge where this is stored or how to free it.
+
+Callback user data context
+--------------------------
+To be able to store the parse result into something without using global variables you are allowed to pass a `user` pointer to the custom callback.
+
+However, this is just one way to pass a context. You can also do it for groups
+using [`cargo_set_group_context`](api.md#cargo_set_group_context), mutex groups [`cargo_set_mutex_group_context`](api.md#cargo_set_mutex_group_context). Or set a global context for the cargo instance [`cargo_set_context`](api.md#cargo_set_context).
+
+There are also functions available to get the group and mutex groups for an option inside of a custom callback using [`cargo_get_option_group`](api.md#cargo_get_option_group) and [`cargo_get_option_mutex_groups`](api.md#cargo_get_option_mutex_groups).
 
 Example
 -------

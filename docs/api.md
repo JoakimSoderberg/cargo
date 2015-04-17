@@ -534,6 +534,46 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 
 Adds an option to a mutex group.
 
+### cargo_mutex_group_set_metavar ###
+
+```c
+int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const char *metavar);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The name of the mutex group.
+
+**metavar**: The meta variable name.
+
+---
+
+This sets the meta variable name for a given mutex group. 
+
+By default the individual variables are shown in the short usage printed by [`cargo_get_usage`](api.md#cargo_get_usage) and friends.
+
+Setting this will show whatever is set in `metavar` instead of all the variable names.
+
+In the example below if `--beta` and `--centauri` are in a mutex group this is what is shown in the usage by default:
+
+```
+Usage: program [--alpha ALPHA] {--beta BETA, --centauri}
+```
+
+So setting the `metavar` can override this to whatever you want:
+
+```c
+cargo_mutex_group_set_metavar(cargo, "mutexgroup", "VARS")
+```
+
+which yields:
+
+```
+Usage: program [--alpha ALPHA] VARS
+```
+
 ### cargo_set_metavar ###
 
 ```c
@@ -822,10 +862,10 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
 
-### cargo_set_user_context ###
+### cargo_set_context ###
 
 ```c
-void cargo_set_user_context(cargo_t ctx, void *user);
+void cargo_set_context(cargo_t ctx, void *user);
 ```
 
 ---
@@ -836,12 +876,12 @@ void cargo_set_user_context(cargo_t ctx, void *user);
 
 ---
 
-This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_get_user_context`](api.md#cargo_get_user_context)
+This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_get_context`](api.md#cargo_get_context)
 
-### cargo_get_user_context ###
+### cargo_get_context ###
 
 ```c
-void *cargo_get_user_context(cargo_t ctx);
+void *cargo_get_context(cargo_t ctx);
 ```
 
 ---
@@ -850,7 +890,142 @@ void *cargo_get_user_context(cargo_t ctx);
 
 ---
 
-This returns the global user context set using [`cargo_set_user_context`](api.md#cargo_set_user_context)
+This returns the global user context set using [`cargo_set_context`](api.md#cargo_set_context)
+
+### cargo_set_group_context ###
+
+```c
+int cargo_set_group_context(cargo_t ctx, const char *group, void *user);
+```
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The name of the group to set the context for. If this is `NULL`, the context is set for the default group.
+
+**user**: A pointer to a user specified data structure.
+
+---
+
+You can use this function to save a context for an option group. You can later get this context using [`cargo_get_group_context`](api.md#cargo_get_group_context).
+
+Passing `NULL` as the `group` name adds the context to the default group. This is the group all options are added to by default unless another group is specified.
+
+This can be used to pass your own group context to a [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) when parsing a custom argument.
+
+### cargo_get_group_context ###
+
+```c
+void *cargo_get_group_context(cargo_t ctx, const char *group);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**group**: The name of the group to get the context for. If this is `NULL`, the context is set for the default group that all options are added to by default.
+
+---
+
+This can be used to fetch the context or a given option group when parsing custom arguments in a [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) callback function.
+
+To set this context for a group see [`cargo_set_group_context`](api.md#cargo_set_group_context).
+
+Since you are not passed an options group name in the [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) callback, you can use [`cargo_get_option_group`](api.md#cargo_get_option_group) to get it given the option name.
+
+```c
+
+int the_parse_callback(cargo_t ctx, void *user, const char *optname,
+                      int argc, char **argv)
+{
+    const char *group = cargo_get_option_group(ctx, optname);
+    my_group_ctx_t *grp_ctx = cargo_get_group_context(ctx, group);
+
+    ... // Use your group context.
+
+    return argc;
+}
+```
+
+
+### cargo_set_mutex_group_context ###
+
+```c
+int cargo_set_mutex_group_context(cargo_t ctx,
+                const char *mutex_group,
+                void *user);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**mutex_group**: The name of the mutex group to set the context for.
+
+**user**: A pointer to a user specified data structure.
+
+---
+
+This sets a user context for a given mutex group, just like [`cargo_set_group_context`](api.md#cargo_set_group_context) does for normal groups.
+
+The only difference is that there is no default mutex group, so passing a `NULL` group is not valid.
+
+### cargo_get_mutex_group_context ###
+
+```c
+void *cargo_get_mutex_group_context(cargo_t ctx, const char *mutex_group);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**mutex_group**: The name of the mutex group to get the context for.
+
+---
+
+This gets the context for the given mutex group. Just like [`cargo_get_group_context`](api.md#cargo_get_group_context) does for normal groups.
+
+Note however that an option can be a member of multiple mutex groups at once, so when getting them you will be given a list instead of a single group name. See [`cargo_get_option_mutex_groups`](api.md#cargo_get_option_mutex_groups)
+
+
+### cargo_get_option_group ###
+
+```c
+const char *cargo_get_option_group(cargo_t ctx, const char *opt);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**opt**: The option name to get the group for.
+
+---
+
+Gets the group a given option is associated with.
+
+### cargo_get_option_mutex_groups ###
+
+```c
+const char **cargo_get_option_mutex_groups(cargo_t ctx,
+                    const char *opt,
+                    size_t *count);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**opt**: The option name to get the list of mutex groups for.
+
+**count**: Pointer to a `size_t` variable where the list count will be returned.
+
+---
+
+This will get the list of mutex groups associated with a given option.
+
+Note that the list is kept internally in cargo and should not be freed by the caller.
 
 ## Utility functions ##
 
