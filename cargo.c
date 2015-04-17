@@ -2464,7 +2464,7 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 	o->name[o->name_count] = optname;
 	o->name_count++;
 
-	if (!(o->description = strdup(description)))
+	if (description && !(o->description = strdup(description)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return NULL;
