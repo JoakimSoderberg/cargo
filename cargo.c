@@ -4884,6 +4884,15 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		o->max_target_count = 1;
 	}
 
+	_cargo_fmt_next_token(&s);
+
+	if (_cargo_fmt_token(&s) != '\0')
+	{
+		_cargo_invalid_format_char(ctx, o->name[0], fmt, &s);
+		CARGODBG(1, "Got garbage at end of format string\n");
+		goto fail;
+	}
+
 	o->flags = flags;
 
 	// Check if the option has a prefix
@@ -7604,10 +7613,37 @@ _TEST_START(TEST_cargo_get_option_mutex_groups)
 }
 _TEST_END()
 
+_TEST_START(TEST_invalid_format_char)
+{
+	int a = 0;
+	int *c = NULL;
+	size_t c_count = 0;
+	int d[4];
+	size_t d_count = 0;
+
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", NULL, "p", &a);
+	cargo_assert(ret != 0, "Invalid format character allowed");
+
+	ret |= cargo_add_option(cargo, 0, "--beta -b", NULL, "[i", &a);
+	cargo_assert(ret != 0, "Impartial format string allowed");
+
+	ret |= cargo_add_option(cargo, 0, "--centauri -c", NULL, "[i],", &c, &c_count);
+	cargo_assert(ret != 0, "Invalid format string allowed");
+
+	ret |= cargo_add_option(cargo, 0, "--delta -d", NULL, ".[i],", &d, &d_count);
+	cargo_assert(ret != 0, "Invalid format string allowed");
+
+	ret |= cargo_add_option(cargo, 0, "--error -e", NULL, "im", &a);
+	cargo_assert(ret != 0, "Invalid format string allowed");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test "D"
 // TODO: Test setting mutex group metavar
 // TODO: Test printing options with 
-
+// TODO: Set group contenxt with invalid group
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test cargo_split_commandline with invalid command line
@@ -7714,7 +7750,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_user_context),
 	CARGO_ADD_TEST(TEST_group_user_context),
 	CARGO_ADD_TEST(TEST_mutex_group_context_fail),
-	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups)
+	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups),
+	CARGO_ADD_TEST(TEST_invalid_format_char)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
