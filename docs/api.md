@@ -1227,6 +1227,15 @@ Without this flag:
 ^^^^^^^     ~~~~~~ ---
 ```
 
+### cargo_splitcmd_flags_t ###
+
+Flags for the [`cargo_split_commandline`](api.md#cargo_split_commandline) function.
+
+Currently this exist only to avoid breaking API changes in the future, by adding a flag to change any internal behaviour that might be needed.
+
+#### `CARGO_SPLITCMD_DEFAULT` ####
+Uses the OS specific version for splitting command lines in Windows and Unix.
+
 ## Utility functions ##
 
 These are not a part of the core, but are nice to have.

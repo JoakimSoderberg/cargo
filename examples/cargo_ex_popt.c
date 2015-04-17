@@ -147,8 +147,7 @@ int main(int argc, char **argv)
 	//
 	ret |= cargo_add_mutex_group(cargo,
 			CARGO_MUTEXGRP_ONE_REQUIRED |
-			CARGO_MUTEXGRP_GROUP_USAGE |
-			CARGO_MUTEXGRP_GROUP_SHORT_USAGE,
+			CARGO_MUTEXGRP_GROUP_USAGE,
 			"cmds", "Commands", NULL);
 	//ret |= cargo_mutex_group_set_metavar(cargo, "cmds", "COMMAND");
 

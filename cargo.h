@@ -128,6 +128,16 @@ typedef struct cargo_s *cargo_t;
 // Flags.
 //
 
+typedef enum cargo_flags_e
+{
+	CARGO_AUTOCLEAN						= (1 << 0),
+	CARGO_NOCOLOR 						= (1 << 1),
+	CARGO_NOERR_OUTPUT					= (1 << 2),
+	CARGO_NOERR_USAGE					= (1 << 3),
+	CARGO_ERR_STDOUT					= (1 << 4),
+	CARGO_NO_AUTOHELP					= (1 << 5)
+} cargo_flags_t;
+
 typedef enum cargo_format_e
 {
 	CARGO_USAGE_FULL_USAGE				= 0,
@@ -152,7 +162,7 @@ typedef enum cargo_mutex_group_flags_e
 {
 	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0),
 	CARGO_MUTEXGRP_GROUP_USAGE			= (1 << 1),
-	CARGO_MUTEXGRP_GROUP_SHORT_USAGE	= (1 << 2),
+	CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE	= (1 << 2),
 	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3)
 } cargo_mutex_group_flags_t;
 
@@ -161,16 +171,6 @@ typedef enum cargo_group_flags_e
 	CARGO_GROUP_HIDE					= (1 << 0),
 	CARGO_GROUP_RAW_DESCRIPTION			= (1 << 1)
 } cargo_group_flags_t;
-
-typedef enum cargo_flags_e
-{
-	CARGO_AUTOCLEAN						= (1 << 0),
-	CARGO_NOCOLOR 						= (1 << 1),
-	CARGO_NOERR_OUTPUT					= (1 << 2),
-	CARGO_NOERR_USAGE					= (1 << 3),
-	CARGO_ERR_STDOUT					= (1 << 4),
-	CARGO_NO_AUTOHELP					= (1 << 5)
-} cargo_flags_t;
 
 //
 // Callback types.
@@ -288,6 +288,11 @@ typedef enum cargo_fprint_flags_e
 	CARGO_FPRINT_NOHIGHLIGHT			= (1 << 2)
 } cargo_fprint_flags_t;
 
+typedef enum cargo_splitcmd_flags_e
+{
+	CARGO_SPLITCMD_DEFAULT = 0
+} cargo_splitcmd_flags_t;
+
 //
 // Utility functions.
 //
@@ -318,7 +323,8 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 					   size_t max_width, size_t highlight_count,
 					   const cargo_highlight_t *highlights);
 
-char **cargo_split_commandline(const char *args, int *argc);
+char **cargo_split_commandline(cargo_splitcmd_flags_t flags,
+								const char *args, int *argc);
 
 void cargo_free_commandline(char ***argv, int argc);
 

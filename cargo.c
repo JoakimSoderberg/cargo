@@ -3498,7 +3498,7 @@ static const void _cargo_mutex_group_short_usage(cargo_t ctx,
 
 		// If we should group the options in the mutex group like this
 		// {opt1, opt2, opt3} or [opt1, opt2, opt3].
-		if (!(mgrp->flags & CARGO_MUTEXGRP_GROUP_USAGE))
+		if ((mgrp->flags & CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE))
 		{
 			continue;
 		}
@@ -5004,7 +5004,7 @@ void cargo_free_commandline(char ***argv, int argc)
 	}
 }
 
-char **cargo_split_commandline(const char *cmdline, int *argc)
+char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline, int *argc)
 {
 	int i;
 	char **argv = NULL;
@@ -7006,7 +7006,7 @@ _TEST_START(TEST_cargo_split_commandline)
 	int argc = 0;
 	ret = 0;
 
-	argv = cargo_split_commandline(cmd, &argc);
+	argv = cargo_split_commandline(0, cmd, &argc);
 	cargo_assert(argv != NULL, "Got NULL argv");
 	cargo_assert_str_array((size_t)argc, 3, argv, argv_expect);
 
@@ -7291,7 +7291,7 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	char **argv = NULL;
 	int argc = 0;
 
-	argv = cargo_split_commandline(LOREM_IPSUM, &argc);
+	argv = cargo_split_commandline(0, LOREM_IPSUM, &argc);
 
 	cargo_assert(argv, "Got NULL argv");
 
