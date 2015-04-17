@@ -1382,10 +1382,13 @@ This will print the proper ANSI color even on **Windows**.
 ### cargo_split_commandline ###
 
 ```c
-char **cargo_split_commandline(const char *args, int *argc);
+char **cargo_split_commandline(cargo_splitcmd_flags_t flags,
+                               const char *args, int *argc);
 ```
 
 ---
+
+**flags**: Currently does nothing, might change in the future. Use `0`.
 
 **args**: A string containing a list of arguments you want to split into an `argv` array.
 
