@@ -3391,7 +3391,12 @@ static int _cargo_set_group_context(cargo_t ctx,
 {
 	cargo_group_t *grp = NULL;
 	assert(ctx);
-	assert(group);
+
+	// If a NULL group is given, we interpret that as the default "" group.
+	if (!group)
+	{
+		group = "";
+	}
 
 	grp = _cargo_find_group(ctx, groups, group_count, group, NULL);
 
