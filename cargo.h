@@ -297,6 +297,8 @@ typedef enum cargo_splitcmd_flags_e
 // Utility functions.
 //
 
+void cargo_fprintf(FILE *fd, const char *fmt, ...);
+
 char *cargo_get_fprint_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
 							size_t max_width,

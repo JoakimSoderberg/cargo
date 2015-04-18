@@ -1240,6 +1240,24 @@ Uses the OS specific version for splitting command lines in Windows and Unix.
 
 These are not a part of the core, but are nice to have.
 
+### cargo_fprintf ###
+
+```c
+void cargo_fprintf(FILE *fd, const char *fmt, ...)
+```
+
+---
+
+**fd**: File descriptor to print to.
+
+**fmt**: Printf format string.
+
+**...**: Format arguments.
+
+---
+
+This behaves just like the normal `fprintf` except that on **Windows** this also supports the ANSI color codes (Unix has native support for that).
+
 ### cargo_get_fprint_args ###
 
 ```c

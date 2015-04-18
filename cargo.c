@@ -880,37 +880,20 @@ static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 		return -1;
 	}
 
-	if (o->custom)
+	if (!o->custom)
 	{
-		if (o->type != CARGO_STRING)
+		if (!o->target)
 		{
-			CARGODBG(1, "%s: Custom callback must be of type string\n", name);
+			CARGODBG(1, "%s: target NULL\n", name);
 			return -1;
 		}
 
-		if (!o->alloc)
+		if (!o->target_count
+			&& ((o->nargs > 1) || (o->nargs == CARGO_NARGS_ONE_OR_MORE)))
 		{
-			CARGODBG(1, "%s: Custom callback cannot use static variable", name);
+			CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", name);
 			return -1;
 		}
-	}
-
-	if ((o->type != CARGO_STRING) && (o->nargs == 1) && o->alloc)
-	{
-		CARGODBG(1, "%s: Cannot allocate for single nonstring value\n", name);
-		return -1;
-	}
-
-	if (!o->custom && !o->target)
-	{
-		CARGODBG(1, "%s: target NULL\n", name);
-		return -1;
-	}
-
-	if (!o->custom && !o->target_count && (o->nargs > 1))
-	{
-		CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", name);
-		return -1;
 	}
 
 	return 0;
@@ -7353,6 +7336,13 @@ _TEST_START(TEST_cargo_fprintf)
 		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
 
 	cargo_assert(s, "Got NULL string");
+	free(s);
+
+	ret = cargo_asprintf(&s, "");
+	cargo_assert(ret == 0, "Expected empty string");
+	cargo_assert(!strcmp(s, ""), "Expecterd empty string");
+
+	cargo_print_ansicolor(stdout, "Test " CARGO_COLOR_RED "RED" CARGO_COLOR_RESET "\n");
 
 	_TEST_CLEANUP();
 	if (s) free(s);
@@ -7664,6 +7654,29 @@ _TEST_START(TEST_invalid_format_char)
 }
 _TEST_END()
 
+_TEST_START(TEST_option_target_null)
+{
+	int a = 0;
+	int *c = NULL;
+	size_t c_count = 0;
+	int d[4];
+	size_t d_count = 0;
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "i", NULL);
+	cargo_assert(ret != 0, "NULL target was allowed");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", NULL, "[i]+", &c, NULL);
+	cargo_assert(ret != 0, "NULL target count was allowed");
+
+	ret = cargo_add_option(cargo, 0, "--delta -d", NULL, "[i]#", &d, NULL, 4);
+	cargo_assert(ret != 0, "NULL target count was allowed");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+
+
 // TODO: Test "D"
 // TODO: Test setting mutex group metavar
 // TODO: Test printing options with 
@@ -7775,7 +7788,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_group_user_context),
 	CARGO_ADD_TEST(TEST_mutex_group_context_fail),
 	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups),
-	CARGO_ADD_TEST(TEST_invalid_format_char)
+	CARGO_ADD_TEST(TEST_invalid_format_char),
+	CARGO_ADD_TEST(TEST_option_target_null)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
