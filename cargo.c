@@ -5051,6 +5051,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 	}
 	#else // WIN32
 	{
+		// TODO: __getmainargs is an alternative... https://msdn.microsoft.com/en-us/library/ff770599.aspx
 		wchar_t **wargs = NULL;
 		size_t needed = 0;
 		wchar_t *cmdlinew = NULL;
@@ -7014,8 +7015,10 @@ _TEST_START(TEST_cargo_split_commandline)
 	argv = cargo_split_commandline(0, NULL, &argc);
 	cargo_assert(argv == NULL, "Expected NULL argv");
 
+	#ifndef _WIN32
 	argv = cargo_split_commandline(0, "cmd not \"bla closed", &argc);
 	cargo_assert(argv == NULL, "Invalid commandline parsed as ok");
+	#endif
 
 	_TEST_CLEANUP();
 }
