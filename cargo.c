@@ -2108,7 +2108,8 @@ fail:
 	return ret;
 }
 
-static int _cargo_mutex_group_should_be_grouped(cargo_t ctx, cargo_opt_t *opt)
+static int _cargo_mutex_group_should_be_grouped(cargo_t ctx,
+			cargo_opt_t *opt, int short_usage)
 {
 	cargo_group_t *mgrp = NULL;
 	size_t i;
@@ -2119,9 +2120,19 @@ static int _cargo_mutex_group_should_be_grouped(cargo_t ctx, cargo_opt_t *opt)
 		assert(opt->mutex_group_idxs[i] < ctx->mutex_group_count);
 		mgrp = &ctx->mutex_groups[opt->mutex_group_idxs[i]];
 
-		if (mgrp->flags & CARGO_MUTEXGRP_GROUP_USAGE)
+		if (short_usage)
 		{
-			return 1;
+			if (!(mgrp->flags & CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE))
+			{
+				return 1;
+			}
+		}
+		else
+		{
+			if (mgrp->flags & CARGO_MUTEXGRP_GROUP_USAGE)
+			{
+				return 1;
+			}
 		}
 	}
 
@@ -2160,7 +2171,7 @@ static int _cargo_print_options(cargo_t ctx,
 
 		// We don't show this in its normal position since it is a member of
 		// a mutex group that should be grouped in the usage. 
-		if (_cargo_mutex_group_should_be_grouped(ctx, opt) && !is_mutex)
+		if (_cargo_mutex_group_should_be_grouped(ctx, opt, 0) && !is_mutex)
 		{
 			continue;
 		}
@@ -2226,7 +2237,8 @@ fail:
 static int _cargo_get_short_option_usage(cargo_t ctx,
 										cargo_opt_t *opt,
 										cargo_astr_t *str,
-										int is_positional)
+										int is_positional,
+										int show_is_optional)
 {
 	int is_req;
 	char metavarbuf[256];
@@ -2263,9 +2275,7 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 
 	is_req = (opt->flags & CARGO_OPT_REQUIRED);
 
-	cargo_aappendf(str, " ");
-
-	if (!is_req)
+	if (show_is_optional && !is_req)
 	{
 		cargo_aappendf(str, "[");
 	}
@@ -2277,7 +2287,7 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 
 	cargo_aappendf(str, "%s", metavar);
 
-	if (!is_req)
+	if (show_is_optional && !is_req)
 	{
 		cargo_aappendf(str, "]");
 	}
@@ -2322,14 +2332,16 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 		opt_str.s = &opt_s;
 		opt = &ctx->options[i];
 
-		// We display this seperately.
-		if (_cargo_mutex_group_should_be_grouped(ctx, opt))
+		// We display this seperately in _cargo_mutex_group_short_usage
+		if (_cargo_mutex_group_should_be_grouped(ctx, opt, 1))
 		{
 			continue;
 		}
 
+		cargo_aappendf(&opt_str, " ");
+
 		if ((ret = _cargo_get_short_option_usage(ctx, opt,
-								&opt_str, is_positional)) < 0)
+								&opt_str, is_positional, 1)) < 0)
 		{
 			CARGODBG(1, "Failed to get option usage\n");
 			return -1;
@@ -3446,6 +3458,7 @@ static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 static const void _cargo_mutex_group_short_usage(cargo_t ctx,
 						cargo_astr_t *str, size_t indent)
 {
+	int ret = 0;
 	size_t i;
 	size_t j;
 	size_t prev_offset = 0;
@@ -3487,18 +3500,36 @@ static const void _cargo_mutex_group_short_usage(cargo_t ctx,
 			continue;
 		}
 
-		// TODO: There is a risk that the {} signs here gives us an ugly
-		// linebreak... Fix this.
-		cargo_aappendf(str, " %s", 
-			(mgrp->flags & CARGO_MUTEXGRP_ONE_REQUIRED) ? "{" : "[");
+		// Instead of printing the {} before and after loop we include it
+		// in the string inside the loop together with the option name
+		// so that we always get a nice linebreak like this:
+		//   {opt1, opt2}
+		// compared to:
+		//   {
+		//   opt1, opt2}
 
 		for (j = 0; j < mgrp->opt_count; j++)
 		{
+			int is_first = (j == 0);
+			int is_last = (j == (mgrp->opt_count - 1));
+			char is_req = (mgrp->flags & CARGO_MUTEXGRP_ONE_REQUIRED);
+
 			memset(&opt_str, 0, sizeof(opt_str));
 			opt_str.s = &opt_s;
+
 			opt = &ctx->options[mgrp->option_indices[j]];
-			cargo_aappendf(&opt_str, "%s%s",
-				opt->name[0], (j != (mgrp->opt_count - 1)) ? ", " : "");
+
+			if (is_first) cargo_aappendf(&opt_str, "%s", (is_req ? " {" : " ["));
+
+			if ((ret = _cargo_get_short_option_usage(ctx, opt,
+							&opt_str, opt->positional, 0)) < 0)
+			{
+				CARGODBG(1, "Failed to get option usage\n");
+				return;
+			}
+
+			if (!is_last) cargo_aappendf(&opt_str, ", ");
+			if (is_last) cargo_aappendf(&opt_str, "%s", (is_req ? "}" : "]"));
 
 			_cargo_fit_on_short_usage_line(ctx, str,
 				indent, str->offset, opt_str.offset, &prev_offset);
@@ -3510,9 +3541,6 @@ static const void _cargo_mutex_group_short_usage(cargo_t ctx,
 				opt_s = NULL;
 			}
 		}
-
-		cargo_aappendf(str, "%s", 
-			(mgrp->flags & CARGO_MUTEXGRP_ONE_REQUIRED) ? "}" : "]");
 	}
 }
 
@@ -3547,10 +3575,11 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 
 	memset(&str, 0, sizeof(str));
 	str.s = &b;
-	indent = str.offset;
 
 	cargo_aappendf(&str, "Usage: %s",
 		_cargo_strip_path_from_progname(ctx->progname));
+
+	indent = str.offset;
 
 	// Options.
 	_cargo_get_short_option_usages(ctx, &str, indent, 0);
@@ -7707,14 +7736,74 @@ _TEST_START(TEST_autoclean_string_list)
 }
 _TEST_END()
 
+static int _test_fail_callback(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv)
+{
+	return -1;
+}
+
+_TEST_START(TEST_fail_custom_callback)
+{
+	size_t i = 0;
+	char *args[] = { "program", "-a", "bla" };
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "c", _test_fail_callback, &i);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Parse expected to fail");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_usage)
+{
+	int a;
+	int b;
+	int c;
+	int d;
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup1", "Mutex group 1", LOREM_IPSUM);
+	cargo_assert(ret == 0, "Failed to add mutex group 1");
+
+	ret |= cargo_add_mutex_group(cargo, 0, "mgroup2", "hello", "world");
+	cargo_assert(ret == 0, "Failed to add mutex group 2");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --alpha -a", "Error Description", "i", &a);
+	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--alpha");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --beta -b", LOREM_IPSUM, "i", &b);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --centauri -c", "bla bla" LOREM_IPSUM, "i", &c);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --delta -d", "bla bla" LOREM_IPSUM, "i", &d);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	cargo_print_usage(cargo, 0);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test "D"
 // TODO: Test setting mutex group metavar
-// TODO: Test printing options with 
-// TODO: Set group contenxt with invalid group
 
 // TODO: Test giving add_option an invalid alias
-// TODO: Test cargo_split_commandline with invalid command line
-// TODO: Test autoclean with string of arrays
+// TODO: Test showing usage for mutex groups.
+// TODO: Test "<group --alpha"
+// TODO: Test Add option to non-existant group
+// TODO: Test add non-existant option to group
+// TODO: Test adding option to a second group
+// TODO: Test group raw description.
+// TODO: Test set group context with NULL group (default group)
+// TODO: Test get group context with invalid option name
+// TODO: Test get group context with option without a group
+// TODO: Test set internal usage flags.
+// TODO: Test --help
+// TODO: Test cargo_get_error
+//
 
 //
 // List of all test functions to run:
@@ -7820,7 +7909,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups),
 	CARGO_ADD_TEST(TEST_invalid_format_char),
 	CARGO_ADD_TEST(TEST_option_target_null),
-	CARGO_ADD_TEST(TEST_autoclean_string_list)
+	CARGO_ADD_TEST(TEST_autoclean_string_list),
+	CARGO_ADD_TEST(TEST_fail_custom_callback),
+	CARGO_ADD_TEST(TEST_mutex_group_usage)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
