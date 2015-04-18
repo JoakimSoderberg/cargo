@@ -7009,9 +7009,15 @@ _TEST_START(TEST_cargo_split_commandline)
 	argv = cargo_split_commandline(0, cmd, &argc);
 	cargo_assert(argv != NULL, "Got NULL argv");
 	cargo_assert_str_array((size_t)argc, 3, argv, argv_expect);
+	cargo_free_commandline(&argv, argc);
+
+	argv = cargo_split_commandline(0, NULL, &argc);
+	cargo_assert(argv == NULL, "Expected NULL argv");
+
+	argv = cargo_split_commandline(0, "cmd not \"bla closed", &argc);
+	cargo_assert(argv == NULL, "Invalid commandline parsed as ok");
 
 	_TEST_CLEANUP();
-	cargo_free_commandline(&argv, argc);
 }
 _TEST_END()
 
