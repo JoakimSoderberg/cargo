@@ -236,6 +236,7 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 
 		if ((size_t)ret >= str->diff)
 		{
+			if (str->l == 0) str->l = CARGO_ASTR_DEFAULT_SIZE;
 			str->l *= 2;
 			CARGODBG(4, "Realloc %lu\n", str->l);
 
