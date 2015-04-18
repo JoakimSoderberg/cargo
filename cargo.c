@@ -5180,6 +5180,8 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 	assert(ctx);
 	assert(opt);
 
+	if (count) *count = 0;
+
 	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
 	{
 		CARGODBG(1, "No such options \"%s\"\n", opt);
@@ -5192,6 +5194,7 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 	// not be changed between calls anyway.
 	if (o->mutex_group_names)
 	{
+		if (count) *count = o->mutex_group_count;
 		return (const char **)o->mutex_group_names;
 	}
 
@@ -5207,10 +5210,7 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 		o->mutex_group_names[i] = strdup(mgrp->name);
 	}
 
-	if (count)
-	{
-		*count = o->mutex_group_count;
-	}
+	if (count) *count = o->mutex_group_count;
 
 	if (o->mutex_group_count == 0)
 	{
@@ -7601,14 +7601,28 @@ _TEST_START(TEST_cargo_get_option_mutex_groups)
 
 	mgroups = cargo_get_option_mutex_groups(cargo, "--alpha", &count);
 	cargo_assert(mgroups != NULL, "Got NULL mutex group list");
+	printf("Mutex group count: %lu\n", count);
 
 	for (i = 0; i < count; i++)
 	{
 		printf("%lu: \"%s\"\n", i, mgroups[i]);
 	}
 
+	cargo_assert(count == 2, "Expected 2 mutex groups");
 	cargo_assert(!strcmp(mgroups[0], "mgroup1"), "Mutex group 1 expected");
 	cargo_assert(!strcmp(mgroups[1], "mgroup2"), "Mutex group 2 expected");
+
+	// Get it twice, make sure it was cached.
+	mgroups = cargo_get_option_mutex_groups(cargo, "--alpha", &count);
+
+	cargo_assert(count == 2, "Expected 2 mutex groups twice");
+	cargo_assert(!strcmp(mgroups[0], "mgroup1"), "Mutex group 1 expected");
+	cargo_assert(!strcmp(mgroups[1], "mgroup2"), "Mutex group 2 expected");
+
+	// Get non-existant option.
+	mgroups = cargo_get_option_mutex_groups(cargo, "--unknown", &count);
+
+	cargo_assert(count == 0, "Expected 0 options");
 
 	_TEST_CLEANUP();
 }
