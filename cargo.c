@@ -1080,7 +1080,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 
 				if (opt->type == CARGO_STRING)
 				{
-					_cargo_free_str_list((char ***)&opt->target, opt->target_count);
+					_cargo_free_str_list(((char ***)opt->target), opt->target_count);
 				}
 				else
 				{
@@ -7370,16 +7370,20 @@ _TEST_END()
 _TEST_START(TEST_cargo_bool_count_compact)
 {
 	int i = 0;
+	int j;
 	char *args[] = { "program ", "-vvv", "123", "-vv" };
 
-	ret |= cargo_add_option(cargo, 0,
-							"--verbose -v", LOREM_IPSUM, "b!", &i);
+	ret |= cargo_add_option(cargo, 0, "args", LOREM_IPSUM, "i", &j);
+	ret |= cargo_add_option(cargo, 0, "--verbose -v", LOREM_IPSUM, "b!", &i);
 
 	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	printf("i == %d\n", i);
 	cargo_assert(i == 5, "Expected i to be 5");
+
+	printf("j == %d\n", j);
+	cargo_assert(j == 123, "Expected j to be 123");
 
 	_TEST_CLEANUP();
 }
@@ -7675,7 +7679,32 @@ _TEST_START(TEST_option_target_null)
 }
 _TEST_END()
 
+_TEST_START(TEST_autoclean_string_list)
+{
+	size_t i;
+	char **strs = NULL;
+	size_t str_count = 0;
+	char *args[] = { "program", "--alpha", "bla", "blo", "bli" };
 
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "[s]+", &strs, &str_count);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+	cargo_assert(strs != NULL, "Got NULL string list");
+
+	printf("strs: %p\n", strs);
+
+	for (i = 0; i < str_count; i++)
+	{
+		printf("%s\n", strs[i]);
+	}
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test "D"
 // TODO: Test setting mutex group metavar
@@ -7789,7 +7818,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_context_fail),
 	CARGO_ADD_TEST(TEST_cargo_get_option_mutex_groups),
 	CARGO_ADD_TEST(TEST_invalid_format_char),
-	CARGO_ADD_TEST(TEST_option_target_null)
+	CARGO_ADD_TEST(TEST_option_target_null),
+	CARGO_ADD_TEST(TEST_autoclean_string_list)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
