@@ -1,6 +1,6 @@
 Compiling
 =========
-Since the design idea of cargo is its **portability** as well that it should be possible easily added to any project, it only consists of [cargo.c][cargoc] and [cargo.h][cargoh].
+cargo was designed for **portability** and is meant to be easily added to any project, so it consists of only [cargo.c][cargoc] and [cargo.h][cargoh].
 
 In these files you can find the library itself, as well as unit tests, an example and a small helper program.
 
@@ -10,30 +10,11 @@ Copy the files
 --------------
 Simply copy [cargo.c][cargoc] and [cargo.h][cargoh] into your project dir and build it as a part of your project. This is as simple as it gets.
 
-Build unit test / helper applications manually
-----------------------------------------------
-
-### Unix
-
-```bash
-$ gcc -DCARGO_TEST=1 -o cargo_tests cargo.c
-$ gcc -DCARGO_HELPER=1 -o cargo_helper cargo.c
-```
-
-### Windows
-
-Or for Windows using the Visual Studio commandline:
-
-```bash
-> cl.exe /DCARGO_TEST /Fecargo_tests cargo.c
-> cl.exe /DCARGO_HELPER /Fecargo_helper cargo.c
-```
-
 CMake project (Recommended)
 ---------------------------
 cargo comes with a [CMake][cmake] project that you can use to build everything.
 
-It is setup to build `cargo_tests`, `cargo_helper` as well as both a static and dynamic library on all platforms.
+It is setup to build `cargo_tests`, `cargo_helper` as well as a static and dynamic library on all platforms.
 
 To see all available cmake options you can use `cmake -LH ..` for turning of memory checks and such things.
 
@@ -60,30 +41,30 @@ $ cmake --build . # To build from command line
 $ start cargo.sln # Open project in Visual Studio.
 ```
 
-Unit tests
-==========
-The benefit with using the [CMake][cmake] project to build everything is that it also sets up the unit tests to automatically run each separate test in its own process, as well as running them through [Valgrind][valgrind] (Linux) or [Dr. Memory][drmemory] (Windows) to check for any memory leaks or corruption.
-
-However if you want you can compile these manually as well.
-
-Running unit tests manually
----------------------------
+Build unit test / helper applications manually
+----------------------------------------------
 
 ### Unix
 
 ```bash
 $ gcc -DCARGO_TEST=1 -o cargo_tests cargo.c
-$ ./cargo_tests -1 # Runs all tests
-$ ./cargo_tests    # Show help and list of tests available.
+$ gcc -DCARGO_HELPER=1 -o cargo_helper cargo.c
 ```
 
 ### Windows
 
+Or for Windows using the Visual Studio commandline:
+
 ```bash
 > cl.exe /DCARGO_TEST /Fecargo_tests cargo.c
-> cargo_tests.exe -1 # Run all tests.
-> cargo_tests.exe    # Show help and list available tests.
+> cl.exe /DCARGO_HELPER /Fecargo_helper cargo.c
 ```
+
+Unit tests
+==========
+The benefit with using the [CMake][cmake] project to build everything is that it also sets up the unit tests to automatically run each separate test in its own process, as well as running them through [Valgrind][valgrind] (Linux) or [Dr. Memory][drmemory] (Windows) to check for any memory leaks or corruption.
+
+However if you want you can compile these manually as well (see below).
 
 Running unit tests using CMake
 ------------------------------
@@ -126,13 +107,40 @@ On Windows if you use Visual Studio, it supports building both Debug and Release
 > bin/Debug/cargo_tests # The path is different on Windows.
 ```
 
+Running unit tests manually
+---------------------------
+
+### Unix
+
+```bash
+$ gcc -DCARGO_TEST=1 -o cargo_tests cargo.c
+$ ./cargo_tests -1 # Runs all tests
+$ ./cargo_tests    # Show help and list of tests available.
+```
+
+### Windows
+
+```bash
+> cl.exe /DCARGO_TEST /Fecargo_tests cargo.c
+> cargo_tests.exe -1 # Run all tests.
+> cargo_tests.exe    # Show help and list available tests.
+```
+
 Debugging cargo
 ===============
-When using cargo or modifying it things might not work as expected. For instance if a unit test fails, it might be beneficial to get some more verbose output of what is happening.
+When using cargo or modifying it, things might not work as expected. For instance if a unit test fails, it might be beneficial to get some more verbose output of what is happening.
 
 To make this easier cargo can be told to output some extra debug information. This is done by setting the `CARGO_DEBUG` macro. `CARGO_DEBUG=1` will print error messages for internal errors occuring. So for instance if you're geting a non-zero return value from `cargo_add_option` or some other API function you can get the related error message by setting `CARGO_DEBUG` to `1`.
 
 The higher you set `CARGO_DEBUG`, the more verbose it will be. Valid values are between `1-6`. To not get totally flooded using `4` in most cases is recommended.
+
+Compile using CMake with debug output
+-------------------------------------
+
+```bash
+$ cmake -DCARGO_DEBUG=4 ..
+$ make
+```
 
 Compile manually with debug output
 ----------------------------------
@@ -150,13 +158,6 @@ $ gcc -DCARGO_TEST=1 -DCARGO_DEBUG=4 -o cargo_tests cargo.c
 > cl.exe /DCARGO_TEST /DCARGO_DEBUG=4 /Fecargo_tests cargo.c
 ```
 
-Compile using CMake with debug output
--------------------------------------
-
-```bash
-$ cmake -DCARGO_DEBUG=4 ..
-$ make
-```
 
 
 [cargoc]: https://github.com/JoakimSoderberg/cargo/blob/master/cargo.c
