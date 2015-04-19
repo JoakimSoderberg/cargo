@@ -63,7 +63,7 @@ int add_global_opts(cargo_t cargo)
 
 int add_module1_opts(cargo_t cargo)
 {
-	int ret;
+	int ret = 0;
 	ret |= cargo_add_group(cargo, 0, "module1", "Module 1 options", NULL);
 	ret |= cargo_add_option(cargo, 0, "<module1> --og1_1", "String used for option 1 1", "s", &og1_1);
 	return ret;

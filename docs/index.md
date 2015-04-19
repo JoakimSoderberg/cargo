@@ -19,7 +19,7 @@ The main design principles:
    cargo consists of *cargo.c* and *cargo.h* which contains everything needed, including an example program, unit tests and the lib itself. This is to make it as easy as possible to include in any project.
 
  - **Simple API**:
-   The API has been heavily inspired by how Python [argparse][argparse] and other dynamic languages.
+   The API has been heavily inspired by Python [argparse][argparse] and other dynamic language command line parsing.
 
  - **Test suite**:
    The goal is keep a [90% test coverage][coveralls].

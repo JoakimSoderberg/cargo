@@ -2742,7 +2742,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 			if (!(*mutex_grpname = strdup(&s[1])))
 			{
 				CARGODBG(1, "Out of memory!\n");
-				return NULL;
+				goto fail;
 			}
 		}
 		else
@@ -2750,7 +2750,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 			if (!(*grpname = strdup(s)))
 			{
 				CARGODBG(1, "Out of memory!\n");
-				return NULL;
+				goto fail;
 			}
 		}
 	}
@@ -2760,6 +2760,18 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 
 fail:
 	if (tmp) free(tmp);
+	
+	if (!ret && *grpname)
+	{
+		free(*grpname);
+		*grpname = NULL;
+	}
+
+	if (!ret && *mutex_grpname)
+	{
+		free(*mutex_grpname);
+		*mutex_grpname = NULL;
+	}
 	_cargo_free_str_list(&groups, &count);
 
 	return ret;
