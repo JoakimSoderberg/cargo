@@ -40,16 +40,18 @@
 #endif // _WIN32
 
 #ifdef CARGO_DEBUG
+int cargo_suppress_debug;
+
 #define CARGODBG(level, fmt, ...)											\
 do 																			\
 {																			\
-	if (level == 1)															\
+	if (!cargo_suppress_debug && (level == 1))								\
 	{																		\
-		fprintf(stderr, "[cargo.c:%4d]: [ERROR] " fmt, __LINE__, ##__VA_ARGS__); \
+		fprintf(stderr, "%d [cargo.c:%4d]: [ERROR] " fmt, level, __LINE__, ##__VA_ARGS__); \
 	}																		\
-	else if (level <= CARGO_DEBUG)											\
+	else if (!cargo_suppress_debug && (level <= CARGO_DEBUG))				\
 	{																		\
-		fprintf(stderr, "[cargo.c:%4d]: " fmt, __LINE__, ##__VA_ARGS__);	\
+		fprintf(stderr, "%d [cargo.c:%4d]: " fmt, level, __LINE__, ##__VA_ARGS__);	\
 	}																		\
 } while (0)
 
@@ -8452,6 +8454,7 @@ static int _tests_print_usage(const char *progname)
 
 int main(int argc, char **argv)
 {
+	cargo_t cargo;
 	size_t i;
 	int was_error = 0;
 	int tests_to_run[CARGO_NUM_TESTS];
@@ -8461,57 +8464,94 @@ int main(int argc, char **argv)
 	int test_index = 0;
 	int shortlist = 0;
 	int start = 1;
+	int ret = 0;
+	char **test_names = NULL;
+	size_t test_name_count = 0;
 	cargo_test_t *t;
 
 	memset(tests_to_run, 0, sizeof(tests_to_run));
 
-	// Get test numbers to run from command line.
-	if (argc >= 2)
+	cargo_suppress_debug = 1;
+
+	if (cargo_init(&cargo, CARGO_AUTOCLEAN | CARGO_NOERR_OUTPUT, argv[0]))
 	{
-		if (!strcmp("--shortlist", argv[1]))
-		{
-			shortlist = 1;
-			start++;
-		}
-
-		for (i = start; i < (size_t)argc; i++)
-		{
-			// First check if we were given a function name.
-			if (!strncmp(argv[i], "TEST_", 5))
-			{
-				test_index = _test_find_test_index(argv[i]);
-
-				if (test_index <= 0)
-				{
-					fprintf(stderr, "Unknown test specified: \"%s\"\n", argv[i]);
-					return CARGO_NUM_TESTS;
-				}
-			}
-			else
-			{
-				test_index = atoi(argv[i]);
-				fprintf(stderr, "%d\n", test_index);
-
-				if ((test_index == 0) || (test_index > (int)CARGO_NUM_TESTS))
-				{
-					fprintf(stderr, "Invalid test number %s\n", argv[i]);
-					return CARGO_NUM_TESTS;
-				}
-				else if (test_index < 0)
-				{
-					printf("Run ALL tests!\n");
-					all = 1;
-					break;
-				}
-			}
-
-			tests_to_run[num_tests] = test_index;
-			num_tests++;
-		}
+		fprintf(stderr, "Failed to init command line parsing\n");
+		return -1;
 	}
-	else
+
+	cargo_set_description(cargo,
+		"You can add additional debug output by compiling with CARGO_DEBUG=<level>");
+
+	ret |= cargo_add_option(cargo, 0, "--shortlist --short -s",
+			"Only show the tests that have been run, don't include the entire list.",
+			"b", &shortlist);
+
+	ret |= cargo_add_option(cargo, 0, "--all -a",
+			"Run all tests.",
+			"b", &all);
+
+	ret |= cargo_add_option(cargo, 0, "tests",
+			"Either a test number or name. "
+			"If -1 is specified all tests will be run.",
+			"[s]*", &test_names, &test_name_count);
+
+	cargo_set_epilog(cargo,
+			"Return code for this usage message equals "
+			"the number of available tests.");
+
+	assert(ret == 0);
+
+	if (cargo_parse(cargo, 1, argc, argv))
 	{
-		return _tests_print_usage(argv[0]);
+		_test_print_names();
+		cargo_print_usage(cargo, 0);
+		fprintf(stderr, "%s\n", cargo_get_error(cargo));
+		return CARGO_NUM_TESTS;
+	}
+
+	if ((test_name_count == 0) && !all)
+	{
+		_test_print_names();
+		cargo_print_usage(cargo, 0);
+		fprintf(stderr, "No test specified!\n");
+		return CARGO_NUM_TESTS;
+	}
+
+	cargo_suppress_debug = 0;
+
+	for (i = 0; i < test_name_count; i++)
+	{
+		// First check if we were given a function name.
+		if (!strncmp(test_names[i], "TEST_", 5))
+		{
+			test_index = _test_find_test_index(test_names[i]);
+
+			if (test_index <= 0)
+			{
+				fprintf(stderr, "Unknown test specified: \"%s\"\n", test_names[i]);
+				return CARGO_NUM_TESTS;
+			}
+		}
+		else
+		{
+			test_index = atoi(test_names[i]);
+			fprintf(stderr, "%d\n", test_index);
+
+			if ((test_index == 0) || (test_index > (int)CARGO_NUM_TESTS))
+			{
+				fprintf(stderr, "Invalid test number %s\n", test_names[i]);
+				return CARGO_NUM_TESTS;
+			}
+			else if (test_index < 0)
+			{
+				printf("Run ALL tests!\n");
+				all = 1;
+				break;
+			}
+		}
+
+		tests_to_run[num_tests] = test_index;
+		num_tests++;
 	}
 
 	// Run all tests.
@@ -8600,6 +8640,10 @@ int main(int argc, char **argv)
 
 	printf("%lu of %lu tests run were successful (%lu of %lu tests ran)\n",
 			success_count, num_tests, num_tests, CARGO_NUM_TESTS);
+
+	cargo_suppress_debug = 1;
+	cargo_destroy(&cargo);
+	cargo_suppress_debug = 0;
 
 	return (num_tests - success_count);
 }
