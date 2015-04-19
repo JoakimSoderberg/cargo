@@ -39,9 +39,9 @@
 #include <wordexp.h>
 #endif // _WIN32
 
-#ifdef CARGO_DEBUG
 int cargo_suppress_debug;
 
+#ifdef CARGO_DEBUG
 #define CARGODBG(level, fmt, ...)											\
 do 																			\
 {																			\
