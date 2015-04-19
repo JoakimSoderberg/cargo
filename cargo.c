@@ -2023,6 +2023,7 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_astr_t *str,
 				size_t i, int name_padding, int option_causes_newline, int max_name_len)
 {
 	size_t j;
+	cargo_opt_t *opt = NULL;
 	int ret = -1;
 	assert(str);
 	assert(ctx);
@@ -2047,14 +2048,21 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_astr_t *str,
 	CARGODBG(2, "max_desc_len = %lu\n", max_desc_len);
 	CARGODBG(2, "str.l = %lu\n", str->l);
 	CARGODBG(2, "str.offset = %lu\n", str->offset);
+	opt = &ctx->options[i];
 
-	opt_description = _cargo_linebreak(ctx, ctx->options[i].description,
+	// No description for option.
+	if (!opt->description)
+	{
+		cargo_aappendf(str, "\n");
+		return 0;
+	}
+
+	opt_description = _cargo_linebreak(ctx, opt->description,
 											max_desc_len);
 
 	if (!opt_description)
 	{
-		CARGODBG(1, "%s: Failed to line break option description\n",
-				ctx->options[i].name[0]);
+		CARGODBG(1, "%s: Failed to line break option description\n", opt->name[0]);
 		goto fail;
 	}
 
@@ -2204,7 +2212,8 @@ static int _cargo_print_options(cargo_t ctx,
 		// Option description.
 		if ((flags & CARGO_USAGE_RAW_OPT_DESCRIPTIONS)
 			|| (opt->flags & CARGO_OPT_RAW_DESCRIPTION)
-			|| (strlen(opt->description) < ctx->max_width))
+			|| (opt->description
+				&& (strlen(opt->description) < ctx->max_width)))
 		{
 			if (cargo_aappendf(str, "%*s%s\n",
 				NAME_PADDING, "", opt->description) < 0)
@@ -3421,7 +3430,6 @@ static void * _cargo_get_group_context(cargo_t ctx, const char *group,
 {
 	cargo_group_t *grp = NULL;
 	assert(ctx);
-	assert(group);
 
 	grp = _cargo_find_group(ctx, groups, group_count, group, NULL);
 
@@ -5177,23 +5185,27 @@ void *cargo_get_context(cargo_t ctx)
 
 int cargo_set_group_context(cargo_t ctx, const char *group, void *user)
 {
+	if (!group) group = "";
 	return _cargo_set_group_context(ctx, group,
 				ctx->groups, ctx->group_count, user);
 }
 
 void *cargo_get_group_context(cargo_t ctx, const char *group)
 {
+	if (!group) group = "";
 	return _cargo_get_group_context(ctx, group, ctx->groups, ctx->group_count);
 }
 
 int cargo_set_mutex_group_context(cargo_t ctx, const char *mutex_group, void *user)
 {
+	assert(mutex_group);
 	return _cargo_set_group_context(ctx, mutex_group,
 				ctx->mutex_groups, ctx->mutex_group_count, user);
 }
 
 void *cargo_get_mutex_group_context(cargo_t ctx, const char *mutex_group)
 {
+	assert(mutex_group);
 	return _cargo_get_group_context(ctx, mutex_group,
 				ctx->mutex_groups, ctx->mutex_group_count);
 }
@@ -6646,6 +6658,8 @@ _TEST_START(TEST_required_option_missing)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
+	cargo_set_internal_usage_flags(cargo, CARGO_USAGE_HIDE_DESCRIPTION);
+
 	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succeeded with missing required option");
 
@@ -7610,6 +7624,18 @@ _TEST_START(TEST_group_user_context)
 	cargo_assert(!strcmp(d, "bla"), "d unexpected");
 	cargo_assert(e == 123, "e changed unexpectedly");
 
+	ret = cargo_set_group_context(cargo, NULL, &group_ctx1);
+	cargo_assert(ret == 0, "Failed to set group context for default group");
+
+	cargo_assert(cargo_get_group_context(cargo, NULL) == &group_ctx1,
+		"Got different group context back for default group");
+
+	ret = cargo_set_group_context(cargo, "unknown", &group_ctx1);
+	cargo_assert(ret != 0, "Able to set group context for un-existent group");
+
+	ret = cargo_set_group_context(cargo, "unknown", &group_ctx1);
+	cargo_assert(ret != 0, "Able to set group context for un-existent group");
+
 	_TEST_CLEANUP();
 	if (d) free(d);
 }
@@ -7625,7 +7651,7 @@ _TEST_START(TEST_mutex_group_context_fail)
 	cargo_assert(ret == 0, "Failed to add mutex group 1");
 
 	user = cargo_get_mutex_group_context(cargo, "mgroup2");
-	cargo_assert(user == NULL, "Got non-NULL mutex group context for non-existant group");
+	cargo_assert(user == NULL, "Got non-NULL mutex group context for non-existent group");
 
 	user = cargo_get_mutex_group_context(cargo, "mgroup1");
 	cargo_assert(user == &mgroup_ctx1, "Did not get correct mutex group context");
@@ -7671,7 +7697,7 @@ _TEST_START(TEST_cargo_get_option_mutex_groups)
 	cargo_assert(!strcmp(mgroups[0], "mgroup1"), "Mutex group 1 expected");
 	cargo_assert(!strcmp(mgroups[1], "mgroup2"), "Mutex group 2 expected");
 
-	// Get non-existant option.
+	// Get non-existent option.
 	mgroups = cargo_get_option_mutex_groups(cargo, "--unknown", &count);
 
 	cargo_assert(count == 0, "Expected 0 options");
@@ -7946,15 +7972,49 @@ _TEST_START(TEST_dummy_callback)
 }
 _TEST_END()
 
+_TEST_START(TEST_group_add_missing_group)
+{
+	size_t i = 0;
+	char *args[] = { "program", "-a", "bla" };
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "i", &i);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	// Add to non-existent group.
+	ret = cargo_group_add_option(cargo, "group1", "--alpha");
+	cargo_assert(ret != 0, "Able to add option to non-existent group");
+
+		// Add non-existent option to non-existent group.
+	ret = cargo_group_add_option(cargo, "group1", "--beta");
+	cargo_assert(ret != 0, "Able to add non-existent option to non-existent group");
+
+	ret = cargo_add_group(cargo, CARGO_GROUP_RAW_DESCRIPTION,
+			"group1", "The Group 1", "This group is 1st");
+	cargo_assert(ret == 0, "Failed to add group");
+
+	// Add non-existent option to group.
+	ret = cargo_group_add_option(cargo, "group1", "--beta");
+	cargo_assert(ret != 0, "Able to add non-existent option to group");
+
+	ret = cargo_add_group(cargo, 0, "group2", "The Group 2", "This group is 2nd");
+	cargo_assert(ret == 0, "Failed to add second group");
+
+	ret = cargo_group_add_option(cargo, "group1", "--alpha");
+	cargo_assert(ret == 0, "Failed to add option to first group");
+	ret = cargo_group_add_option(cargo, "group2", "--alpha");
+	cargo_assert(ret != 0, "Able to add option to second group");
+
+	ret = cargo_add_option(cargo, 0, "<group1> --beta -b", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	cargo_print_usage(cargo, 0);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test "<group --alpha"
-// TODO: Test Add option to non-existant group
-// TODO: Test add non-existant option to group
-// TODO: Test adding option to a second group
-// TODO: Test group raw description.
-// TODO: Test set group context with NULL group (default group)
-// TODO: Test get group context with invalid option name
-// TODO: Test get group context with option without a group
 // TODO: Test set internal usage flags.
 // TODO: Test --help
 // TODO: Test cargo_get_error
@@ -8070,7 +8130,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_usage2),
 	CARGO_ADD_TEST(TEST_mutex_group_usage3),
 	CARGO_ADD_TEST(TEST_mutex_group_usage_set_metavar),
-	CARGO_ADD_TEST(TEST_dummy_callback)
+	CARGO_ADD_TEST(TEST_dummy_callback),
+	CARGO_ADD_TEST(TEST_group_add_missing_group)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
