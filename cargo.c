@@ -7974,7 +7974,9 @@ _TEST_END()
 
 _TEST_START(TEST_group_add_missing_group)
 {
-	size_t i = 0;
+	int i = 0;
+	int *j = NULL;
+	size_t j_count = 0;
 	char *args[] = { "program", "-a", "bla" };
 
 	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "i", &i);
@@ -8009,13 +8011,20 @@ _TEST_START(TEST_group_add_missing_group)
 
 	cargo_print_usage(cargo, 0);
 
+	ret = cargo_add_option(cargo, 0, "<group1 --centauri -c", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret != 0, "Succesfully added invalid option with invalid group");
+
+	ret = cargo_add_option(cargo, 0, "", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret != 0, "Succesfully added option with empty name");
+
+	ret = cargo_add_option(cargo, 0, "--delta", LOREM_IPSUM, "[i]#", &j, &j_count, -5);
+	cargo_assert(ret != 0, "Succesfully added option with nargs = -5");
+
 	_TEST_CLEANUP();
 }
 _TEST_END()
 
 // TODO: Test giving add_option an invalid alias
-// TODO: Test "<group --alpha"
-// TODO: Test set internal usage flags.
 // TODO: Test --help
 // TODO: Test cargo_get_error
 //
