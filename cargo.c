@@ -2344,11 +2344,16 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 								&opt_str, is_positional, 1)) < 0)
 		{
 			CARGODBG(1, "Failed to get option usage\n");
-			return -1;
+			goto fail;
 		}
 
 		if (ret == 1)
 		{
+			if (opt_s)
+			{
+				free(opt_s);
+				opt_s = NULL;
+			}
 			continue;
 		}
 
@@ -2365,6 +2370,9 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 	}
 
 	return 0;
+fail:
+	if (opt_s) free(opt_s);
+	return -1;
 }
 
 static char **_cargo_split_and_verify_option_names(cargo_t ctx,
