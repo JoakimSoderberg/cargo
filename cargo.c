@@ -4230,6 +4230,18 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 		CARGODBG(1, "Cannot add alias for positional argument\n");
 		return -1;
 	}
+	else
+	{
+		if (!_cargo_starts_with_prefix(ctx, alias))
+		{
+			CARGODBG(1, "Cannot add a positional as an alias to an option. "
+						"The alias must be prefixed with %s: \"%s\"\n",
+						(strlen(ctx->prefix) > 1)
+						? "one of these characters" : "this character",
+						ctx->prefix);
+			return -1;
+		}
+	}
 
 	if (opt->name_count >= CARGO_NAME_COUNT)
 	{
@@ -8016,6 +8028,9 @@ _TEST_START(TEST_group_add_missing_group)
 
 	ret = cargo_add_option(cargo, 0, "--delta", LOREM_IPSUM, "[i]#", &j, &j_count, -5);
 	cargo_assert(ret != 0, "Succesfully added option with nargs = -5");
+
+	ret = cargo_add_option(cargo, 0, "--unicorn u", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret != 0, "Succesfully added option with invalid alias");
 
 	_TEST_CLEANUP();
 }
