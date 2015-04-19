@@ -348,7 +348,7 @@ This turns this off. Use this if you want to customize the error output.
 #### `CARGO_NOERR_USAGE` ####
 Whenever cargo prints parse errors internally it will also print the short usage information.
 
-This flags does not print the short usage on error.
+This flags turns of the printing of the short usage on error.
 
 Note if you simply want to customize the usage output printed by cargo on internal errors you can set the usage flags using [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags).
 
