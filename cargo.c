@@ -4254,7 +4254,7 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	size_t name_i;
 	cargo_opt_t *opt;
 	assert(ctx);
-
+ 
 	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
 	{
 		CARGODBG(1, "Failed to find option \"%s\"\n", optname);
@@ -7931,11 +7931,22 @@ _TEST_START(TEST_mutex_group_usage_set_metavar)
 }
 _TEST_END()
 
-// TODO: Test "D"
+_TEST_START(TEST_dummy_callback)
+{
+	size_t i = 0;
+	char *args[] = { "program", "-a", "bla" };
 
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "D");
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test giving add_option an invalid alias
-// TODO: Test showing usage for mutex groups.
 // TODO: Test "<group --alpha"
 // TODO: Test Add option to non-existant group
 // TODO: Test add non-existant option to group
@@ -8058,7 +8069,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_usage),
 	CARGO_ADD_TEST(TEST_mutex_group_usage2),
 	CARGO_ADD_TEST(TEST_mutex_group_usage3),
-	CARGO_ADD_TEST(TEST_mutex_group_usage_set_metavar)
+	CARGO_ADD_TEST(TEST_mutex_group_usage_set_metavar),
+	CARGO_ADD_TEST(TEST_dummy_callback)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
