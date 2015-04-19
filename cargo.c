@@ -869,12 +869,6 @@ static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 	assert(ctx);
 	assert(o);
 
-	if ((opt_len = strlen(name)) == 0)
-	{
-		CARGODBG(1, "%s", "Option name has length 0\n");
-		return -1;
-	}
-
 	if (!_cargo_nargs_is_valid(o->nargs))
 	{
 		CARGODBG(1, "%s: nargs is invalid %d\n", name, o->nargs);
@@ -8015,6 +8009,9 @@ _TEST_START(TEST_group_add_missing_group)
 	cargo_assert(ret != 0, "Succesfully added invalid option with invalid group");
 
 	ret = cargo_add_option(cargo, 0, "", LOREM_IPSUM, "i", &i);
+	cargo_assert(ret != 0, "Succesfully added option with empty name");
+
+	ret = cargo_add_option(cargo, 0, "<group1>", LOREM_IPSUM, "i", &i);
 	cargo_assert(ret != 0, "Succesfully added option with empty name");
 
 	ret = cargo_add_option(cargo, 0, "--delta", LOREM_IPSUM, "[i]#", &j, &j_count, -5);
