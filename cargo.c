@@ -3584,6 +3584,8 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 	memset(&str, 0, sizeof(str));
 	str.s = &b;
 
+	// TODO: Let the user completly override the short usage.
+
 	cargo_aappendf(&str, "Usage: %s",
 		_cargo_strip_path_from_progname(ctx->progname));
 
@@ -4273,7 +4275,7 @@ int cargo_mutex_group_set_metavar(cargo_t ctx,
 	assert(mutex_group);
 
 	if (!(g =_cargo_find_group(ctx,
-		ctx->mutex_groups, ctx->mutex_max_groups, mutex_group, NULL)))
+		ctx->mutex_groups, ctx->mutex_group_count, mutex_group, NULL)))
 	{
 		CARGODBG(1, "No such mutex group \"%s\"\n", mutex_group);
 		return -1;
@@ -4371,12 +4373,12 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	}
 	#endif
 
-	// Start by priting mutually exclusive groups
+	// Start by printing mutually exclusive groups
 	for (i = 0; i < ctx->mutex_group_count; i++)
 	{
 		int indent = 0;
 		char *lb_desc;
-		const char *description;
+		const char *description = NULL;
 		grp = &ctx->mutex_groups[i];
 
 		if (!(grp->flags & CARGO_MUTEXGRP_GROUP_USAGE))
@@ -4389,8 +4391,9 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 			cargo_aappendf(&str, "\n%s:", grp->title);
 		}
 
-		grp->description = grp->description;
-		if (!grp->description)
+		description = grp->description;
+
+		if (!description)
 		{
 			description = "Specify one of the following.";
 		}
@@ -4402,8 +4405,16 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 		cargo_aappendf(&str, "\n%s\n", lb_desc);
 		free(lb_desc);
 
+		// Positional.
 		if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
 								1, &str, max_name_len, indent, 1, flags))
+		{
+			goto fail;
+		}
+
+		// Options.
+		if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
+								0, &str, max_name_len, indent, 1, flags))
 		{
 			goto fail;
 		}
@@ -7765,38 +7776,163 @@ _TEST_START(TEST_fail_custom_callback)
 }
 _TEST_END()
 
+static int _test_mutex_group_usage_add_options(cargo_t cargo,
+				cargo_mutex_group_flags_t flags1,
+				cargo_mutex_group_flags_t flags2,
+				int *a, int *b, int *c, int *d)
+{
+	int ret = 0;
+	ret |= cargo_add_mutex_group(cargo, flags1, "mgroup1", "Mutex group 1",
+			"MGROUP1_DESCRIPTION " LOREM_IPSUM);
+	ret |= cargo_add_mutex_group(cargo, flags2, "mgroup2", "Mutex group2",
+			"MGROUP2_DESCRIPTION " LOREM_IPSUM LOREM_IPSUM);
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --alpha -a", "Error Description", "i", a);
+	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--alpha");
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --beta -b", LOREM_IPSUM, "i", b);
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --centauri -c", "bla bla" LOREM_IPSUM, "i", c);
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --delta -d", "bla bla" LOREM_IPSUM, "i", d);
+	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--delta");
+
+	ret |= cargo_add_option(cargo, 0, "--error -e", "AAWESOME" LOREM_IPSUM, "i", d);
+	ret |= cargo_add_option(cargo, 0, "--fail -f", "Fail " LOREM_IPSUM, "i", d);
+
+	return ret;
+}
+
 _TEST_START(TEST_mutex_group_usage)
 {
 	int a;
 	int b;
 	int c;
 	int d;
-	ret |= cargo_add_mutex_group(cargo, 0, "mgroup1", "Mutex group 1", LOREM_IPSUM);
-	cargo_assert(ret == 0, "Failed to add mutex group 1");
+	const char *s = NULL;
 
-	ret |= cargo_add_mutex_group(cargo, 0, "mgroup2", "hello", "world");
-	cargo_assert(ret == 0, "Failed to add mutex group 2");
-
-	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --alpha -a", "Error Description", "i", &a);
-	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--alpha");
-
-	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --beta -b", LOREM_IPSUM, "i", &b);
-	cargo_assert(ret == 0, "Failed to add option");
-
-	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --centauri -c", "bla bla" LOREM_IPSUM, "i", &c);
-	cargo_assert(ret == 0, "Failed to add option");
-
-	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --delta -d", "bla bla" LOREM_IPSUM, "i", &d);
-	cargo_assert(ret == 0, "Failed to add option");
+	ret = _test_mutex_group_usage_add_options(cargo, 0, 0, &a, &b, &c, &d);
+	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_print_usage(cargo, 0);
+
+	s = cargo_get_usage(cargo, 0);
+	cargo_assert(s, "Got NULL usage");
+	cargo_assert(!strstr(s, "MGROUP1_DESCRIPTION"),
+		"MGROUP2_DESCRIPTION should not show by default");
+	cargo_assert(!strstr(s, "MGROUP2_DESCRIPTION"),
+		"MGROUP2_DESCRIPTION should not show by default");
+	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
+	cargo_assert(strstr(s, "--beta"), "Missing --beta");
+	cargo_assert(strstr(s, "--centauri"), "Missing --centauri");
+	cargo_assert(strstr(s, "--delta"), "Missing --delta");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_usage2)
+{
+	int a;
+	int b;
+	int c;
+	int d;
+	const char *s = NULL;
+
+	ret = _test_mutex_group_usage_add_options(cargo,
+			CARGO_MUTEXGRP_ONE_REQUIRED |
+			CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE |
+			CARGO_MUTEXGRP_GROUP_USAGE,
+			0, &a, &b, &c, &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_print_usage(cargo, 0);
+
+	s = cargo_get_usage(cargo, 0);
+	cargo_assert(s, "Got NULL usage");
+	cargo_assert(strstr(s, "MGROUP1_DESCRIPTION"),
+		"MGROUP1_DESCRIPTION should be shown when grouped");
+	cargo_assert(!strstr(s, "MGROUP2_DESCRIPTION"),
+		"MGROUP2_DESCRIPTION should not show by default");
+	
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
+	cargo_assert(strstr(s, "--beta"), "Missing --beta");
+	cargo_assert(strstr(s, "--centauri"), "Missing --centauri");
+	cargo_assert(strstr(s, "--delta"), "Missing --delta");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_usage3)
+{
+	int a;
+	int b;
+	int c;
+	int d;
+	const char *s = NULL;
+
+	ret = _test_mutex_group_usage_add_options(cargo,
+			CARGO_MUTEXGRP_ONE_REQUIRED |
+			CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE |
+			CARGO_MUTEXGRP_GROUP_USAGE,
+			CARGO_MUTEXGRP_GROUP_USAGE |
+			CARGO_MUTEXGRP_RAW_DESCRIPTION, &a, &b, &c, &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_print_usage(cargo, 0);
+
+	s = cargo_get_usage(cargo, 0);
+	cargo_assert(strstr(s, "MGROUP1_DESCRIPTION"),
+		"MGROUP1_DESCRIPTION should be shown when grouped");
+	cargo_assert(strstr(s, "MGROUP2_DESCRIPTION"),
+		"MGROUP2_DESCRIPTION should be shown when grouped");
+
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
+	cargo_assert(strstr(s, "--beta"), "Missing --beta");
+	cargo_assert(strstr(s, "--centauri"), "Missing --centauri");
+	cargo_assert(strstr(s, "--delta"), "Missing --delta");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_group_usage_set_metavar)
+{
+	int a;
+	int b;
+	int c;
+	int d;
+	const char *s = NULL;
+
+	ret = _test_mutex_group_usage_add_options(cargo,
+			CARGO_MUTEXGRP_ONE_REQUIRED |
+			CARGO_MUTEXGRP_GROUP_USAGE,
+			CARGO_MUTEXGRP_GROUP_USAGE |
+			CARGO_MUTEXGRP_RAW_DESCRIPTION, &a, &b, &c, &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_mutex_group_set_metavar(cargo, "mgroup1", "MUTEX");
+	cargo_assert(ret == 0, "Failed to set mutex group metavar");
+
+	cargo_print_usage(cargo, 0);
+
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	cargo_assert(s, "Got NULL short usage");
+	cargo_assert(strstr(s, "MUTEX"), "Expected to find mutex group metavar");
+	cargo_assert(!strstr(s, "--beta"), "--beta should be hidden");
+	cargo_assert(!strstr(s, "--centauri"), "--centauri should be hidden");
+
+	// Try to set for non-existing mutex group.
+	ret = cargo_mutex_group_set_metavar(cargo, "mgroup3", "MUTEX");
+	cargo_assert(ret != 0, "Succeeded to set metavar on invalid mutex group");
 
 	_TEST_CLEANUP();
 }
 _TEST_END()
 
 // TODO: Test "D"
-// TODO: Test setting mutex group metavar
+
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test showing usage for mutex groups.
@@ -7919,7 +8055,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_option_target_null),
 	CARGO_ADD_TEST(TEST_autoclean_string_list),
 	CARGO_ADD_TEST(TEST_fail_custom_callback),
-	CARGO_ADD_TEST(TEST_mutex_group_usage)
+	CARGO_ADD_TEST(TEST_mutex_group_usage),
+	CARGO_ADD_TEST(TEST_mutex_group_usage2),
+	CARGO_ADD_TEST(TEST_mutex_group_usage3),
+	CARGO_ADD_TEST(TEST_mutex_group_usage_set_metavar)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
