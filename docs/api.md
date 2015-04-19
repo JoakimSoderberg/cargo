@@ -203,10 +203,41 @@ This behaviour can be changed by appending a set of specifiers after `b`:
 
 - `=` After the integer variable, specify a value that will be stored in it instead of the default `1`.
 - `!` Allow multiple occurances of the given flag, count how many times it occurs and store it in the specified integer variable. `-v -v -v` and `-vvv` is equivalent. This is useful for `verbosity` flags and such.
+- `|` Bitwise OR. This is similar to how `!` works, except instead of simply counting the number of occurances, this will do a bitwise OR operation. To do this, you specify a set of extra arguments, the first denotes how many values are available. Followed by a list of the actual `unsigned int` values. For each time the given option occurs an item is popped from the list and a bitwise OR operation is done with the value of the target variable. This can be useful if you want to set values in a bit mask for instance.
+- `&` Works the same as `|` except that an bitwise AND is performed on the target value.
+- `+` Same as `|` except that an addition is made on the target value for each value in the list.
 
-Parse an ordinary flag and store `1` in `val` if set: `b, &val`
-Or parse the flag but store `5` in `val` if set: `b, &val, 5`
-Or count the number of occurrances of the flag: `b!, &val`
+Some examples:
+
+- Parse an ordinary flag and store `1` in `val` if set: `b, &val`. 
+  `"--opt"` -> `val = 1`
+- Or parse the flag but store `5` in `val` if set: `"b", &val, 5`
+  `"--opt"` -> `val = 5`
+- Or count the number of occurrances of the flag: `"b!", &val`
+  `"--opt --opt --opt"` -> `val = 3`
+- Or do a bitwise OR operation for each occurance of the flag: `"b|", &val, 3, (1 << 1), (1 << 3), (1 << 5)`
+  `"--opt --opt"` -> `val = (1 << 1) | (1 << 3) = 10`
+- Same as above but in a more easy to grasp use case:
+
+```c
+typedef enum debug_level_e
+{
+   NONE  = 0,
+   ERROR = (1 << 0),
+   WARN  = (1 << 1),
+   INFO  = (1 << 2),
+   DEBUG = (1 << 3)
+} debug_level_t;
+
+...
+debug_level_t debug_level = NONE;
+
+cargo_add_option(cargo, 0, "--verbosity -v", "Verbosity level",
+                 "b|", &debug_level, 4, ERROR, WARN, INFO, DEBUG);
+
+```
+
+So `"-vvv"` would give a debug level of `INFO`.
 
 ### Arrays
 

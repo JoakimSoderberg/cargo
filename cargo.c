@@ -669,6 +669,13 @@ static const char *_cargo_type_map[] =
 	"unsigned long long"
 };
 
+typedef enum cargo_bool_acc_op_e
+{
+	CARGO_BOOL_OP_PLUS,
+	CARGO_BOOL_OP_OR,
+	CARGO_BOOL_OP_AND
+} cargo_bool_acc_op_t;
+
 typedef struct cargo_group_s cargo_group_t;
 
 typedef struct cargo_opt_s
@@ -707,6 +714,11 @@ typedef struct cargo_opt_s
 
 	int bool_store;
 	int bool_count;
+
+	unsigned int *bool_acc;
+	cargo_bool_acc_op_t bool_acc_op;
+	size_t bool_acc_count;
+	size_t bool_acc_max_count;
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
@@ -1012,7 +1024,7 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 		if (!strncmp(name, arg, strlen(name)))
 		{
 			// We must have the bool count flag set for this to be allowed.
-			if (opt->bool_count)
+			if (opt->bool_count || opt->bool_acc)
 			{
 				CARGODBG(3, "  Found matching option \"%s\", alias \"%s\"\n",
 						opt->name[0], opt->name[i]);
@@ -1226,6 +1238,76 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					(*val)++;
 				}
 			}
+			else if (opt->bool_acc)
+			{
+				// TODO: Maybe move all this complexity from
+				// handling -vvv as a special case here, to instead expanding it
+				// at the beginning of the parse... "-vvv" -> "-v", "-v", "-v"
+				size_t count;
+				size_t acc_val;
+				size_t i = 0;
+				char *arg = ctx->argv[ctx->i];
+				CARGODBG(2, "           ARG: %s\n", arg);
+
+				// "-vvv" support.
+				if (!_cargo_is_option_name(ctx, opt, arg)
+				  && _cargo_is_option_name_compact(ctx, opt, arg))
+				{
+					CARGODBG(2, "          Compact %s\n", arg);
+					arg += strspn(arg, ctx->prefix);
+					count = strlen(arg);
+					CARGODBG(2, "              %lu\n", count);
+				}
+				else
+				{
+					count = 1;
+				}
+
+				for (i = opt->bool_acc_count; 
+					(i < opt->bool_acc_count + count) 
+					&& (i < opt->bool_acc_max_count);
+					i++)
+				{
+					acc_val = opt->bool_acc[i];
+
+					CARGODBG(2, "       %lu Bool acc %lx\n", i, acc_val);
+					switch (opt->bool_acc_op)
+					{
+						case CARGO_BOOL_OP_OR:
+						{
+							CARGODBG(2, "       OR\n");
+							*val |= acc_val;
+							break;
+						}
+						case CARGO_BOOL_OP_AND:
+						{
+							CARGODBG(2, "       AND\n");
+							*val &= acc_val;
+							break;
+						}
+						case CARGO_BOOL_OP_PLUS:
+						{
+							CARGODBG(2, "       PLUS\n");
+							*val += acc_val;
+							break;
+						}
+						default:
+						{
+							CARGODBG(1, "Got unknown operation\n");
+							break;
+						}
+					}
+				}
+
+				opt->bool_acc_count = i;
+
+				if (opt->bool_acc_count >= opt->bool_acc_max_count)
+				{
+					CARGODBG(2, "       Bool acc reached maxcount %lu\n",
+							opt->bool_acc_max_count);
+					break;
+				}
+			}
 			else
 			{
 				CARGODBG(2, "       No bool count\n");
@@ -1422,7 +1504,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			return -1;
 		}
 		else if ((opt->type == CARGO_BOOL)
-			  && opt->bool_count)
+			  && (opt->bool_count || opt->bool_acc))
 		{
 			// This is for parsing multiple arguments of the same type
 			// for instance -v -v -v.
@@ -2503,6 +2585,14 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	{
 		free(o->description);
 		o->description = NULL;
+	}
+
+	if (o->bool_acc)
+	{
+		free(o->bool_acc);
+		o->bool_acc = NULL;
+		o->bool_acc_count = 0;
+		o->bool_acc_max_count = 0;
 	}
 
 	// Special case for custom callback target, it is allocated
@@ -4815,11 +4905,41 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 				case '=': o->bool_store = va_arg(ap, int); break;
 				// Count flag occurances.
 				case '!': o->bool_count = 1; break;
+				case '|':
+				case '+':
+				case '&':
+				{
+					switch (_cargo_fmt_token(&s))
+					{
+						default:
+						case '|': o->bool_acc_op = CARGO_BOOL_OP_OR; break;
+						case '+': o->bool_acc_op = CARGO_BOOL_OP_PLUS; break;
+						case '&': o->bool_acc_op = CARGO_BOOL_OP_AND; break;
+					}
+
+					o->bool_acc_count = 0;
+					o->bool_acc_max_count = (size_t)va_arg(ap, unsigned int);
+					CARGODBG(3, "Bool acc max count %lu\n", o->bool_acc_max_count);
+
+					if (!(o->bool_acc = calloc(o->bool_acc_max_count, sizeof(unsigned int))))
+					{
+						CARGODBG(1, "Out of memory\n");
+						goto fail;
+					}
+
+					for (i = 0; i < o->bool_acc_max_count; i++)
+					{
+						o->bool_acc[i] = va_arg(ap, unsigned int);
+						CARGODBG(3, "  bool acc value %lu: 0x%x\n", i, o->bool_acc[i]);
+					}
+					break;
+				}
 				default:
 				{
 					// Got no flag modifier token.
 					o->bool_store = 1;
 					o->bool_count = 0;
+					o->bool_acc = NULL;
 					_cargo_fmt_prev_token(&s);
 				}
 			}
@@ -8036,6 +8156,126 @@ _TEST_START(TEST_group_add_missing_group)
 }
 _TEST_END()
 
+_TEST_START(TEST_bool_acc_or)
+{
+	unsigned int a = 0;
+	unsigned int b = 0;
+	unsigned int c = 0;
+	unsigned int expected_bits = 0;
+	char *args[] = { "program", "-a", "-b", "-b", "123", "-ccc", "-b"};
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL,
+			"b|", &a, 1, (1 << 1));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", NULL,
+			"b|", &b, 2, (1 << 1), (1 << 2));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", NULL,
+			"b|", &c, 3, (1 << 1), (1 << 2), (1 << 5));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	expected_bits = (1 << 1);
+	printf("a = Expect: 0x%x Got: 0x%x\n", expected_bits, a);
+	cargo_assert((a & expected_bits) == expected_bits, "Expected bit 1 to be set");
+	cargo_assert((a ^ expected_bits) == 0, "Expected no other bit than 1 to be set");
+
+	// We have 3 occurrances of "-b" but only 2 bits should still be set.
+	expected_bits = (1 << 1) | (1 << 2);
+	printf("b = Expect: 0x%x Got: 0x%x\n", expected_bits, b);
+	cargo_assert((b & (expected_bits)) == expected_bits, "Expected bit 1 and 2 to be set");
+	cargo_assert((b ^ (expected_bits)) == 0, "Expected no other bit than 1 and 2 to be set");
+
+	expected_bits = (1 << 1) | (1 << 2) | (1 << 5);
+	printf("c = Expect: 0x%x Got: 0x%x\n", expected_bits, c);
+	cargo_assert((c & expected_bits) == expected_bits, "Expected bit 1, 2 and 5 to be set");
+	cargo_assert((c ^ expected_bits) == 0, "Expected no other bit than 1, 2 and 5 to be set");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_bool_acc_and)
+{
+	unsigned int a = -1;
+	unsigned int b = -1;
+	unsigned int c = -1;
+	unsigned int expected_bits = 0;
+	char *args[] = { "program", "-a", "-b", "-b", "123", "-ccc", "-b"};
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL,
+			"b&", &a, 1, (1 << 1));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", NULL,
+			"b&", &b, 2, ((1 << 1) | (1 << 2) | (1 << 3)), (1 << 2));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", NULL,
+			"b&", &c, 2, (1 << 1) | (1 << 2) | (1 << 5),  (1 << 1) | (1 << 5));
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	expected_bits = (1 << 1);
+	printf("a = Expect: 0x%x Got: 0x%x\n", expected_bits, a);
+	cargo_assert((a & expected_bits) == expected_bits, "Expected no bit to be set");
+	cargo_assert((a ^ expected_bits) == 0, "Expected no other bit than 1 to be set");
+
+	expected_bits = (1 << 2);
+	printf("b = Expect: 0x%x Got: 0x%x\n", expected_bits, b);
+	cargo_assert((b & (expected_bits)) == expected_bits, "Expected bit 2 to be set");
+	cargo_assert((b ^ (expected_bits)) == 0, "Expected no other bit than 2 to be set");
+
+	expected_bits = (1 << 1) | (1 << 5);
+	printf("c = Expect: 0x%x Got: 0x%x\n", expected_bits, c);
+	cargo_assert((c & expected_bits) == expected_bits, "Expected bit 1 and 5 to be set");
+	cargo_assert((c ^ expected_bits) == 0, "Expected no other bit than 1 and 5 to be set");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_bool_acc_plus)
+{
+	unsigned int a = 0;
+	unsigned int b = 0;
+	unsigned int c = 0;
+	char *args[] = { "program", "-a", "-b", "-b", "123", "-ccc", "-b"};
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL,
+			"b+", &a, 1, 1);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", NULL,
+			"b+", &b, 2, 1, 2);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", NULL,
+			"b+", &c, 3, 1, 2, 3);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("a = Expect: %u Got: %u\n", 1, a);
+	cargo_assert(a == 1, "Expected a == 1");
+
+	printf("b = Expect: %u Got: %u\n", (1 + 2), b);
+	cargo_assert(b == (1 + 2), "Expected b == 3");
+
+	printf("c = Expect: %u Got: %u\n", (1 + 2 + 3), c);
+	cargo_assert(c == (1 + 2 + 3), "Expected c == 6");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test cargo_get_error
@@ -8152,7 +8392,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_group_usage3),
 	CARGO_ADD_TEST(TEST_mutex_group_usage_set_metavar),
 	CARGO_ADD_TEST(TEST_dummy_callback),
-	CARGO_ADD_TEST(TEST_group_add_missing_group)
+	CARGO_ADD_TEST(TEST_group_add_missing_group),
+	CARGO_ADD_TEST(TEST_bool_acc_or),
+	CARGO_ADD_TEST(TEST_bool_acc_and),
+	CARGO_ADD_TEST(TEST_bool_acc_plus)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
