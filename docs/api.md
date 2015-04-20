@@ -823,12 +823,15 @@ By default on an error only the short usage is shown together with the error. If
 ### cargo_parse ###
 
 ```c
-int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
+int cargo_parse(cargo_t ctx, cargo_flags_t flags,
+                int start_index, int argc, char **argv);
 ```
 
 ---
 
 **ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: These flags will override the global flags set in [`cargo_init`](api.md#cargo_init) if non-zero.
 
 **start_index**: What index into `argv` should cargo start parsing from.
 
@@ -847,7 +850,7 @@ argv = { "the/program", "--option", "5" };
   // Start parsing here ^
 argc = 3;
 ...
-ret = cargo_parse(cargo, 1, argc, argv);
+ret = cargo_parse(cargo, 0, 1, argc, argv);
 ```
 
 By default cargo will try to parse the arguments it is given, and if there is an error it will output it to `stderr` including a short usage message.

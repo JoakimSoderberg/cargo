@@ -4124,16 +4124,20 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 	return 0;
 }
 
-// TODO: Maybe have an cargo_parse_ex that takes flags as well...
-// Then we can for instance, either give error on unknown opts/args
-// or just ignore them.
-int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
+int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, char **argv)
 {
 	int start = 0;
 	int opt_arg_count = 0;
 	char *arg = NULL;
 	const char *name = NULL;
 	cargo_opt_t *opt = NULL;
+	cargo_flags_t global_flags = ctx->flags;
+
+	// Override if any flags are set.
+	if (flags)
+	{
+		ctx->flags = flags;
+	}
 
 	CARGODBG(2, "============ Cargo Parse =============\n");
 
@@ -4260,6 +4264,7 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	if (ctx->help)
 	{
 		cargo_print_usage(ctx, 0);
+		ctx->flags = global_flags;
 		return 1;
 	}
 
@@ -4274,11 +4279,12 @@ int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
 	}
 
 	_cargo_parse_show_error(ctx);
-
+	ctx->flags = global_flags;
 	return 0;
 fail:
 	_cargo_parse_show_error(ctx);
 	_cargo_cleanup_option_values(ctx);
+	ctx->flags = global_flags;
 	return -1;
 }
 
@@ -5515,7 +5521,7 @@ _TEST_START(TEST_no_args_bool_option)
 	ret = cargo_add_option(cargo, 0, "--alpha", "Description", "b", &a);
 	cargo_assert(ret == 0, "Failed to add valid bool option");
 
-	if (cargo_parse(cargo, 1, argc, args))
+	if (cargo_parse(cargo, 0, 1, argc, args))
 	{
 		msg = "Failed to parse bool with no argument";
 		goto fail;
@@ -5540,7 +5546,7 @@ _TEST_END()
 								fmt,										\
 								&a, ##__VA_ARGS__);							\
 		cargo_assert(ret == 0, "Failed to add valid "#type" option");		\
-		if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))	\
+		if (cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args))	\
 		{																	\
 			msg = "Failed to parse "#type" with value \""#value"\"";		\
 			goto fail;														\
@@ -5567,7 +5573,7 @@ _TEST_START(TEST_add_static_string_option)
 							&b, sizeof(b));
 	cargo_assert(ret == 0, "Failed to add valid static string option");
 
-	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
+	if (cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args))
 	{
 		msg = "Failed to parse static char * with value \"abc\"";
 		goto fail;
@@ -5588,7 +5594,7 @@ _TEST_START(TEST_add_alloc_string_option)
 							&b);
 	cargo_assert(ret == 0, "Failed to add valid alloc string option");
 
-	if (cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args))
+	if (cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args))
 	{
 		msg = "Failed to parse alloc char * with value \"abc\"";
 		goto fail;
@@ -5611,7 +5617,7 @@ _TEST_END()
  							fmt, ##__VA_ARGS__);							 \
 	cargo_assert(ret == 0,													 \
 		"Failed to add "#array"["#array_size"] array option");				 \
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);		 \
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);		 \
 	cargo_assert(ret == 0, "Failed to parse array: "#array"["#array_size"]");\
 }
 
@@ -5845,7 +5851,7 @@ _TEST_START(TEST_add_alloc_dynamic_int_array_option_noargs)
 							&a, &count);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Successfully parsed when no args");
 
 	_TEST_CLEANUP();
@@ -6048,7 +6054,7 @@ _TEST_START(TEST_misspelled_argument)
 	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, 3, args);
+	ret = cargo_parse(cargo, 0, 1, 3, args);
 	cargo_assert(ret == -1, "Got valid parse with invalid input");
 	_TEST_CLEANUP();
 }
@@ -6095,7 +6101,7 @@ _TEST_START(TEST_get_extra_args)
 	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse extra args input");
 
 	// Get left over arguments.
@@ -6121,7 +6127,7 @@ _TEST_START(TEST_get_unknown_opts)
 	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succeeded parsing with unknown options");
 
 	// Get left over arguments.
@@ -6206,7 +6212,7 @@ _TEST_START(TEST_parse_invalid_value)
 	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed invalid value");
 
 	_TEST_CLEANUP();
@@ -6252,7 +6258,7 @@ _TEST_START(TEST_parse_twice)
 
 	printf("\nArgs 1:\n");
 	{
-		ret = cargo_parse(cargo, 1, sizeof(args1) / sizeof(args1[0]), args1);
+		ret = cargo_parse(cargo, 0, 1, sizeof(args1) / sizeof(args1[0]), args1);
 
 		cargo_assert(ret == 0, "Failed to parse advanced example");
 		cargo_assert_array(ports_count, PORTS_COUNT, ports, args1_ports_expect);
@@ -6268,7 +6274,7 @@ _TEST_START(TEST_parse_twice)
 
 	printf("\nArgs 2:\n");
 	{
-		ret = cargo_parse(cargo, 1, sizeof(args2) / sizeof(args2[0]), args2);
+		ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
 
 		cargo_assert(ret == 0, "Failed to parse advanced example");
 		cargo_assert_str_array(vals_count, 5, vals, args1_vals_expect);
@@ -6292,7 +6298,7 @@ _TEST_START(TEST_parse_missing_value)
 	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed missing value");
 
 	_TEST_CLEANUP();
@@ -6310,7 +6316,7 @@ _TEST_START(TEST_parse_missing_array_value)
 	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed missing value");
 
 	_TEST_CLEANUP();
@@ -6330,7 +6336,7 @@ _TEST_START(TEST_parse_missing_array_value_ensure_free)
 	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "[i]#", &j, &j_count, 2);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed missing value");
 	cargo_assert(j == NULL, "Array non-NULL after failed parse");
 
@@ -6348,7 +6354,7 @@ _TEST_START(TEST_parse_same_option_twice)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("--alpha == %d\n", i);
 	cargo_assert(ret == 0, "Failed to parsed duplicate option without unique");
 	cargo_assert(i == 2, "Expected --alpha to have value 2");
@@ -6367,7 +6373,7 @@ _TEST_START(TEST_parse_same_option_twice_string)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parsed duplicate option without unique");
 	cargo_assert(s && !strcmp(s, "def"), "Expected --alpha to have value \"def\"");
 
@@ -6387,7 +6393,7 @@ _TEST_START(TEST_parse_same_option_twice_with_unique)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("--alpha == %d\n", i);
 	cargo_assert(ret != 0, "Succesfully parsed duplicate option");
 	cargo_assert(i == 1, "Expected --alpha to have value 1");
@@ -6407,7 +6413,7 @@ _TEST_START(TEST_parse_same_option_twice_string_with_unique)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("--alpha = %s\n", s);
 	cargo_assert(ret != 0, "Succesfully parsed duplicate option");
 	cargo_assert(s == NULL, "Expected --alpha to have value NULL");
@@ -6495,7 +6501,7 @@ _TEST_START(TEST_positional_argument)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("alpha = %d\n", j);
 	cargo_assert(ret == 0, "Failed to parse positional argument");
 	cargo_assert(j == 456, "Expected \"alpha\" to have value 456");
@@ -6518,7 +6524,7 @@ _TEST_START(TEST_positional_array_argument)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	for (k = 0; k < j_count; k++)
 	{
 		printf("alpha = %d\n", j[k]);
@@ -6555,7 +6561,7 @@ _TEST_START(TEST_multiple_positional_array_argument)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 
 	for (k = 0; k < j_count; k++)
 	{
@@ -6601,7 +6607,7 @@ _TEST_START(TEST_multiple_positional_array_argument2)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 
 	for (k = 0; k < j_count; k++)
 	{
@@ -6648,7 +6654,7 @@ _TEST_START(TEST_multiple_positional_array_argument3)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 
 	printf("j_count = %lu\n", j_count);
 	for (k = 0; k < j_count; k++)
@@ -6679,7 +6685,7 @@ _TEST_START_EX(TEST_autoclean_flag, CARGO_AUTOCLEAN)
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "s", &s);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse valid option");
 	cargo_assert(s && !strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
 
@@ -6700,7 +6706,7 @@ _TEST_START_EX(TEST_autoclean_flag_off, 0)
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "s", &s);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse valid option");
 	cargo_assert(s && !strcmp(s, "abc"), "Expected --alpha to have value \"abc\"");
 
@@ -6726,7 +6732,7 @@ _TEST_START(TEST_parse_zero_or_more_with_args)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 	cargo_assert_array(i_count, 2, i, i_expect);
 
@@ -6746,7 +6752,7 @@ _TEST_START(TEST_parse_zero_or_more_without_args)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &j);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 	cargo_assert(i == NULL, "Expected i to be NULL");
 	cargo_assert(i_count == 0, "Expected i count to be 0");
@@ -6776,7 +6782,7 @@ _TEST_START(TEST_parse_zero_or_more_with_positional)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "[i]*", &j, &j_count);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 	cargo_assert_array(pos_count, 2, pos, pos_expect);
 	cargo_assert_array(i_count, 2, i, i_expect);
@@ -6800,7 +6806,7 @@ _TEST_START(TEST_required_option_missing)
 
 	cargo_set_internal_usage_flags(cargo, CARGO_USAGE_HIDE_DESCRIPTION);
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succeeded with missing required option");
 
 	_TEST_CLEANUP();
@@ -6818,7 +6824,7 @@ _TEST_START(TEST_required_option)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed with existing required option");
 	cargo_assert(j == 789, "Expected j == 789");
 
@@ -6864,7 +6870,7 @@ _TEST_START(TEST_custom_callback)
 	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "c", _test_cb, &data);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	printf("%dx%d\n", data.width, data.height);
 	cargo_assert(data.width == 128, "Width expected to be 128");
 	cargo_assert(data.height == 64, "Height expected to be 128");
@@ -6916,7 +6922,7 @@ _TEST_START(TEST_custom_callback_fixed_array)
 							_test_cb_fixed_array, &data, &data_count, DATA_COUNT);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 
 	cargo_assert(data_count == DATA_COUNT, "Expected data_count == DATA_COUNT");
 
@@ -6981,7 +6987,7 @@ _TEST_START(TEST_custom_callback_array)
 							_test_cb_array, &data, &data_count, DATA_COUNT);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 
 	cargo_assert(data_count == 5, "Expected data_count == 5");
 
@@ -7009,7 +7015,7 @@ _TEST_START(TEST_zero_or_more_with_arg)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 	cargo_assert(j == 789, "Expected j == 789");
 
@@ -7027,7 +7033,7 @@ _TEST_START(TEST_zero_or_more_without_arg)
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 	cargo_assert(j == 5, "Expected j == 5");
 
@@ -7068,7 +7074,7 @@ _TEST_START(TEST_group)
 	ret |= cargo_add_option(cargo, 0, "<group2> --delta", LOREM_IPSUM LOREM_IPSUM, "i?", &l);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 
 	cargo_print_usage(cargo, 0);
@@ -7112,7 +7118,7 @@ _TEST_START(TEST_many_groups)
 
 	cargo_assert(ret == 0, "Failed to add groups");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
 	cargo_assert(vals[0][0] == 5, "Expected --optg01o01 to be 5");
 	cargo_assert(vals[1][1] == 123, "Expected --optg02o02 to be 123");
@@ -7144,7 +7150,7 @@ _TEST_START(TEST_mutex_group_guard)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	// We parse args with 2 members of the mutex group.
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed mutex group with 2 group members");
 
 	_TEST_CLEANUP();
@@ -7174,7 +7180,7 @@ _TEST_START(TEST_mutex_group_require_one)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	// We parse args with no members of the mutex group.
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0,
 		"Succesfully parsed mutex group with no mutex member when 1 required");
 
@@ -7218,7 +7224,7 @@ _TEST_START(TEST_missing_last_arg)
 	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i", &k);
 	cargo_assert(ret == 0, "Failed to add options");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Succesfully parsed option without argument");
 
 	_TEST_CLEANUP();
@@ -7324,7 +7330,7 @@ _TEST_START(TEST_cargo_set_prefix)
 	ret = cargo_add_option(cargo, 0, "++beta +b", LOREM_IPSUM, "i", &i);
 	cargo_assert(ret == 0, "Failed to add option with valid prefix '+'");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse with custom prefix");
 	cargo_assert(i == 123, "Expected ++beta to have value 123");
 
@@ -7560,7 +7566,7 @@ _TEST_START(TEST_cargo_bool_count)
 	ret |= cargo_add_option(cargo, 0,
 							"--verbose -v", LOREM_IPSUM, "b!", &i);
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	printf("i == %d\n", i);
@@ -7579,7 +7585,7 @@ _TEST_START(TEST_cargo_bool_count_compact)
 	ret |= cargo_add_option(cargo, 0, "args", LOREM_IPSUM, "i", &j);
 	ret |= cargo_add_option(cargo, 0, "--verbose -v", LOREM_IPSUM, "b!", &i);
 
-	cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	printf("i == %d\n", i);
@@ -7624,7 +7630,7 @@ _TEST_START(TEST_fixed_fail_array)
 							".[i]#", &vals, &val_count, 4);
 	ret |= cargo_add_option(cargo, 0, "--beta", LOREM_IPSUM, "i", &i);
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Parse succeeded when it should fail");
 
 	_TEST_CLEANUP();
@@ -7755,7 +7761,7 @@ _TEST_START(TEST_group_user_context)
 	ret |= cargo_mutex_group_add_option(cargo, "mgroup2", "--error");
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse");
 
 	cargo_assert(a == 15, "a unexpected");
@@ -7906,7 +7912,7 @@ _TEST_START(TEST_autoclean_string_list)
 	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "[s]+", &strs, &str_count);
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed to parse");
 	cargo_assert(strs != NULL, "Got NULL string list");
 
@@ -7935,7 +7941,7 @@ _TEST_START(TEST_fail_custom_callback)
 	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "c", _test_fail_callback, &i);
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0, "Parse expected to fail");
 
 	_TEST_CLEANUP();
@@ -8105,7 +8111,7 @@ _TEST_START(TEST_dummy_callback)
 	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "D");
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	_TEST_CLEANUP();
@@ -8190,7 +8196,7 @@ _TEST_START(TEST_bool_acc_or)
 			"b|", &c, 3, (1 << 1), (1 << 2), (1 << 5));
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	expected_bits = (1 << 1);
@@ -8233,7 +8239,7 @@ _TEST_START(TEST_bool_acc_and)
 			"b&", &c, 2, (1 << 1) | (1 << 2) | (1 << 5),  (1 << 1) | (1 << 5));
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	expected_bits = (1 << 1);
@@ -8274,7 +8280,7 @@ _TEST_START(TEST_bool_acc_plus)
 			"b+", &c, 3, 1, 2, 3);
 	cargo_assert(ret == 0, "Failed to add option");
 
-	ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
 
 	printf("a = Expect: %u Got: %u\n", 1, a);
@@ -8501,7 +8507,7 @@ int main(int argc, char **argv)
 
 	assert(ret == 0);
 
-	if (cargo_parse(cargo, 1, argc, argv))
+	if (cargo_parse(cargo, 0, 1, argc, argv))
 	{
 		_test_print_names();
 		cargo_print_usage(cargo, 0);

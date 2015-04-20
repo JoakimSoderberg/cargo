@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 							"b", &sum_flag);
 	assert(ret == 0);
 
-	if (cargo_parse(cargo, 1, argc, argv)) return -1;
+	if (cargo_parse(cargo, 0, 1, argc, argv)) return -1;
 	if (sum_flag) accumulator = sum_ints;
 	printf("%d\n", accumulator(integers, integer_count));
 	cargo_destroy(&cargo);

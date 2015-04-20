@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 
 	assert(ret == 0);
 
-	if (cargo_parse(cargo, 1, argc, argv)) return -1;
+	if (cargo_parse(cargo, 0, 1, argc, argv)) return -1;
 
 	if (args.verbose_flag) printf("Verbose flag is set %d\n", args.verbose_flag);
 

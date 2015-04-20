@@ -389,7 +389,7 @@ rect_t rect;
 ret = cargo_add_option(cargo, 0, "--rect","The rect",
                         "c", parse_rect_cb, &rect);
 
-ret = cargo_parse(cargo, 1, argc, argv);
+ret = cargo_parse(cargo, 0, 1, argc, argv);
 ```
 
 List example

@@ -37,15 +37,18 @@ In the normal case you simply want cargo to parse the commandline you give it an
 To do this we can start to look at how [`cargo_parse`](api.md#cargo_parse) looks like:
 
 ```c
-int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv)
+int cargo_parse(cargo_t ctx, cargo_flags_t flags,
+                int start_index, int argc, char **argv)
 ```
 
 As usual a [`cargo_t`](api.md#cargo_t) context is given, and any C programmer is familiar with what `argc` and `argv` is.
 
 However `start_index` specifies the index into `argv` cargo should start parsing at. In most cases this is `1`, since at index `0` we have the program name.
 
+The `flags` are the same flags passed to [`cargo_init`](api.md#cargo_init). Any flags passed to this function that aren't `0` will override those ones during this call to [`cargo_parse`](api.md#cargo_parse).
+
 ```c
-ret = cargo_parse(cargo, 1, argc, argv);
+ret = cargo_parse(cargo, 0, 1, argc, argv);
 ```
 
 Here is a full example:
@@ -68,7 +71,7 @@ int main(int argc, char **argv)
                            &integers, &integers_count); 
     assert(ret == 0);
 
-    if ((ret = cargo_parse(cargo, 1, argc, argv)))
+    if ((ret = cargo_parse(cargo, 0, 1, argc, argv)))
     {
         // By default cargo will output a short usage message and
         // any errors that occur while parsing.

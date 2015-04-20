@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 			CARGO_MUTEXGRP_ONE_REQUIRED |
 			CARGO_MUTEXGRP_GROUP_USAGE,
 			"cmds", "Commands", NULL);
-	//ret |= cargo_mutex_group_set_metavar(cargo, "cmds", "COMMAND");
+	ret |= cargo_mutex_group_set_metavar(cargo, "cmds", "COMMAND");
 
 	ret |= cargo_add_option(cargo, CARGO_OPT_NOT_REQUIRED, "<!cmds> command1",
 			"Silly example command", "c", parse_command_cb, &cmd);
@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 
 	assert(ret == 0);
 
-	if (cargo_parse(cargo, 1, argc, argv)) return -1;
+	if (cargo_parse(cargo, 0, 1, argc, argv)) return -1;
 
 	switch (cmd)
 	{
