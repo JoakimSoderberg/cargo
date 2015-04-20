@@ -227,6 +227,7 @@ int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const ch
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
+// TODO: Add cargo_flags_t that overrides...
 int cargo_parse(cargo_t ctx, int start_index, int argc, char **argv);
 
 void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);

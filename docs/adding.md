@@ -190,7 +190,7 @@ int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
 
 This function simply takes a `group` name, as well as an `opt`ion name.
 
-The other way to add an option to a group is to do it directly in the [`cargo_add_option`](api.md#cargo_add_option) call by prepending the group name enclodes in brackets, like this: `"<group1> --integers -i"
+The other way to add an option to a group is to do it directly in the [`cargo_add_option`](api.md#cargo_add_option) call by prepending the group name enclodes in brackets, like this: `"<group1> --integers -i"`
 
 Here's an example of both methods:
 
@@ -232,6 +232,16 @@ int cargo_mutex_group_add_option(cargo_t ctx,
                                 const char *opt);
 ```
 
+Or just as with normal groups, options can be added to mutex groups using `cargo_add_option` as well. However to differentiate mutex groups from normal groups they need to be prepended with a `!`, so `"<!mutexgrp> --opt"`:
+
+```c
+ret = cargo_add_option(cargo, 0, "<!mutex_group> --integers -i", 
+                       "Integers", "[i]+",
+                       &integers, &integer_count);
+```
+
+You can add an option in this way to both a normal group and mutex group: `"<!mutex_group, group> --opt"`
+
 So here we create the three options and put them in a mutex group:
 
 ```c
@@ -240,16 +250,17 @@ int j = 0;
 int k = 0;
 ret = cargo_add_mutex_group(cargo, 0, "mutex_group1");
 
-ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
-ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
+ret |= cargo_add_option(cargo, 0, "<!mutex_group1> --alpha",
+                        "The alpha", "i?", &j);
 
-ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
-ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
+ret |= cargo_add_option(cargo, 0, "<!mutex_group1> --beta -b",
+                        "The beta", "i", &i);
 
+// Or add it via separate API call.
 ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
 ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--centauri");
 
-cargo_assert(ret == 0, "Failed to add options");
+assert(ret == 0);
 ```
 
 Here is the resulting output:
@@ -284,7 +295,7 @@ ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
 // Don't add this to the mutex group.
 ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
 
-cargo_assert(ret == 0, "Failed to add options");
+assert(ret == 0);
 ```
 
 And the resulting output if we don't at least specify one of `--alpha` or `--beta`:
@@ -301,7 +312,7 @@ Custom parsing
 ==============
 As you have seen in the previous examples, parsing native types such as `int`, `float`, `double` or a string is possible. But what if you want to parse something more advanced, a timestamp for example?
 
-Here's where custom callbacks come in to play. Instead of simply passing the address to the variable you want cargo to put whatever it parses into, you also specify a custom callback that cargo should call when it parses an option.
+Here's where custom callbacks come in to play. When adding an option, you both specify the target variable as well as a custom callback that cargo should call when it parses that option.
 
 The callback function of type [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) looks like this:
 
@@ -316,7 +327,7 @@ The `void *user` is a user defined pointer that will be passed on to the callbac
 
 `argc` and `argv` are the arguments that cargo has parsed for the option being parsed (it is not the entire command line). So for instance if cargo is given the command line `--alpha --beta 1 2 3 --sigma 4 5` and we're parsing the `--beta` option. Then `argc` will be `3` and `argv` will contain `[1, 2, 3]`.
 
-Note that any memory you allocate in this callback, you will have to free, even if [`CARGO_AUTOCLEAN`](api.md#CARGO_AUTOCLEAN) is enabled, since cargo does not have any knowledge where this is stored or how to free it.
+Note that any memory you allocate in this callback, you will have to free, even if [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean) is enabled, since cargo does not have any knowledge where this is stored or how to free it.
 
 Callback user data context
 --------------------------
@@ -378,16 +389,16 @@ rect_t rect;
 ret = cargo_add_option(cargo, 0, "--rect","The rect",
                         "c", parse_rect_cb, &rect);
 
-ret = cargo_parse(cargo, 1, sizeof(args) / sizeof(args[0]), args);
+ret = cargo_parse(cargo, 1, argc, argv);
 ```
 
 List example
 ------------
-This works just like any other type, so you can of course parse a list of  values usign a custom callback as well, and using a `[c]+` format string for the example above. This time allocating an array of `rect_t`:s.
+This works just like any other type, so you can of course parse a list of  values using a custom callback as well, and using a `[c]+` format string for the example above. This time allocating an array of `rect_t`:s.
 
 ```c
-static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
-                                int argc, char **argv)
+static int parse_rect_list_cb(cargo_t ctx, void *user, const char *optname,
+                              int argc, char **argv)
 {
     int i;
     assert(ctx);
@@ -395,7 +406,7 @@ static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
     rect_t **u = (rect_t **)user;
     rect_t *rect;
 
-    if (!(*u = calloc(argc, sizeof(_test_data_t))))
+    if (!(*u = calloc(argc, sizeof(rect_t))))
     {
         return -1;
     }
@@ -412,6 +423,18 @@ static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
 
     return i; // How many arguments we ate.
 }
+```
+
+As you might've noticed in the above example, you have nowhere to save the number of `rect_t` structs. However the count will be returned as with any other array option:
+
+```c
+rect_t *rects;
+size_t rect_count;
+
+ret = cargo_add_option(cargo, 0, "--rects -r", "Rectangles",
+                       "[c]+", parse_rect_list_cb, &rects, &rect_count);
+...
+if (rects) free(rects);
 ```
 
 Help with format strings
