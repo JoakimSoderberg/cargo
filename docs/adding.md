@@ -428,13 +428,15 @@ static int parse_rect_list_cb(cargo_t ctx, void *user, const char *optname,
 As you might've noticed in the above example, you have nowhere to save the number of `rect_t` structs. However the count will be returned as with any other array option:
 
 ```c
-rect_t *rects;
-size_t rect_count;
+rect_t *rects = NULL; // Remember to init so we know if we need to free.
+size_t rect_count = 0;
+
+...
 
 ret = cargo_add_option(cargo, 0, "--rects -r", "Rectangles",
                        "[c]+", parse_rect_list_cb, &rects, &rect_count);
 ...
-if (rects) free(rects);
+if (rects) free(rects); // Remember we always have to free this ourselves.
 ```
 
 Help with format strings

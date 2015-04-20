@@ -10,8 +10,8 @@ int main(int argc, char **argv)
     cargo_t cargo; // The cargo context instance.
     int ret = 0;
 
-    int *integers;
-    size_t integers_count;
+    int *integers = NULL;
+    size_t integers_count = 0;
 
     if (cargo_init(&cargo, 0, argv[0]))
     {
@@ -25,6 +25,7 @@ int main(int argc, char **argv)
     // Do the parsing here!
 
     cargo_destroy(&cargo);
+    if (integers) free(integers);
     return 0;
 }
 ```
@@ -46,6 +47,8 @@ However `start_index` specifies the index into `argv` cargo should start parsing
 ```c
 ret = cargo_parse(cargo, 1, argc, argv);
 ```
+
+Here is a full example:
 
 ```c
 int main(int argc, char **argv)
@@ -86,7 +89,7 @@ One exception what is mentioend above is if you call [`cargo_parse`](api.md#carg
 
 Usually however, parsing more than once with the same cargo instance does not make much sense.
 
-If you want to override this behaviour, and make cargo to free these variables automatically in [`cargo_destroy`](api.md#cargo_destroy), you can do this by passing the [`CARGO_AUTOCLEAN`](api.md#CARGO_AUTOCLEAN) flag to [`cargo_init`](api.md#cargo_init).
+If you want to override this behaviour, and make cargo to free these variables automatically in [`cargo_destroy`](api.md#cargo_destroy), you can do this by passing the [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean) flag to [`cargo_init`](api.md#cargo_init).
 
 Customizing parse output messages
 ---------------------------------
@@ -94,11 +97,11 @@ As mentioned above by default the short version of the usage is shown by default
 
 If you instead want to output your own error message, or for whatever reason do things in another order. You can change this behaviour by passing a set of [`cargo_flags_t`](api.md#cargo_flags_t) to [`cargo_init`](api.md#cargo_init).
 
-To turn off any automatic error output you can pass [`CARGO_NOERR_OUTPUT`](api.md#CARGO_NOERR_OUTPUT), and for no usage [`CARGO_NOERR_USAGE`](api.md#CARGO_NOERR_USAGE). When you do this, you can still fetch any error message using [`cargo_get_error`](api.md#cargo_get_error).
+To turn off any automatic error output you can pass [`CARGO_NOERR_OUTPUT`](api.md#cargo_noerr_output), and for no usage [`CARGO_NOERR_USAGE`](api.md#cargo_noerr_usage). When you do this, you can still fetch any error message using [`cargo_get_error`](api.md#cargo_get_error).
 
-If you instead rather have cargo output the full usage on an error you can pass the [`CARGO_USAGE_FULL_USAGE`](api.md#CARGO_USAGE_FULL_USAGE) flag to the [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags) function. Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when using [`cargo_print_usage`](api.md#cargo_print_usage).
+If you instead rather have cargo output the full usage on an error you can pass the [`CARGO_USAGE_FULL_USAGE`](api.md#cargo_usage_full_usage) flag to the [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags) function. Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when using [`cargo_print_usage`](api.md#cargo_print_usage).
 
-By default the error messages are printed to `stderr`, if you instead want cargo to print them to `stdout` you can set the [`CARGO_ERR_STDOUT`](api.md#CARGO_ERR_STDOUT) flag.
+By default the error messages are printed to `stderr`, if you instead want cargo to print them to `stdout` you can set the [`CARGO_ERR_STDOUT`](api.md#cargo_err_stdout) flag.
 
 Here are some examples on how this looks:
 
@@ -120,7 +123,7 @@ Unknown options:
 
 ### No error output
 
-[`CARGO_NOERR_OUTPUT`](api.md#CARGO_NOERR_OUTPUT)
+[`CARGO_NOERR_OUTPUT`](api.md#cargo_noerr_output)
 
 ```bash
 $ cargo_ex_ints
