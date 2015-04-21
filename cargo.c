@@ -8467,6 +8467,7 @@ int main(int argc, char **argv)
 	size_t num_tests = 0;
 	size_t success_count = 0;
 	int all = 0;
+	int quiet = 0;
 	int test_index = 0;
 	int shortlist = 0;
 	int start = 1;
@@ -8496,6 +8497,10 @@ int main(int argc, char **argv)
 			"Run all tests.",
 			"b", &all);
 
+	ret |= cargo_add_option(cargo, 0, "--quiet -q",
+			"Suppress CARGO_DEBUG output.",
+			"b", &quiet);
+
 	ret |= cargo_add_option(cargo, 0, "tests",
 			"Either a test number or name. "
 			"If -1 is specified all tests will be run.",
@@ -8523,7 +8528,7 @@ int main(int argc, char **argv)
 		return CARGO_NUM_TESTS;
 	}
 
-	cargo_suppress_debug = 0;
+	if (!quiet) cargo_suppress_debug = 0;
 
 	for (i = 0; i < test_name_count; i++)
 	{
@@ -8649,7 +8654,7 @@ int main(int argc, char **argv)
 
 	cargo_suppress_debug = 1;
 	cargo_destroy(&cargo);
-	cargo_suppress_debug = 0;
+	if (!quiet) cargo_suppress_debug = 0;
 
 	return (num_tests - success_count);
 }
