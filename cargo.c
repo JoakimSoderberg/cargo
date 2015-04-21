@@ -58,7 +58,7 @@ do 																			\
 #define CARGODBGI(level, fmt, ...)											\
 do 																			\
 {																			\
-	if (level <= CARGO_DEBUG)												\
+	if (!cargo_suppress_debug && (level <= CARGO_DEBUG))					\
 	{																		\
 		fprintf(stderr, fmt, ##__VA_ARGS__);								\
 	}																		\
