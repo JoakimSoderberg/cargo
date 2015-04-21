@@ -442,6 +442,41 @@ Another way of overriding this is to simply display the variables in the mutex g
 #### `CARGO_MUTEXGRP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the mutex group description.
 
+#### `CARGO_MUTEXGRP_ORDER_BEFORE` ####
+This flag enables you to force the order a set of options is parsed in. The first option added to this group is special. Any options added after it must be specified before it on the command line.
+
+So if you have `--alpha --beta --centauri --delta` and add `--alpha` as the first option to the mutex group `mutex1` and set this flag on it. Any additional options added to that group must always be parsed before `--alpha`.
+
+```c
+int a = 0;
+int b = 0;
+int c = 0;
+int d = 0;
+
+cargo_add_mutex_group(cargo, CARGO_MUTEXGRP_ORDER_BEFORE,
+                            "mutex1", "Mutex group 1", NULL);
+
+cargo_add_option(cargo, 0, "<!mutex1> --alpha -a", "Description", "b", &a);
+cargo_add_option(cargo, 0, "<!mutex1> --beta -b", "Description", "b", &b);
+cargo_add_option(cargo, 0, "<!mutex1> --centauri -c", "Description", "b", &c);
+cargo_add_option(cargo, 0, "--delta -d", "Description", "b", &d);
+
+cargo_parse(cargo, 0, 1, argc, argv);
+```
+
+So if you input `"--alpha --beta --centauri --delta"`:
+
+```bash
+Usage: program [--help HELP] [--alpha] [--beta] [--centauri] [--delta]
+--alpha --beta --centauri --delta
+^^^^^^^ ~~~~~~ ~~~~~~~~~~
+These options must all be specified before "--alpha":
+--beta, --centauri
+```
+
+#### `CARGO_MUTEXGRP_ORDER_AFTER` ####
+Same as [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_after) except that the rest of the variables in the mutex group must be parsed after the first one.
+
 
 ### cargo_group_flags_t ###
 

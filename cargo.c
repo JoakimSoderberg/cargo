@@ -710,7 +710,7 @@ typedef struct cargo_opt_s
 	size_t max_target_count;
 
 	int array;
-	int parsed;
+	int parsed;					// The argv index when we last parsed the option
 	cargo_option_flags_t flags;
 	int num_eaten;
 
@@ -1067,7 +1067,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 	assert(opt);
 
 	opt->target_idx = 0;
-	opt->parsed = 0;
+	opt->parsed = -1;		// This is the index into argv that we parsed this option at.
 	opt->num_eaten = 0;
 
 	CARGODBG(3, "Cleanup option (%s) target: %s\n", _cargo_type_map[opt->type], opt->name[0]);
@@ -1483,7 +1483,7 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 
 static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const char *name)
 {
-	if (opt->parsed)
+	if (opt->parsed >= 0)
 	{
 		cargo_astr_t str;
 		char *error = NULL;
@@ -1711,6 +1711,11 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 	memset(buf, 0, bufsize);
 	str.s = buf;
 	str.l = bufsize;
+
+	if (opt->type == CARGO_BOOL)
+	{
+		return 0;
+	}
 
 	while (_cargo_is_prefix(ctx, opt->name[0][i]))
 	{
@@ -2205,6 +2210,9 @@ static int _cargo_mutex_group_should_be_grouped(cargo_t ctx,
 	{
 		assert(opt->mutex_group_idxs[i] < ctx->mutex_group_count);
 		mgrp = &ctx->mutex_groups[opt->mutex_group_idxs[i]];
+
+		if (mgrp->flags & (CARGO_MUTEXGRP_ORDER_BEFORE | CARGO_MUTEXGRP_ORDER_AFTER))
+			continue;
 
 		if (short_usage)
 		{
@@ -3030,6 +3038,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 }
 
 static void _cargo_print_mutex_group(cargo_t ctx,
+									 size_t start_index,
 									 cargo_astr_t *str,
 									 cargo_group_t *g)
 {
@@ -3038,12 +3047,193 @@ static void _cargo_print_mutex_group(cargo_t ctx,
 	assert(g);
 	assert(str);
 
-	for (i = 0; i < g->opt_count; i++)
+	if (start_index >= g->opt_count)
+		return;
+
+	for (i = start_index; i < g->opt_count; i++)
 	{
 		opt = &ctx->options[g->option_indices[i]];
 		cargo_aappendf(str, "%s%s", opt->name[0],
 				(i < (g->opt_count - 1)) ? ", " : "\n");
 	}
+}
+
+static void _cargo_print_mutex_group_highlights(cargo_t ctx,
+											cargo_astr_t *str,
+											cargo_highlight_t *parse_highlights,
+											size_t parsed_count)
+{
+	char *s;
+
+	if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
+				_cargo_get_cflag(ctx), ctx->max_width,
+				parsed_count, parse_highlights)))
+	{
+		CARGODBG(1, "Out of memory\n");
+		return;
+	}
+
+	cargo_aappendf(str, "%s\n", s);
+	free(s);
+}
+
+static int _cargo_check_mutex_group(cargo_t ctx,
+									cargo_astr_t *str,
+									cargo_group_t *g)
+{
+	cargo_opt_t *opt = NULL;
+	size_t j = 0;
+	int ret = -1;
+	cargo_highlight_t *parse_highlights = NULL;
+	size_t parsed_count = 0;
+	assert(ctx);
+	assert(g);
+	assert(str);
+
+	parsed_count = 0;
+
+	// We create a list of highlights, so if more than one option in the
+	// mutex groups is parsed, we can highlight it.
+	if (!(parse_highlights = calloc(g->opt_count,
+								sizeof(cargo_highlight_t))))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	for (j = 0; j < g->opt_count; j++)
+	{
+		opt = &ctx->options[g->option_indices[j]];
+
+		if (opt->parsed >= 0)
+		{
+			// TODO: Mutex. Hmmm is this really correct? opt->parsed is set to ctx->i
+			parse_highlights[parsed_count].i = j + ctx->start;
+			parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
+			parsed_count++;
+		}
+	}
+
+	if (parsed_count > 1)
+	{
+		_cargo_print_mutex_group_highlights(ctx, str, parse_highlights, parsed_count);
+		cargo_aappendf(str, "Only one of these variables allowed at the same time:\n");
+		_cargo_print_mutex_group(ctx, 0, str, g);
+		goto fail;
+	}
+	else if ((parsed_count == 0)
+			&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
+	{
+		cargo_aappendf(str, "One of these variables is required:\n");
+		_cargo_print_mutex_group(ctx, 0, str, g);
+		goto fail;
+	}
+
+	ret = 0;
+
+fail:
+	if (parse_highlights)
+	{
+		free(parse_highlights);
+		parse_highlights = NULL;
+	}
+
+	return ret;
+}
+
+static int _cargo_check_order_mutex_group(cargo_t ctx,
+										  cargo_astr_t *str,
+										  cargo_group_t *g)
+{
+	int ret = -1;
+	size_t i = 0;
+	cargo_opt_t *opt = NULL;
+	cargo_opt_t *first_opt = NULL;
+	cargo_highlight_t *parse_highlights = NULL;
+	size_t parsed_count = 0;
+	int first_i = -1;
+	int is_invalid = 0;
+	size_t invalid_order_count = 0;
+	assert(ctx);
+	assert(str);
+	assert(g);
+	assert(g->flags & (CARGO_MUTEXGRP_ORDER_BEFORE | CARGO_MUTEXGRP_ORDER_AFTER));
+
+	if (g->opt_count == 0)
+	{
+		CARGODBG(1, "Warning: No options in mutex order group \"%s\"\n", g->name);
+		return 0;
+	}
+
+	// We create a list of highlights, so if more than one option in the
+	// mutex groups is parsed, we can highlight it.
+	if (!(parse_highlights = calloc(g->opt_count,
+								sizeof(cargo_highlight_t))))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		goto fail;
+	}
+
+	// We compare all other options with the parse index of the first one.
+	first_opt = &ctx->options[g->option_indices[0]];
+	first_i = first_opt->parsed;
+
+	parse_highlights[invalid_order_count].i = i + ctx->start;
+	parse_highlights[invalid_order_count].c = "^"CARGO_COLOR_GREEN;
+
+	invalid_order_count = 1;
+
+	for (i = 1; i < g->opt_count; i++)
+	{
+		is_invalid = 0;
+		opt = &ctx->options[g->option_indices[i]];
+
+		// Skip unparsed.
+		if (opt->parsed < 0) continue;
+
+		if (g->flags & CARGO_MUTEXGRP_ORDER_BEFORE)
+		{
+			if (opt->parsed > first_i)
+			{
+				is_invalid = 1;	
+			}
+		}
+		else
+		{
+			if (opt->parsed < first_i)
+			{
+				is_invalid = 1;
+			}
+		}
+
+		if (is_invalid)
+		{
+			parse_highlights[invalid_order_count].i = i + ctx->start;
+			parse_highlights[invalid_order_count].c = "~"CARGO_COLOR_RED;
+			invalid_order_count++;
+		}
+	}
+
+	if (invalid_order_count > 1)
+	{
+		_cargo_print_mutex_group_highlights(ctx, str, parse_highlights, invalid_order_count);
+		cargo_aappendf(str, "These options must all be specified %s \"%s\":\n",
+			(g->flags & CARGO_MUTEXGRP_ORDER_BEFORE) ? "before" : "after",
+			first_opt->name[0]);
+		_cargo_print_mutex_group(ctx, 1, str, g);
+		goto fail;
+	}
+
+	ret = 0;
+
+fail:
+	if (parse_highlights)
+	{
+		free(parse_highlights);
+		parse_highlights = NULL;
+	}
+
+	return ret;
 }
 
 static int _cargo_check_mutex_groups(cargo_t ctx)
@@ -3053,10 +3243,7 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 	int ret = -1;
 	size_t i = 0;
 	size_t j = 0;
-	cargo_highlight_t *parse_highlights = NULL;
-	size_t parsed_count = 0;
 	cargo_group_t *g = NULL;
-	cargo_opt_t *opt = NULL;
 	assert(ctx);
 	memset(&str, 0, sizeof(cargo_astr_t));
 	str.s = &error;
@@ -3066,57 +3253,28 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 	for (i = 0; i < ctx->mutex_group_count; i++)
 	{
 		g = &ctx->mutex_groups[i];
-		parsed_count = 0;
 
-		if (!(parse_highlights = calloc(g->opt_count,
-									sizeof(cargo_highlight_t))))
+		if (g->flags & (CARGO_MUTEXGRP_ORDER_BEFORE | CARGO_MUTEXGRP_ORDER_AFTER))
 		{
-			CARGODBG(1, "Out of memory!\n");
-			goto fail;
-		}
+			CARGODBG(2, "Order mutex group %s:\n", g->name);
 
-		for (j = 0; j < g->opt_count; j++)
-		{
-			opt = &ctx->options[g->option_indices[j]];
-
-			if (opt->parsed)
+			// Check that all options in the group is either before or after
+			// the first option of the group.
+			if (_cargo_check_order_mutex_group(ctx, &str, g))
 			{
-				// TODO: Mutex. Hmmm is this really correct? opt->parsed is set to ctx->i
-				parse_highlights[parsed_count].i = j + ctx->start;
-				parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
-				parsed_count++;
-			}
-		}
-
-		if (parsed_count > 1)
-		{
-			char *s;
-
-			if (!(s = cargo_get_fprintl_args(ctx->argc, ctx->argv, ctx->start,
-						_cargo_get_cflag(ctx), ctx->max_width,
-						parsed_count, parse_highlights)))
-			{
-				CARGODBG(1, "Out of memory\n");
 				goto fail;
 			}
-
-			cargo_aappendf(&str, "%s\n", s);
-			free(s);
-
-			cargo_aappendf(&str, "Only one of these variables allowed at the same time:\n");
-			_cargo_print_mutex_group(ctx, &str, g);
-			goto fail;
 		}
-		else if ((parsed_count == 0)
-				&& (g->flags & CARGO_MUTEXGRP_ONE_REQUIRED))
+		else
 		{
-			cargo_aappendf(&str, "One of these variables is required:\n");
-			_cargo_print_mutex_group(ctx, &str, g);
-			goto fail;
-		}
+			CARGODBG(2, "Normal mutex group %s:\n", g->name);
 
-		free(parse_highlights);
-		parse_highlights = NULL;
+			// Check that only one of the group is selected.
+			if (_cargo_check_mutex_group(ctx, &str, g))
+			{
+				goto fail;
+			}
+		}
 	}
 
 	ret = 0;
@@ -3124,11 +3282,6 @@ fail:
 	if (ret)
 	{
 		_cargo_set_error(ctx, error);
-	}
-
-	if (parse_highlights)
-	{
-		free(parse_highlights);
 	}
 
 	return ret;
@@ -3416,7 +3569,7 @@ static int _cargo_check_required_options(cargo_t ctx)
 	{
 		opt = &ctx->options[i];
 
-		if ((opt->flags & CARGO_OPT_REQUIRED) && !opt->parsed)
+		if ((opt->flags & CARGO_OPT_REQUIRED) && (opt->parsed < 0))
 		{
 			CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
 			cargo_aappendf(&errstr, "Missing required argument \"%s\"\n", opt->name[0]);
@@ -3425,7 +3578,7 @@ static int _cargo_check_required_options(cargo_t ctx)
 			return -1;
 		}
 
-		if (opt->parsed)
+		if (opt->parsed >= 0)
 		{
 			if (((opt->nargs == CARGO_NARGS_ONE_OR_MORE) && (opt->num_eaten == 0))
 			 || ((opt->nargs >= 0) && (opt->num_eaten != opt->nargs)))
@@ -3586,6 +3739,11 @@ static const void _cargo_mutex_group_short_usage(cargo_t ctx,
 	for (i = 0; i < ctx->mutex_group_count; i++)
 	{
 		mgrp = &ctx->mutex_groups[i];
+
+		if (mgrp->flags & (CARGO_MUTEXGRP_ORDER_BEFORE | CARGO_MUTEXGRP_ORDER_AFTER))
+		{
+			continue;
+		}
 
 		// Given by the user to override.
 		if (mgrp->metavar)
@@ -8296,6 +8454,60 @@ _TEST_START(TEST_bool_acc_plus)
 }
 _TEST_END()
 
+static char *_test_mutex_order_group(cargo_t cargo, cargo_mutex_group_flags_t flags,
+									 int args1_expect, int args2_expect)
+{
+	char *msg = NULL;
+	int ret = 0;
+	int a = 0;
+	int b = 0;
+	int c = 0;
+	int d = 0;
+	int e = 0;
+	int f = 0;
+	char *args1[] = { "program", "--alpha", "--beta", "--centauri", "--error" };
+	char *args2[] = { "program", "--fail", "--beta", "--centauri", "--alpha", "--error" };
+
+	ret = cargo_add_mutex_group(cargo, flags, "mgroup1", "Mutex group 1",
+			"MGROUP1_DESCRIPTION " LOREM_IPSUM);
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --alpha -a", "Error Description", "b", &a);
+
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --beta -b", LOREM_IPSUM, "b", &b);
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --centauri -c", "bla bla" LOREM_IPSUM, "b", &c);
+	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --delta -d", "bla bla" LOREM_IPSUM, "b", &d);
+	
+	ret |= cargo_add_option(cargo, 0, "--error -e", "AAWESOME" LOREM_IPSUM, "b", &d);
+	ret |= cargo_add_option(cargo, 0, "--fail -f", "Fail " LOREM_IPSUM, "b", &d);
+
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args1) / sizeof(args1[0]), args1);
+	cargo_assert(ret == args1_expect, "Unexpected result on parse");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == args2_expect, "Unexpected result on parse");
+fail:
+	return msg;
+}
+
+_TEST_START(TEST_mutex_order_group_before)
+{
+	printf("Test order before:\n");
+	msg = _test_mutex_order_group(cargo, CARGO_MUTEXGRP_ORDER_BEFORE, -1, 0);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_mutex_order_group_after)
+{
+	printf("Test order after:\n");
+	msg = _test_mutex_order_group(cargo, CARGO_MUTEXGRP_ORDER_AFTER, 0, -1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test cargo_get_error
@@ -8415,7 +8627,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_group_add_missing_group),
 	CARGO_ADD_TEST(TEST_bool_acc_or),
 	CARGO_ADD_TEST(TEST_bool_acc_and),
-	CARGO_ADD_TEST(TEST_bool_acc_plus)
+	CARGO_ADD_TEST(TEST_bool_acc_plus),
+	CARGO_ADD_TEST(TEST_mutex_order_group_before),
+	CARGO_ADD_TEST(TEST_mutex_order_group_after),
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
@@ -8443,19 +8657,6 @@ static int _test_find_test_index(const char *name)
 	}
 
 	return -1;
-}
-
-static int _tests_print_usage(const char *progname)
-{
-	_test_print_names();
-	fprintf(stderr, "\nCargo v%s\n", cargo_get_version());
-	fprintf(stderr, "Usage: %s [--shortlist] [test_num ...] [test_name ...]\n\n", progname);
-	fprintf(stderr, "  --shortlist  Don't list test that were not run (must be first argument).\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "  Use test_num = -1 or all tests\n");
-	fprintf(stderr, "  Or you can specify the testname: TEST_...\n");
-	fprintf(stderr, "  Return code for this usage message equals the number of available tests.\n");
-	return CARGO_NUM_TESTS;
 }
 
 int main(int argc, char **argv)

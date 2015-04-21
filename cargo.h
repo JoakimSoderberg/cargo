@@ -163,7 +163,9 @@ typedef enum cargo_mutex_group_flags_e
 	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0),
 	CARGO_MUTEXGRP_GROUP_USAGE			= (1 << 1),
 	CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE	= (1 << 2),
-	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3)
+	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3),
+	CARGO_MUTEXGRP_ORDER_BEFORE			= (1 << 4),
+	CARGO_MUTEXGRP_ORDER_AFTER			= (1 << 5)
 } cargo_mutex_group_flags_t;
 
 typedef enum cargo_group_flags_e
@@ -223,11 +225,14 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
 
-int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const char *metavar);
+int cargo_mutex_group_set_metavar(cargo_t ctx,
+								const char *mutex_group,
+								const char *metavar);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
-int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, char **argv);
+int cargo_parse(cargo_t ctx, cargo_flags_t flags,
+				int start_index, int argc, char **argv);
 
 void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
 
