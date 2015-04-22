@@ -156,7 +156,8 @@ typedef enum cargo_option_flags_e
 	CARGO_OPT_UNIQUE					= (1 << 0),
 	CARGO_OPT_REQUIRED					= (1 << 1),
 	CARGO_OPT_NOT_REQUIRED				= (1 << 2),
-	CARGO_OPT_RAW_DESCRIPTION			= (1 << 3)
+	CARGO_OPT_RAW_DESCRIPTION			= (1 << 3),
+	CARGO_OPT_STOP						= (1 << 4)
 } cargo_option_flags_t;
 
 typedef enum cargo_mutex_group_flags_e
@@ -205,8 +206,13 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
-// TODO: Add flag. So one can set flag "per item" or "all".
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+
+int cargo_set_option_descriptionv(cargo_t ctx,
+								  char *optname, const char *fmt, va_list ap);
+
+int cargo_set_option_description(cargo_t ctx,
+								 char *optname, const char *fmt, ...);
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);

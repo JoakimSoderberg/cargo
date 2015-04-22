@@ -755,6 +755,7 @@ typedef struct cargo_s
 	int argc;
 	char **argv;
 	int start;
+	int stopped;
 
 	int help;
 
@@ -1683,6 +1684,12 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		}
 
 		CARGODBG(2, "Custom call back ate: %d\n", custom_eaten);
+	}
+
+	if (opt->flags & CARGO_OPT_STOP)
+	{
+		CARGODBG(2, "%s: Stopping parse\n", opt->name[0]);
+		ctx->stopped = 1;
 	}
 
 	return (opt->positional) ? opt->num_eaten : (opt->num_eaten + 1);
@@ -4364,6 +4371,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	ctx->argc = argc;
 	ctx->argv = argv;
 	ctx->start = start_index;
+	ctx->stopped = 0;
 
 	_cargo_set_error(ctx, NULL);
 
@@ -4423,7 +4431,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 
 		// TODO: Add support for abbreviated prefix matching so that
 		// --ar will match --arne unless it's ambigous with some other option.
-		if ((name = _cargo_check_options(ctx, &opt, arg)))
+		if (!ctx->stopped && (name = _cargo_check_options(ctx, &opt, arg)))
 		{
 			// We found an option, parse any arguments it might have.
 			if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
@@ -4441,7 +4449,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 			CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
 
 			// Positional argument.
-			if (_cargo_get_positional(ctx, &opt_i) == 0)
+			if (!ctx->stopped && (_cargo_get_positional(ctx, &opt_i) == 0))
 			{
 				opt = &ctx->options[opt_i];
 				if ((opt_arg_count = _cargo_parse_option(ctx, opt,
@@ -8710,10 +8718,43 @@ _TEST_START(TEST_cargo_set_option_description)
 }
 _TEST_END()
 
+_TEST_START(TEST_parse_stop)
+{
+	size_t extra_args_count = 0;
+	char **extra_args = NULL;
+	int a = 0;
+	int b = 0;
+	int c = 0;
+	int d = 0;
+	char *args[] = { "--beta", "123", "--alpha", "--centauri", "beep", "--delta" };
+	// We stop parsing here ---------------------^
+	char *extra_expect[] = { "123", "beep", "--delta" };
+
+	cargo_set_flags(cargo, 0);
+
+	ret |= cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	ret |= cargo_add_option(cargo, 0, "--beta", "an option", "b", &b);
+	ret |= cargo_add_option(cargo, CARGO_OPT_STOP, "--centauri", "an option", "b", &c);
+	ret |= cargo_add_option(cargo, 0, "--delta", "an option", "b", &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+
+	extra_args = cargo_get_args_copy(cargo, &extra_args_count);
+
+	cargo_assert_str_array(extra_args_count,
+		sizeof(extra_expect) / sizeof(extra_expect[0]),
+		extra_args, extra_expect);
+
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&extra_args, &extra_args_count);
+}
+_TEST_END()
+
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
-// TODO: Test CARGO_OPT_STOP
-// TODO: Test cargo_set_option_description
 
 //
 // List of all test functions to run:
@@ -8834,7 +8875,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_mutex_order_group_after),
 	CARGO_ADD_TEST(TEST_medium_length_usage),
 	CARGO_ADD_TEST(TEST_cargo_get_unknown_copy),
-	CARGO_ADD_TEST(TEST_cargo_get_args_copy)
+	CARGO_ADD_TEST(TEST_cargo_get_args_copy),
+	CARGO_ADD_TEST(TEST_cargo_set_option_description),
+	CARGO_ADD_TEST(TEST_parse_stop)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
