@@ -3107,8 +3107,7 @@ static int _cargo_check_mutex_group(cargo_t ctx,
 
 		if (opt->parsed >= 0)
 		{
-			// TODO: Mutex. Hmmm is this really correct? opt->parsed is set to ctx->i
-			parse_highlights[parsed_count].i = j + ctx->start;
+			parse_highlights[parsed_count].i = opt->parsed;
 			parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
 			parsed_count++;
 		}
@@ -3117,7 +3116,7 @@ static int _cargo_check_mutex_group(cargo_t ctx,
 	if (parsed_count > 1)
 	{
 		_cargo_print_mutex_group_highlights(ctx, str, parse_highlights, parsed_count);
-		cargo_aappendf(str, "Only one of these variables allowed at the same time:\n");
+		cargo_aappendf(str, "Only one of these variables is allowed at the same time:\n");
 		_cargo_print_mutex_group(ctx, 0, str, g);
 		goto fail;
 	}
@@ -3189,7 +3188,13 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 		opt = &ctx->options[g->option_indices[i]];
 
 		// Skip unparsed.
-		if (opt->parsed < 0) continue;
+		if (opt->parsed < 0)
+		{
+			CARGODBG(3, "  Not parsed skipping %s\n", opt->name[0]);
+			continue;
+		}
+
+		CARGODBG(3, "  Check mutex order for %s\n", opt->name[0]);
 
 		if (g->flags & CARGO_MUTEXGRP_ORDER_BEFORE)
 		{
@@ -3208,7 +3213,8 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 
 		if (is_invalid)
 		{
-			parse_highlights[invalid_order_count].i = i + ctx->start;
+			CARGODBG(3, "     Invalid order, highlight index %d\n", opt->parsed);
+			parse_highlights[invalid_order_count].i = opt->parsed;
 			parse_highlights[invalid_order_count].c = "~"CARGO_COLOR_RED;
 			invalid_order_count++;
 		}
@@ -3919,6 +3925,8 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 
 	// Add the default group.
 	cargo_add_group(c, 0, "", "", "");
+
+	_cargo_add_help_if_missing(c);
 
 	return 0;
 }
@@ -6149,13 +6157,12 @@ _TEST_START(TEST_autohelp_default)
 }
 _TEST_END()
 
-_TEST_START(TEST_autohelp_off)
+_TEST_START_EX(TEST_autohelp_off, CARGO_NO_AUTOHELP)
 {
 	int i;
 	const char *usage = NULL;
 
 	// Turn off auto_help (--help).
-	cargo_set_flags(cargo, CARGO_NO_AUTOHELP);
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
 
 	usage = cargo_get_usage(cargo, 0);
@@ -6167,8 +6174,9 @@ _TEST_START(TEST_autohelp_off)
 				"Help found when auto_help turned off");
 
 	_TEST_CLEANUP();
+	cargo_destroy(&cargo);
 }
-_TEST_END()
+_TEST_END_NODESTROY()
 
 #define _ADD_TEST_USAGE_OPTIONS() 											\
 do 																			\
