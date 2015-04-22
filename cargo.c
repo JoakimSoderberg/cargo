@@ -857,6 +857,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 	size_t i = 0;
 	size_t j = 0;
 	cargo_opt_t *opt = NULL;
+	assert(name);
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
@@ -4602,6 +4603,47 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 	CARGODBG(2, "  Added alias \"%s\"\n", alias);
 
 	return 0;
+}
+
+int cargo_set_option_descriptionv(cargo_t ctx,
+								  char *optname, const char *fmt, va_list ap)
+{
+	int ret = 0;
+	size_t opt_i = 0;
+	size_t name_i = 0;
+	cargo_opt_t *opt = NULL;
+	va_list apc;
+	assert(ctx);
+ 
+	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
+	{
+		CARGODBG(1, "Failed to find option \"%s\"\n", optname);
+		return -1;
+	}
+
+	opt = &ctx->options[opt_i];
+
+	if (opt->description)
+	{
+		free(opt->description);
+		opt->description = NULL;
+	}
+
+	ret = cargo_vasprintf(&opt->description, fmt, ap);
+
+	return (ret >= 0) ? 0 : -1;
+}
+
+int cargo_set_option_description(cargo_t ctx,
+								 char *optname, const char *fmt, ...)
+{
+	int ret = 0;
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	ret = cargo_set_option_descriptionv(ctx, optname, fmt, ap);
+	va_end(ap);
+	return ret;
 }
 
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
@@ -8652,6 +8694,21 @@ _TEST_START(TEST_cargo_get_args_copy)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_set_option_description)
+{
+	int a = 0;
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	cargo_assert(ret == 0, "Failed to create option");
+
+	ret = cargo_set_option_description(cargo, "--alpha",
+			"%s world %d", "hello", 123);
+	cargo_assert(ret == 0, "Failed to set description");
+
+	cargo_print_usage(cargo, 0);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help

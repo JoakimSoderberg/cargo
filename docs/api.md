@@ -799,6 +799,46 @@ Usage: program [--alpha ALPHA] VARS
 
 For another setting related how the mutex group is shown in the usage see [`CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE`](api.md#cargo_mutexgrp_no_group_short_usage).
 
+### cargo_set_option_description ###
+
+```c
+int cargo_set_option_description(cargo_t ctx,
+                 char *optname, const char *fmt, ...);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The option name you want to set the metavar for.
+
+**fmt**: Printf format string.
+
+**...**: Variable arguments for printf.
+---
+
+This sets an options description with printf formatting avaialable.
+
+### cargo_set_option_descriptionv ###
+
+```c
+int cargo_set_option_descriptionv(cargo_t ctx,
+                  char *optname, const char *fmt, va_list ap);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The option name you want to set the metavar for.
+
+**fmt**: Printf format string.
+
+**ap**: Variable arguments for printf.
+---
+
+Variadic version of [`cargo_set_option_description`](api.md#cargo_set_option_description).
+
 ### cargo_set_metavar ###
 
 ```c
