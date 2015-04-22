@@ -135,7 +135,8 @@ typedef enum cargo_flags_e
 	CARGO_NOERR_OUTPUT					= (1 << 2),
 	CARGO_NOERR_USAGE					= (1 << 3),
 	CARGO_ERR_STDOUT					= (1 << 4),
-	CARGO_NO_AUTOHELP					= (1 << 5)
+	CARGO_NO_AUTOHELP					= (1 << 5),
+	CARGO_NO_FAIL_UNKNOWN				= (1 << 6)
 } cargo_flags_t;
 
 typedef enum cargo_format_e

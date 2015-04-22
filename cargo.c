@@ -3339,6 +3339,12 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 	memset(&str, 0, sizeof(str));
 	str.s = &error;
 
+	if (ctx->flags & CARGO_NO_FAIL_UNKNOWN)
+	{
+		CARGODBG(2, "Skipping unknown check, CARGO_NO_FAIL_UNKNOWN set\n");
+		return 0;
+	}
+
 	// TODO: Add support for options with negative numbers.
 	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
 	{
