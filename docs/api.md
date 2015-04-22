@@ -1074,6 +1074,23 @@ This will return a list of strings containing the unknown options that were pass
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy of each string in the returned array.
 
+### cargo_get_unknown_copy ###
+
+```c
+const char **cargo_get_unknown_copy(cargo_t ctx, size_t *unknown_count);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**unknown_count**: A pointer to a `size_t` where the number of unknown options passed to [`cargo_parse`](api.md#cargo_parse) will be returned.
+
+---
+
+Same as [`cargo_get_unknown`](api.md#cargo_get_unknown) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
+
+
 ### cargo_get_args ###
 
 ```c
@@ -1089,6 +1106,22 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 ---
 
 This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
+
+### cargo_get_args_copy ###
+
+```c
+char **cargo_get_args_copy(cargo_t ctx, size_t *argc);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**argc**: A pointer to a `size_t` where the number of arguments passed to [`cargo_parse`](api.md#cargo_parse) that were not consumed is retruned.
+
+---
+
+Same as [`cargo_get_args`](api.md#cargo_get_args) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
 ### cargo_set_context ###
 

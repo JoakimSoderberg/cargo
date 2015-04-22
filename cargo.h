@@ -255,7 +255,11 @@ const char *cargo_get_error(cargo_t ctx);
 
 const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
+char **cargo_get_unknown_copy(cargo_t ctx, size_t *unknown_count);
+
 const char **cargo_get_args(cargo_t ctx, size_t *argc);
+
+char **cargo_get_args_copy(cargo_t ctx, size_t *argc);
 
 void cargo_set_context(cargo_t ctx, void *user);
 

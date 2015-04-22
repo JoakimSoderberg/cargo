@@ -3893,6 +3893,53 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 	return b;
 }
 
+char **_cargo_copy_string_list(char **strs, size_t count, size_t *target_count)
+{
+	char **ret = NULL;
+	size_t i;
+
+	if (target_count) *target_count = 0;
+
+	if (!strs)
+	{
+		return NULL;
+	}
+
+	if (!(ret = calloc(count, sizeof(char *))))
+	{
+		CARGODBG(1, "Out of memory!\n");
+		return NULL;
+	}
+
+	if (target_count) *target_count = count;
+
+	for (i = 0; i < count; i++)
+	{
+		if (!(ret[i] = strdup(strs[i])))
+		{
+			CARGODBG(1, "Out of memory\n");
+			goto fail;
+		}
+	}
+
+	return ret;
+fail:
+	if (ret)
+	{
+		count = i;
+		for (i = 0; i < count; i++)
+		{
+			free(ret[i]);
+		}
+
+		free(ret);
+	}
+
+	if (target_count) *target_count = 0;
+
+	return NULL;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 // -----------------------------------------------------------------------------
@@ -4478,6 +4525,13 @@ const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count)
 	return (const char **)ctx->unknown_opts;
 }
 
+char **cargo_get_unknown_copy(cargo_t ctx, size_t *unknown_count)
+{
+	assert(ctx);
+	return _cargo_copy_string_list(ctx->unknown_opts,
+			ctx->unknown_opts_count, unknown_count);
+}
+
 const char **cargo_get_args(cargo_t ctx, size_t *argc)
 {
 	assert(ctx);
@@ -4488,6 +4542,12 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc)
 	}
 
 	return (const char **)ctx->args;
+}
+
+char **cargo_get_args_copy(cargo_t ctx, size_t *argc)
+{
+	assert(ctx);
+	return _cargo_copy_string_list(ctx->args, ctx->arg_count, argc);
 }
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
@@ -5589,6 +5649,17 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 // LCOV_EXCL_START
 #ifdef CARGO_TEST
 
+
+#define LOREM_IPSUM															\
+	"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"		\
+	" eiusmod tempor incididunt ut labore et dolore magna aliqua. "			\
+	"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "	\
+	"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "	\
+	"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "	\
+	"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "	\
+	"culpa qui officia deserunt mollit anim id est laborum."
+
+
 #define cargo_assert(test, message) \
 do 									\
 {									\
@@ -5785,11 +5856,11 @@ _TEST_END()
 //
 #define _TEST_ARRAY_OPTION(array, array_size, args, argc, fmt, ...) 		 \
 {																			 \
- 	ret = cargo_add_option(cargo, 0, "--beta -b", "Description",				 \
+ 	ret = cargo_add_option(cargo, 0, "--beta -b", "Description",			 \
  							fmt, ##__VA_ARGS__);							 \
 	cargo_assert(ret == 0,													 \
 		"Failed to add "#array"["#array_size"] array option");				 \
-	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);		 \
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);	 \
 	cargo_assert(ret == 0, "Failed to parse array: "#array"["#array_size"]");\
 }
 
@@ -7213,15 +7284,6 @@ _TEST_START(TEST_zero_or_more_without_arg)
 }
 _TEST_END()
 
-#define LOREM_IPSUM															\
-	"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"		\
-	" eiusmod tempor incididunt ut labore et dolore magna aliqua. "			\
-	"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "	\
-	"nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "	\
-	"reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "	\
-	"pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "	\
-	"culpa qui officia deserunt mollit anim id est laborum."
-
 _TEST_START(TEST_group)
 {
 	int i = 0;
@@ -8526,6 +8588,7 @@ _TEST_START(TEST_medium_length_usage)
 	ret |= cargo_add_option(cargo, 0, "--alpha",
 							"Hello there\n"
 							"This isn't very long!", "D");
+	cargo_assert(ret == 0, "Failed to add options");
 	cargo_print_usage(cargo, 0);
 
 	cargo_assert(strstr(cargo_get_usage(cargo, 0), "   This isn't"),
@@ -8535,11 +8598,65 @@ _TEST_START(TEST_medium_length_usage)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_get_unknown_copy)
+{
+	size_t unknown_count = 0;
+	char **unknowns = NULL;
+	int a = 0;
+	char *args[] = { "--beta", "--alpha", "--centauri", "--delta" };
+	char *unknown_expect[] = { "--beta", "--centauri", "--delta" };
+
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == -1, "Expected fail on unknown options");
+
+	cargo_assert(cargo_get_error(cargo) != NULL, "Got NULL error");
+
+	unknowns = cargo_get_unknown_copy(cargo, &unknown_count);
+
+	cargo_assert_str_array(unknown_count,
+		sizeof(unknown_expect) / sizeof(unknown_expect[0]),
+		unknowns, unknown_expect);
+
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&unknowns, &unknown_count);
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_get_args_copy)
+{
+	size_t extra_args_count = 0;
+	char **extra_args = NULL;
+	int a = 0;
+	char *args[] = { "--beta", "123", "--alpha", "--centauri", "beep", "--delta" };
+	char *extra_expect[] = { "--beta", "123", "--centauri", "beep", "--delta" };
+
+	cargo_set_flags(cargo, CARGO_NO_FAIL_UNKNOWN);
+
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+
+	extra_args = cargo_get_args_copy(cargo, &extra_args_count);
+
+	cargo_assert_str_array(extra_args_count,
+		sizeof(extra_expect) / sizeof(extra_expect[0]),
+		extra_args, extra_expect);
+
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&extra_args, &extra_args_count);
+}
+_TEST_END()
+
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
-// TODO: Test cargo_get_error
-//
+// TODO: Test CARGO_OPT_STOP
+// TODO: Test cargo_set_option_description
 
 //
 // List of all test functions to run:
@@ -8658,6 +8775,9 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_bool_acc_plus),
 	CARGO_ADD_TEST(TEST_mutex_order_group_before),
 	CARGO_ADD_TEST(TEST_mutex_order_group_after),
+	CARGO_ADD_TEST(TEST_medium_length_usage),
+	CARGO_ADD_TEST(TEST_cargo_get_unknown_copy),
+	CARGO_ADD_TEST(TEST_cargo_get_args_copy)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
