@@ -2297,10 +2297,10 @@ static int _cargo_print_options(cargo_t ctx,
 
 		// Option description.
 		if ((flags & CARGO_USAGE_RAW_OPT_DESCRIPTIONS)
-			|| (opt->flags & CARGO_OPT_RAW_DESCRIPTION)
-			|| (opt->description
-				&& (strlen(opt->description) < ctx->max_width)))
+			|| (opt->flags & CARGO_OPT_RAW_DESCRIPTION))
 		{
+			CARGODBG(5, "%s: RAW DESCRIPTION\n", opt->name[0]);
+
 			if (cargo_aappendf(str, "%*s%s\n",
 				NAME_PADDING, "", opt->description) < 0)
 			{
@@ -8517,6 +8517,20 @@ _TEST_START(TEST_mutex_order_group_after)
 {
 	printf("Test order after:\n");
 	msg = _test_mutex_order_group(cargo, CARGO_MUTEXGRP_ORDER_AFTER, 0, -1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_medium_length_usage)
+{
+	ret |= cargo_add_option(cargo, 0, "--alpha",
+							"Hello there\n"
+							"This isn't very long!", "D");
+	cargo_print_usage(cargo, 0);
+
+	cargo_assert(strstr(cargo_get_usage(cargo, 0), "   This isn't"),
+				"Medium length usage not indented properly");
+
 	_TEST_CLEANUP();
 }
 _TEST_END()
