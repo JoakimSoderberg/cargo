@@ -117,7 +117,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-fail:
     cargo_destroy(&cargo);
 
     return 0;
