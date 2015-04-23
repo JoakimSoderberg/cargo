@@ -114,11 +114,12 @@ int main(int argc, char **argv)
 
     if (cargo_parse(cargo, 0, 1, argc, argv))
     {
-        return -1;
+        ret = -1;
+        goto fail;
     }
 
 fail:
     cargo_destroy(&cargo);
 
-    return 0;
+    return ret;
 }

@@ -656,7 +656,6 @@ WORD cargo_ansi_state_to_attr(cargo_ansi_state_t *state)
 
 void cargo_print_ansicolor(FILE *fd, const char *buf)
 {
-	const char *start = NULL;
 	const char *end = NULL;
 	char *numend = NULL;
 	const char *s = buf;
@@ -791,7 +790,7 @@ typedef struct cargo_opt_s
 								// (but not the array).
 
 	int group_index;
-	int mutex_group_idxs[CARGO_MAX_OPT_MUTEX_GROUP];
+	size_t mutex_group_idxs[CARGO_MAX_OPT_MUTEX_GROUP];
 	size_t mutex_group_count;
 	char **mutex_group_names;
 
@@ -994,14 +993,12 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 
 static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 {
-	size_t opt_len;
-	char *name = o->name[0];
 	assert(ctx);
 	assert(o);
 
 	if (!_cargo_nargs_is_valid(o->nargs))
 	{
-		CARGODBG(1, "%s: nargs is invalid %d\n", name, o->nargs);
+		CARGODBG(1, "%s: nargs is invalid %d\n", o->name[0], o->nargs);
 		return -1;
 	}
 
@@ -1009,14 +1006,14 @@ static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
 	{
 		if (!o->target)
 		{
-			CARGODBG(1, "%s: target NULL\n", name);
+			CARGODBG(1, "%s: target NULL\n", o->name[0]);
 			return -1;
 		}
 
 		if (!o->target_count
 			&& ((o->nargs > 1) || (o->nargs == CARGO_NARGS_ONE_OR_MORE)))
 		{
-			CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", name);
+			CARGODBG(1, "%s: target_count NULL, when nargs > 1\n", o->name[0]);
 			return -1;
 		}
 	}
@@ -2020,7 +2017,6 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	char *scpy = NULL;
 	char *end = NULL;
 	size_t splitlen = strlen(splitchars);
-	size_t split_count = 0;
 	assert(count);
 
 	*count = 0;
@@ -2101,7 +2097,6 @@ static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 	char *start = s;
 	char *prev = s;
 	char *p = s;
-	char *end = NULL;
 
 	if (!s)
 		return NULL;
@@ -2654,7 +2649,6 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 {
 	char **optname_list = NULL;
 	char *tmp = NULL;
-	size_t i;
 	assert(ctx);
 	assert(optcount);
 
@@ -2671,10 +2665,13 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 	}
 
 	#ifdef CARGO_DEBUG
-	CARGODBG(3, "Got %lu option names:\n", *optcount);
-	for (i = 0; i < *optcount; i++)
 	{
-		CARGODBG(3, " %s\n", optname_list[i]);
+		size_t i;
+		CARGODBG(3, "Got %lu option names:\n", *optcount);
+		for (i = 0; i < *optcount; i++)
+		{
+			CARGODBG(3, " %s\n", optname_list[i]);
+		}
 	}
 	#endif // CARGO_DEBUG
 
@@ -3907,7 +3904,6 @@ static void * _cargo_get_group_context(cargo_t ctx, const char *group,
 static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 						cargo_group_t *groups, size_t group_count)
 {
-	cargo_group_t *grp = NULL;
 	cargo_opt_t *o = NULL;
 	size_t opt_i;
 	assert(ctx);
@@ -4941,7 +4937,6 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 	size_t opt_i = 0;
 	size_t name_i = 0;
 	cargo_opt_t *opt = NULL;
-	va_list apc;
 	assert(ctx);
 
 	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
@@ -5053,7 +5048,6 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	size_t positional_count = 0;
 	size_t option_count = 0;
 	const char *short_usage = NULL;
-	cargo_opt_t *opt = NULL;
 	cargo_group_t *grp = NULL;
 	cargo_astr_t str;
 	int is_default_group = 1;
@@ -5137,7 +5131,6 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	for (i = 0; i < ctx->mutex_group_count; i++)
 	{
 		int indent = 2;
-		char *lb_desc;
 		const char *description = NULL;
 		grp = &ctx->mutex_groups[i];
 
@@ -7813,7 +7806,6 @@ _TEST_END()
 
 _TEST_START(TEST_custom_callback_fixed_array_no_count)
 {
-	size_t i;
 	_test_rect_t rect;
 	char *args[] = { "program", "--alpha", "1", "2", "3", "4" };
 
@@ -9273,7 +9265,6 @@ _TEST_START(TEST_mutex_order_group_before)
 	printf("Test order before:\n");
 	msg = _test_mutex_order_group(cargo,
 			CARGO_MUTEXGRP_ORDER_BEFORE, CARGO_PARSE_MUTEX_CONFLICT_ORDER, 0);
-	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -9282,7 +9273,6 @@ _TEST_START(TEST_mutex_order_group_after)
 	printf("Test order after:\n");
 	msg = _test_mutex_order_group(cargo,CARGO_MUTEXGRP_ORDER_AFTER, 0,
 			CARGO_PARSE_MUTEX_CONFLICT_ORDER);
-	_TEST_CLEANUP();
 }
 _TEST_END()
 
