@@ -140,7 +140,7 @@ If you instead want a complete copy of this list you can use [`cargo_parse_copy`
 
 Unknown options
 ---------------
-When cargo parses a command line it will by default fail on finding options prepended with the [`prefix`](api.md#cargo_set_prefix) character that has not been added with [`cargo_add_option`](api.md#cargo_add_option). [`cargo_parse`](api.md#cargo_parse) will in this case return [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#cargo_parse_unknown_opts).
+When cargo parses a command line it will by default fail on finding options prepended with the [`prefix`](api.md#cargo_set_prefix) character that has not been added with [`cargo_add_option`](api.md#cargo_add_option). [`cargo_parse`](api.md#cargo_parse) will in this case return [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts).
 
 To get a read only list containing the list of these unknown options you can call [`cargo_get_unknown`](api.md#cargo_get_unknown). Or if you want a changeable copy instead you can use [`cargo_get_unknown_copy`](api.md#cargo_get_unknown_copy). This can then be freed using the utility function [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
