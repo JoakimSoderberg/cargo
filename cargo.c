@@ -4070,13 +4070,6 @@ cargo_flags_t cargo_get_flags(cargo_t ctx)
 	return ctx->flags;
 }
 
-void cargo_set_option_count_hint(cargo_t ctx, size_t option_count)
-{
-	assert(ctx);
-	if (ctx->opt_count == 0)
-		ctx->max_opts = option_count;
-}
-
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 {
 	assert(ctx);
@@ -6349,23 +6342,6 @@ _TEST_START(TEST_misspelled_argument)
 
 	ret = cargo_parse(cargo, 0, 1, 3, args);
 	cargo_assert(ret == -1, "Got valid parse with invalid input");
-	_TEST_CLEANUP();
-}
-_TEST_END()
-
-_TEST_START(TEST_max_option_count)
-{
-	int i;
-	float f;
-	int b;
-
-	cargo_set_option_count_hint(cargo, 1);
-
-	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);
-	ret |= cargo_add_option(cargo, 0, "--beta", "The alpha", "f", &f);
-	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);
-
-	cargo_assert(ret == 0, "Failed to add options");
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -8804,7 +8780,6 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_autohelp_off),
 	CARGO_ADD_TEST(TEST_get_usage),
 	CARGO_ADD_TEST(TEST_misspelled_argument),
-	CARGO_ADD_TEST(TEST_max_option_count),
 	CARGO_ADD_TEST(TEST_add_duplicate_option),
 	CARGO_ADD_TEST(TEST_get_extra_args),
 	CARGO_ADD_TEST(TEST_get_unknown_opts),

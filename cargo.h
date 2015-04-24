@@ -241,8 +241,6 @@ void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 int cargo_parse(cargo_t ctx, cargo_flags_t flags,
 				int start_index, int argc, char **argv);
 
-void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
-
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width);
