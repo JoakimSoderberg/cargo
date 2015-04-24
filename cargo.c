@@ -4507,7 +4507,11 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	}
 
 	// Shows warnings.
-	_cargo_parse_show_error(ctx);
+	if (!(ctx->flags & CARGO_NOWARN))
+	{
+		_cargo_parse_show_error(ctx);
+	}
+
 	ctx->flags = global_flags;
 	return CARGO_PARSE_OK;
 fail:
