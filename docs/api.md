@@ -1651,5 +1651,19 @@ void cargo_free_commandline(char ***argv, int argc);
 
 ---
 
-This can be used to free and `NULL` an `argv` array that was split using [`cargo_split_commandline`](api.md#cargo_split_commandline)
+This can be used to free and `NULL` an `argv` array that was split using [`cargo_split_commandline`](api.md#cargo_split_commandline).
+
+Note that this function will both free and set `argv` to `NULL`.
+
+```c
+char **argv = NULL;
+int argc;
+
+argv = cargo_split_commandline(0, "some --command line", &argc);
+
+...
+
+// Free and NULL argv.
+cargo_free_commandline(&argv, argc);
+```
 
