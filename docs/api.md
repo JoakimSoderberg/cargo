@@ -37,9 +37,9 @@ Sets the max width for the usage output to the console width.
 
 ### `CARGO_MAX_MAX_WIDTH`
 
-The absolute max console width allowed, any value set via This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width), will be capped to this.
+The absolute max console width allowed, any value set via [`cargo_set_max_width`](api.md#cargo_set_max_width), will be capped to this.
 
-Cargo version
+cargo version
 -------------
 
 ### `CARGO_MAJOR_VERSION` ###
@@ -60,7 +60,7 @@ If this is a release build, this will be set to `0`. Otherwise it is a developme
 
 ### `CARGO_VERSION` ###
 
-A hexidecimal representation of the cargo version, as a 4-byte integer in the form `(MAJOR << 24) | (MINOR << 16) | (PATCH << 8)`.
+A hexadecimal representation of the cargo version, as a 4-byte integer in the form `(MAJOR << 24) | (MINOR << 16) | (PATCH << 8)`.
 
 The last byte signifies the release status. `0` means release, and non-zero is a developer release after a given release.
 
@@ -125,9 +125,9 @@ These examples is what you would pass as `fmt` string, and the `...` variable ar
 * `"i", &val`
   Parse a single integer into `int val`.
 * `"b", &val`
-  Parse an option as a flag without any arguments. Stores `1` in `val` by default.
+  Parse an option as a flag without any arguments. Stores `1` in `val` if flag is set.
 * `"b=", &val, 5`
-  Parse an option as a flag. Stores 5 in `val`.
+  Parse an option as a flag. Stores 5 in `val` if flag is set.
 * `"b!", &val`
   Parse an option as a flag. Allow multiple occurances, count them and store the result in `val`.
 * `"f", &val`
@@ -139,23 +139,23 @@ These examples is what you would pass as `fmt` string, and the `...` variable ar
 * `"s#", &str, 32`
   Parse and allocate memory for `char *str` of max length 32.
 * `".s#", &str, 32`
-  Parse and copy to `char str[32]` of max length 32.
+  Parse and copy max 32 characters to `char str[32]`.
 * `"[i]*", &vals, &count`
-  Parse and allocate **zero or more** integers into `int *vals` and store the number parsed into `size_t count`.
+  Parse and allocate **zero or more** integers into `int *vals` and store the number of values parsed into `size_t count`.
 * `"[f]+", &vals, &count`
-  Parse and allocate **one or more** floats into `float *vals` and store the number parsed into `size_t count`
+  Parse and allocate **one or more** floats into `float *vals` and store the number of values parsed into `size_t count`
 * `"[s]+", &strs, &count`
-  Parse and allocate **one or more** strings into `char **strs` and store the number parsed into `size_t count`
+  Parse and allocate **one or more** strings into `char **strs` and store the number of strings parsed into `size_t count`
 * `"[i]#", &vals, &count, 4`
-  Parse and allocate max 4 integers into `int *vals` and store the number parsed into `size_t count`
+  Parse and allocate max 4 integers into `int *vals` and store the number of integers parsed into `size_t count`
 * `"[s]#", &strs, &count, 5`
-  Parse and allocate max 5 strings into `char **strs` and store the number parsed into `size_t count`
+  Parse and allocate max 5 strings into `char **strs` and store the number of strings parsed into `size_t count`
 * `"[s#]#", &strs, 32, &count, 5`
-  Parse and allocate max 5 strings of max 32 length, and store the number parsed into `size_t count`.
+  Parse and allocate max 5 strings of max 32 length, and store the number of strings parsed into `size_t count`.
 * `".[i]#", &vals, &count, 4`
-  Parse max 4 integers into `int vals[4]` and store the number parsed into `size_t count`.
+  Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
 * `".[i]+", &vals, &count, 4`
-  Parse max 4 integers into `int vals[4]` and store the number parsed into `size_t count`.
+  Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
 
 ### Type ###
 
@@ -175,9 +175,6 @@ The basis of the format is a type specifier:
 Only one type specifier is allowed in a format string.
 
 To parse an option that expects a `float` value as argument you call [`cargo_add_option`](api.md#cargo_add_option) in the following way:
-
-Example:
-To parse a float:
 ```c
 float val;
 cargo_add_option(cargo, 0, "--opt", "description", "f", &val);
@@ -189,7 +186,7 @@ char *str;
 ..., "s", &str);
 ```
 
-If an option expects an optional value, you can prepend it with `?`:
+If an option has an optional value, you can append `?`:
 ```c
 float val = 0.3f;
 cargo_add_option(cargo, 0, "--opt", "description", "f?", &val);
@@ -295,7 +292,7 @@ cargo_add_option(cargo, 0, "--opt", "description",
 
 ### cargo_t ###
 
-This is the type of the cargo context. This type is opague and should never be manipulated directly, only by using the cargo API functions.
+This is the type of the cargo context. This type is opaque and should never be manipulated directly, only by using the cargo API functions.
 
 To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
@@ -391,7 +388,7 @@ Show only the short usage.
 The description passed to [`cargo_init`](api.md#cargo_init) or set using [`cargo_set_description`](api.md#cargo_set_description) will be displayed as is, and no automatic formatting is done by cargo.
 
 #### `CARGO_USAGE_RAW_OPT_DESCRIPTIONS` ####
-All option descriptions will be treated as raw. Note that this can be set on a per option basis as well using [`CARGO_OPT_RAW_DESCRIPTION`](api.md#cargo_opt_raw_description). Cargo will not perform any automatic formatting on the option descriptions.
+All option descriptions will be treated as raw. Note that this can be set on a per option basis as well using [`CARGO_OPT_RAW_DESCRIPTION`](api.md#cargo_opt_raw_description). cargo will not perform any automatic formatting on the option descriptions.
 
 #### `CARGO_USAGE_RAW_EPILOG` ####
 The epilog (text after all option descriptions) set using [`cargo_set_epilog`](api.md#cargo_set_epilog) will be displayed as is, and no automatic formatting is done by cargo.
@@ -687,7 +684,7 @@ Note that you can have max [`CARGO_NAME_COUNT - 1`](api.md#CARGO_NAME_COUNT) ali
 
 Also note that this is usually best done directly when calling [`cargo_add_option`](api.md#cargo_add_option) instead.
 
-You cannot aliases to positional arguments (options starting without a prefix character).
+You cannot add aliases to positional arguments (options starting without a prefix character).
 
 ### cargo_add_group ###
 
@@ -1543,7 +1540,7 @@ program first second --third 123
 
 As you can see, you pass it an index, for instance `4`, as well as a highlight character `"*"`. In the example above, by appending a color after the highlight character this will be used when printing the highlight character.
 
-Cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But any ANSI color code can be used.
+cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But any ANSI color code can be used.
 
 Note that cargo internally also supports outputting these ANSI colors on **Windows** which does not have native ANSI console color support normally.
 
