@@ -358,6 +358,23 @@ cargo prints errors to `stderr` by default. This flag changes so that it prints 
 #### `CARGO_NO_AUTOHELP` ####
 This flag turns off the automatic creating of the `--help` option.
 
+#### `CARGO_NO_FAIL_UNKNOWN` ####
+Don't fail the parse when unknown options are found, simply add them to the list of unknown options.
+
+You can still get a list of the unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+#### `CARGO_UNIQUE_OPTS` ####
+By default if an options is specified more than once, the last value for the last occurrance is the one that counts, and will override anything specified earlier.
+
+This option will instead give an error if any option is specified more than once (except special cases for boolean options).
+
+This can be set on a per option basis as well using [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique).
+
+#### `CARGO_NOWARN` ####
+Don't show warnings.
+
+For example when [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is not set and an option is specified more than once, a warning will be shown that the first value is ignored. This suppresses this.
+
 ### cargo_usage_t ###
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
@@ -490,6 +507,51 @@ A use case for this might be an `--advanced_help` that unhides the group and pri
 #### `CARGO_GROUP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the group description.
 
+
+### cargo_parse_result_t ###
+
+This is the [`cargo_parse`](api.md#cargo_parse) return values. This is different from most other API return values since knowing the reason that a parse failed is usually important to be able to show a relevant error message.
+
+You can also get the internal error message that cargo displays by default by using [`cargo_get_error`](api.md#cargo_get_error).
+
+#### (0) `CARGO_PARSE_OK` ####
+For a successful parse this is returned.
+
+#### (-1) `CARGO_PARSE_UNKNOWN_OPTS` ####
+If the parse fails because there are unknown options in the given command line this will be returned.
+
+Unknown options are defined as arguments prepended with a [prefix](api.md#cargo_set_prefix) character that was not added using [`cargo_add_option`](api.md#cargo_add_option).
+
+You can get the list of unknown options found using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+Note that you can tell cargo not to fail on unknown options by setting the flag [`CARGO_NO_FAIL_UNKNOWN`](api.md#cargo_no_fail_unknown).
+
+#### (-2) `CARGO_PARSE_NOMEM` ####
+If cargo runs out of memory this will be returned when parsing.
+
+#### (-3) `CARGO_PARSE_FAIL_OPT` ####
+When cargo fails to parse an option for some reason.
+
+#### (-4) `CARGO_PARSE_MISS_REQUIRED` ####
+If any required option is missing.
+
+See [`CARGO_OPT_REQUIRED`](api.md#cargo_opt_required) and [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required).
+
+#### (-5) `CARGO_PARSE_MUTEX_CONFLICT` ####
+When a mutex group conflict occurs. Either that at least one option is required in a mutex group. Or that more than one in the mutex group has been specified at the same time.
+
+See [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#cargo_mutexgrp_one_required)
+
+#### (-6) `CARGO_PARSE_MUTEX_CONFLICT_ORDER` ####
+An order mutex group rule has been broken.
+
+See [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_before) and See [`CARGO_MUTEXGRP_ORDER_AFTER`](api.md#cargo_mutexgrp_order_before)
+
+#### (-7) `CARGO_PARSE_OPT_ALREADY_PARSED` ####
+If an option has already been parsed before (specified more than once) and either [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique) for the option is set. Alternatively if [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is set.
+
+#### (-8) `CARGO_PARSE_CALLBACK_ERR` ####
+If a custom option user callback parses an option and indicates that an error has occurred.
 
 ## Functions ##
 
@@ -815,6 +877,7 @@ int cargo_set_option_description(cargo_t ctx,
 **fmt**: Printf format string.
 
 **...**: Variable arguments for printf.
+
 ---
 
 This sets an options description with printf formatting avaialable.
@@ -835,6 +898,7 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 **fmt**: Printf format string.
 
 **ap**: Variable arguments for printf.
+
 ---
 
 Variadic version of [`cargo_set_option_description`](api.md#cargo_set_option_description).
@@ -898,8 +962,8 @@ By default on an error only the short usage is shown together with the error. If
 ### cargo_parse ###
 
 ```c
-int cargo_parse(cargo_t ctx, cargo_flags_t flags,
-                int start_index, int argc, char **argv);
+cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
+                                 int start_index, int argc, char **argv);
 ```
 
 ---
@@ -934,6 +998,17 @@ If you want to override this behaviour, you can change this behaviour by setting
 
 You can turn it off completely and instead use [`cargo_get_usage`](api.md#cargo_get_usage), [`cargo_get_error`](api.md#cargo_get_error) and [`cargo_get_unknown`](api.md#cargo_get_unknown) to customize the output however you want.
 
+The return value for this is more specific and contains different reasons found in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum. If the parse was successful, [`CARGO_PARSE_OK`](api.md#0-cargo_parse_ok) defined as `0` is returned. 
+
+**Return value**
+The return values for this function is defined in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum.
+
+For errors a negative value is always returned, however instead of simply using `-1` for all errors like the rest of the API, there are different values for each error type. 
+
+For example if the reason for the failed parse is that unknown options where found, [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts) will be returned, and you can use that knowledge to get the list of unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#CARGO_PARSE_SHOW_HELP) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) flag is set in [`cargo_init`](api.md#cargo_init).
+
 ### cargo_set_option_count_hint ###
 
 ```c
@@ -964,7 +1039,7 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 ---
 
-This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"="` unless it has been overriden in `"cargo_config.h"`.
+This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"-"` unless it has been overriden in `"cargo_config.h"`.
 
 For instance you can allow both `"-"` and `"+"` by setting this to `"-+"`. So then you can add an option such as `"--option"` or `"++option"`.
 
@@ -1113,6 +1188,8 @@ const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 This will return a list of strings containing the unknown options that were passed to the last call to [`cargo_parse`](api.md#cargo_parse).
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy of each string in the returned array.
+
+Note that if you call [`cargo_parse`](api.md#cargo_parse) again the pointer returned by this will become invalid.
 
 ### cargo_get_unknown_copy ###
 

@@ -136,7 +136,9 @@ typedef enum cargo_flags_e
 	CARGO_NOERR_USAGE					= (1 << 3),
 	CARGO_ERR_STDOUT					= (1 << 4),
 	CARGO_NO_AUTOHELP					= (1 << 5),
-	CARGO_NO_FAIL_UNKNOWN				= (1 << 6)
+	CARGO_NO_FAIL_UNKNOWN				= (1 << 6),
+	CARGO_UNIQUE_OPTS					= (1 << 7),
+	CARGO_NOWARN						= (1 << 8)
 } cargo_flags_t;
 
 typedef enum cargo_format_e
@@ -175,6 +177,20 @@ typedef enum cargo_group_flags_e
 	CARGO_GROUP_HIDE					= (1 << 0),
 	CARGO_GROUP_RAW_DESCRIPTION			= (1 << 1)
 } cargo_group_flags_t;
+
+typedef enum cargo_parse_result_e
+{
+	CARGO_PARSE_CALLBACK_ERR			= -8,
+	CARGO_PARSE_OPT_ALREADY_PARSED		= -7,
+	CARGO_PARSE_MUTEX_CONFLICT_ORDER	= -6,
+	CARGO_PARSE_MUTEX_CONFLICT			= -5,
+	CARGO_PARSE_MISS_REQUIRED			= -4,
+	CARGO_PARSE_FAIL_OPT				= -3,
+	CARGO_PARSE_NOMEM					= -2,
+	CARGO_PARSE_UNKNOWN_OPTS			= -1,
+	CARGO_PARSE_OK 						= 0,
+	CARGO_PARSE_SHOW_HELP 				= 1
+} cargo_parse_result_t;
 
 //
 // Callback types.
@@ -238,8 +254,8 @@ int cargo_mutex_group_set_metavar(cargo_t ctx,
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
-int cargo_parse(cargo_t ctx, cargo_flags_t flags,
-				int start_index, int argc, char **argv);
+cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
+								int start_index, int argc, char **argv);
 
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 

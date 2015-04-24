@@ -1493,8 +1493,17 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
-		// TODO: Have a global flag for this as well, so it applies to all options.
-		if (opt->flags & CARGO_OPT_UNIQUE)
+		if ((opt->type == CARGO_BOOL)
+			  && (opt->bool_count || opt->bool_acc))
+		{
+			// This is for parsing multiple arguments of the same type
+			// for instance -v -v -v.
+			// We need to reset the target index when doing this, otherwise
+			// we would be treating the target value for the bool option as an
+			// array since target_idx is incremented on each parse.
+			opt->target_idx = 0;
+		}
+		else if ((ctx->flags & CARGO_UNIQUE_OPTS) || (opt->flags & CARGO_OPT_UNIQUE))
 		{
 			CARGODBG(2, "%s: Parsing option as unique\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
@@ -1506,16 +1515,6 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			if (s) free(s);
 			_cargo_set_error(ctx, error);
 			return -1;
-		}
-		else if ((opt->type == CARGO_BOOL)
-			  && (opt->bool_count || opt->bool_acc))
-		{
-			// This is for parsing multiple arguments of the same type
-			// for instance -v -v -v.
-			// We need to reset the target index when doing this, otherwise
-			// we would be treating the target value for the bool option as an
-			// array since target_idx is incremented on each parse.
-			opt->target_idx = 0;
 		}
 		else
 		{
@@ -1556,7 +1555,9 @@ static const char *_cargo_nargs_str(int nargs)
 	}
 }
 
-static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
+static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
+								cargo_opt_t *opt,
+								const char *name,
 								int argc, char **argv)
 {
 	int ret;
@@ -1573,7 +1574,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 	if (!opt->positional
 		&& _cargo_check_if_already_parsed(ctx, opt, name))
 	{
-		return -1;
+		return CARGO_PARSE_OPT_ALREADY_PARSED;
 	}
 
 	// Keep looking until the end of the argument list.
@@ -1619,7 +1620,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 			{
 				CARGODBG(1, "Failed to set value for no argument option\n");
-				return -1;
+				return CARGO_PARSE_FAIL_OPT;
 			}
 		}
 	}
@@ -1642,7 +1643,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 			{
 				CARGODBG(1, "Failed to set target value for %s: \n", name);
-				return -1;
+				return CARGO_PARSE_FAIL_OPT;
 			}
 
 			// If we have exceeded opt->max_target_count
@@ -1680,7 +1681,7 @@ static int _cargo_parse_option(cargo_t ctx, cargo_opt_t *opt, const char *name,
 		if (custom_eaten < 0)
 		{
 			CARGODBG(1, "Custom callback indicated error\n");
-			return -1;
+			return CARGO_PARSE_CALLBACK_ERR;
 		}
 
 		CARGODBG(2, "Custom call back ate: %d\n", custom_eaten);
@@ -3250,11 +3251,11 @@ fail:
 	return ret;
 }
 
-static int _cargo_check_mutex_groups(cargo_t ctx)
+static cargo_parse_result_t _cargo_check_mutex_groups(cargo_t ctx)
 {
 	cargo_astr_t str;
 	char *error = NULL;
-	int ret = -1;
+	int ret = CARGO_PARSE_MUTEX_CONFLICT;
 	size_t i = 0;
 	size_t j = 0;
 	cargo_group_t *g = NULL;
@@ -3276,7 +3277,7 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 			// the first option of the group.
 			if (_cargo_check_order_mutex_group(ctx, &str, g))
 			{
-				goto fail;
+				ret = CARGO_PARSE_MUTEX_CONFLICT_ORDER; goto fail;
 			}
 		}
 		else
@@ -3286,12 +3287,12 @@ static int _cargo_check_mutex_groups(cargo_t ctx)
 			// Check that only one of the group is selected.
 			if (_cargo_check_mutex_group(ctx, &str, g))
 			{
-				goto fail;
+				ret = CARGO_PARSE_MUTEX_CONFLICT; goto fail;
 			}
 		}
 	}
 
-	ret = 0;
+	ret = CARGO_PARSE_OK;
 fail:
 	if (ret)
 	{
@@ -3334,9 +3335,9 @@ static int _cargo_is_arg_negative_integer(const char *arg)
 	return (i < 0);
 }
 
-static int _cargo_check_unknown_options(cargo_t ctx)
+static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 {
-	int ret = -1;
+	cargo_parse_result_t ret = CARGO_PARSE_UNKNOWN_OPTS;
 	size_t i;
 	cargo_opt_t *opt = NULL;
 	cargo_highlight_t *highlights = NULL;
@@ -3346,12 +3347,6 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 	char *arg = NULL;
 	memset(&str, 0, sizeof(str));
 	str.s = &error;
-
-	if (ctx->flags & CARGO_NO_FAIL_UNKNOWN)
-	{
-		CARGODBG(2, "Skipping unknown check, CARGO_NO_FAIL_UNKNOWN set\n");
-		return 0;
-	}
 
 	// TODO: Add support for options with negative numbers.
 	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
@@ -3384,7 +3379,7 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		if (!(highlights = calloc(ctx->unknown_opts_count,
 								sizeof(cargo_highlight_t))))
 		{
-			goto fail;
+			ret = CARGO_PARSE_NOMEM; goto fail;
 		}
 
 		for (i = 0; i < ctx->unknown_opts_count; i++)
@@ -3398,7 +3393,7 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 			ctx->unknown_opts_count, highlights)))
 		{
 			CARGODBG(1, "Out of memory\n");
-			goto fail;
+			ret = CARGO_PARSE_NOMEM; goto fail;
 		}
 
 		cargo_aappendf(&str, "%s\n", s);
@@ -3414,12 +3409,23 @@ static int _cargo_check_unknown_options(cargo_t ctx)
 		}
 
 		free(highlights);
+		highlights = NULL;
+
 		free(s);
-		_cargo_set_error(ctx, error);
-		return -1;
+		s = NULL;
+
+		if (!(ctx->flags & CARGO_NO_FAIL_UNKNOWN))
+		{
+			_cargo_set_error(ctx, error);
+			return ret;
+		}
+		else
+		{
+			CARGODBG(2, "No error on unknown options, CARGO_NO_FAIL_UNKNOWN set\n");
+		}
 	}
 
-	ret = 0;
+	ret = CARGO_PARSE_OK;
 
 fail:
 	// We failed to set the error...
@@ -4346,6 +4352,7 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 
 int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, char **argv)
 {
+	int ret = CARGO_PARSE_OK;
 	int start = 0;
 	int opt_arg_count = 0;
 	char *arg = NULL;
@@ -4385,19 +4392,19 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		goto fail;
+		ret = CARGO_PARSE_NOMEM; goto fail;
 	}
 
 	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
-		goto fail;
+		ret = CARGO_PARSE_NOMEM; goto fail;
 	}
 
 	if (!(ctx->unknown_opts_idxs = calloc(argc, sizeof(int))))
 	{
 		CARGODBG(1, "Out of memory");
-		goto fail;
+		ret = CARGO_PARSE_NOMEM; goto fail;
 	}
 
 	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
@@ -4405,7 +4412,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	// Check for unknown options first.
 	if (_cargo_check_unknown_options(ctx))
 	{
-		goto fail;
+		ret = CARGO_PARSE_UNKNOWN_OPTS; goto fail;
 	}
 
 	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
@@ -4432,7 +4439,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 			{
 				CARGODBG(1, "Failed to parse %s option: %s\n",
 						_cargo_type_map[opt->type], name);
-				goto fail;
+				ret = opt_arg_count; goto fail;
 			}
 		}
 		else
@@ -4451,7 +4458,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 				{
 					CARGODBG(1, "    Failed to parse %s option: %s\n",
 							_cargo_type_map[opt->type], name);
-					goto fail;
+					ret = opt_arg_count; goto fail;
 				}
 			}
 			else
@@ -4486,27 +4493,28 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	{
 		cargo_print_usage(ctx, 0);
 		ctx->flags = global_flags;
-		return 1;
+		return CARGO_PARSE_SHOW_HELP;
 	}
 
 	if (_cargo_check_required_options(ctx))
 	{
-		goto fail;
+		ret = CARGO_PARSE_MISS_REQUIRED; goto fail;
 	}
 
-	if (_cargo_check_mutex_groups(ctx))
+	if ((ret = _cargo_check_mutex_groups(ctx)))
 	{
 		goto fail;
 	}
 
+	// Shows warnings.
 	_cargo_parse_show_error(ctx);
 	ctx->flags = global_flags;
-	return 0;
+	return CARGO_PARSE_OK;
 fail:
 	_cargo_parse_show_error(ctx);
 	_cargo_cleanup_option_values(ctx);
 	ctx->flags = global_flags;
-	return -1;
+	return ret;
 }
 
 const char *cargo_get_error(cargo_t ctx)
@@ -6308,7 +6316,7 @@ do 																			\
 	int b;																	\
 	ret |= cargo_add_option(cargo, 0, "pos", "Positional arg", "[i]+",		\
 							&k, &k_count);									\
-	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "i", &i);	\
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha" LOREM_IPSUM, "i", &i);	\
 	ret |= cargo_add_option(cargo, 0, "--beta", "The alpha", "f", &f);		\
 	ret |= cargo_add_option(cargo, 0, "--crash -c", "The alpha", "b", &b);	\
 	cargo_assert(ret == 0, "Failed to add options");						\
@@ -8596,7 +8604,8 @@ fail:
 _TEST_START(TEST_mutex_order_group_before)
 {
 	printf("Test order before:\n");
-	msg = _test_mutex_order_group(cargo, CARGO_MUTEXGRP_ORDER_BEFORE, -1, 0);
+	msg = _test_mutex_order_group(cargo,
+			CARGO_MUTEXGRP_ORDER_BEFORE, CARGO_PARSE_MUTEX_CONFLICT_ORDER, 0);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -8604,7 +8613,8 @@ _TEST_END()
 _TEST_START(TEST_mutex_order_group_after)
 {
 	printf("Test order after:\n");
-	msg = _test_mutex_order_group(cargo, CARGO_MUTEXGRP_ORDER_AFTER, 0, -1);
+	msg = _test_mutex_order_group(cargo,CARGO_MUTEXGRP_ORDER_AFTER, 0,
+			CARGO_PARSE_MUTEX_CONFLICT_ORDER);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -8731,6 +8741,14 @@ _TEST_END()
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
+
+// TODO: Test CARGO_NO_FAIL_UNKNOWN and make 
+// sure they are still added to the list of unknown options, 
+// but that the parse does not fail
+
+// TODO: Test CARGO_UNIQUE_OPTS
+// TODO: Test CARGO_NOWARN
+// TODO: Test cargo_parse_result_t
 
 //
 // List of all test functions to run:
