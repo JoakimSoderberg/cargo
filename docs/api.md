@@ -355,6 +355,23 @@ cargo prints errors to `stderr` by default. This flag changes so that it prints 
 #### `CARGO_NO_AUTOHELP` ####
 This flag turns off the automatic creating of the `--help` option.
 
+#### `CARGO_NO_FAIL_UNKNOWN` ####
+Don't fail the parse when unknown options are found, simply add them to the list of unknown options.
+
+You can still get a list of the unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+#### `CARGO_UNIQUE_OPTS` ####
+By default if an options is specified more than once, the last value for the last occurrance is the one that counts, and will override anything specified earlier.
+
+This option will instead give an error if any option is specified more than once (except special cases for boolean options).
+
+This can be set on a per option basis as well using [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique).
+
+#### `CARGO_NOWARN` ####
+Don't show warnings.
+
+For example when [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is not set and an option is specified more than once, a warning will be shown that the first value is ignored. This suppresses this.
+
 ### cargo_usage_t ###
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
@@ -439,6 +456,41 @@ Another way of overriding this is to simply display the variables in the mutex g
 #### `CARGO_MUTEXGRP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the mutex group description.
 
+#### `CARGO_MUTEXGRP_ORDER_BEFORE` ####
+This flag enables you to force the order a set of options is parsed in. The first option added to this group is special. Any options added after it must be specified before it on the command line.
+
+So if you have `--alpha --beta --centauri --delta` and add `--alpha` as the first option to the mutex group `mutex1` and set this flag on it. Any additional options added to that group must always be parsed before `--alpha`.
+
+```c
+int a = 0;
+int b = 0;
+int c = 0;
+int d = 0;
+
+cargo_add_mutex_group(cargo, CARGO_MUTEXGRP_ORDER_BEFORE,
+                            "mutex1", "Mutex group 1", NULL);
+
+cargo_add_option(cargo, 0, "<!mutex1> --alpha -a", "Description", "b", &a);
+cargo_add_option(cargo, 0, "<!mutex1> --beta -b", "Description", "b", &b);
+cargo_add_option(cargo, 0, "<!mutex1> --centauri -c", "Description", "b", &c);
+cargo_add_option(cargo, 0, "--delta -d", "Description", "b", &d);
+
+cargo_parse(cargo, 0, 1, argc, argv);
+```
+
+So if you input `"--alpha --beta --centauri --delta"`:
+
+```bash
+Usage: program [--help HELP] [--alpha] [--beta] [--centauri] [--delta]
+--alpha --beta --centauri --delta
+^^^^^^^ ~~~~~~ ~~~~~~~~~~
+These options must all be specified before "--alpha":
+--beta, --centauri
+```
+
+#### `CARGO_MUTEXGRP_ORDER_AFTER` ####
+Same as [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_after) except that the rest of the variables in the mutex group must be parsed after the first one.
+
 
 ### cargo_group_flags_t ###
 
@@ -452,6 +504,51 @@ A use case for this might be an `--advanced_help` that unhides the group and pri
 #### `CARGO_GROUP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the group description.
 
+
+### cargo_parse_result_t ###
+
+This is the [`cargo_parse`](api.md#cargo_parse) return values. This is different from most other API return values since knowing the reason that a parse failed is usually important to be able to show a relevant error message.
+
+You can also get the internal error message that cargo displays by default by using [`cargo_get_error`](api.md#cargo_get_error).
+
+#### (0) `CARGO_PARSE_OK` ####
+For a successful parse this is returned.
+
+#### (-1) `CARGO_PARSE_UNKNOWN_OPTS` ####
+If the parse fails because there are unknown options in the given command line this will be returned.
+
+Unknown options are defined as arguments prepended with a [prefix](api.md#cargo_set_prefix) character that was not added using [`cargo_add_option`](api.md#cargo_add_option).
+
+You can get the list of unknown options found using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+Note that you can tell cargo not to fail on unknown options by setting the flag [`CARGO_NO_FAIL_UNKNOWN`](api.md#cargo_no_fail_unknown).
+
+#### (-2) `CARGO_PARSE_NOMEM` ####
+If cargo runs out of memory this will be returned when parsing.
+
+#### (-3) `CARGO_PARSE_FAIL_OPT` ####
+When cargo fails to parse an option for some reason.
+
+#### (-4) `CARGO_PARSE_MISS_REQUIRED` ####
+If any required option is missing.
+
+See [`CARGO_OPT_REQUIRED`](api.md#cargo_opt_required) and [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required).
+
+#### (-5) `CARGO_PARSE_MUTEX_CONFLICT` ####
+When a mutex group conflict occurs. Either that at least one option is required in a mutex group. Or that more than one in the mutex group has been specified at the same time.
+
+See [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#cargo_mutexgrp_one_required)
+
+#### (-6) `CARGO_PARSE_MUTEX_CONFLICT_ORDER` ####
+An order mutex group rule has been broken.
+
+See [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_before) and See [`CARGO_MUTEXGRP_ORDER_AFTER`](api.md#cargo_mutexgrp_order_before)
+
+#### (-7) `CARGO_PARSE_OPT_ALREADY_PARSED` ####
+If an option has already been parsed before (specified more than once) and either [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique) for the option is set. Alternatively if [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is set.
+
+#### (-8) `CARGO_PARSE_CALLBACK_ERR` ####
+If a custom option user callback parses an option and indicates that an error has occurred.
 
 ## Functions ##
 
@@ -761,6 +858,48 @@ Usage: program [--alpha ALPHA] VARS
 
 For another setting related how the mutex group is shown in the usage see [`CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE`](api.md#cargo_mutexgrp_no_group_short_usage).
 
+### cargo_set_option_description ###
+
+```c
+int cargo_set_option_description(cargo_t ctx,
+                 char *optname, const char *fmt, ...);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The option name you want to set the metavar for.
+
+**fmt**: Printf format string.
+
+**...**: Variable arguments for printf.
+
+---
+
+This sets an options description with printf formatting avaialable.
+
+### cargo_set_option_descriptionv ###
+
+```c
+int cargo_set_option_descriptionv(cargo_t ctx,
+                  char *optname, const char *fmt, va_list ap);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**optname**: The option name you want to set the metavar for.
+
+**fmt**: Printf format string.
+
+**ap**: Variable arguments for printf.
+
+---
+
+Variadic version of [`cargo_set_option_description`](api.md#cargo_set_option_description).
+
 ### cargo_set_metavar ###
 
 ```c
@@ -820,8 +959,8 @@ By default on an error only the short usage is shown together with the error. If
 ### cargo_parse ###
 
 ```c
-int cargo_parse(cargo_t ctx, cargo_flags_t flags,
-                int start_index, int argc, char **argv);
+cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
+                                 int start_index, int argc, char **argv);
 ```
 
 ---
@@ -856,6 +995,17 @@ If you want to override this behaviour, you can change this behaviour by setting
 
 You can turn it off completely and instead use [`cargo_get_usage`](api.md#cargo_get_usage), [`cargo_get_error`](api.md#cargo_get_error) and [`cargo_get_unknown`](api.md#cargo_get_unknown) to customize the output however you want.
 
+The return value for this is more specific and contains different reasons found in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum. If the parse was successful, [`CARGO_PARSE_OK`](api.md#0-cargo_parse_ok) defined as `0` is returned. 
+
+**Return value**
+The return values for this function is defined in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum.
+
+For errors a negative value is always returned, however instead of simply using `-1` for all errors like the rest of the API, there are different values for each error type. 
+
+For example if the reason for the failed parse is that unknown options where found, [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts) will be returned, and you can use that knowledge to get the list of unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#CARGO_PARSE_SHOW_HELP) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) flag is set in [`cargo_init`](api.md#cargo_init).
+
 ### cargo_set_option_count_hint ###
 
 ```c
@@ -886,7 +1036,7 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 ---
 
-This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"="` unless it has been overriden in `"cargo_config.h"`.
+This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"-"` unless it has been overriden in `"cargo_config.h"`.
 
 For instance you can allow both `"-"` and `"+"` by setting this to `"-+"`. So then you can add an option such as `"--option"` or `"++option"`.
 
@@ -1036,6 +1186,25 @@ This will return a list of strings containing the unknown options that were pass
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy of each string in the returned array.
 
+Note that if you call [`cargo_parse`](api.md#cargo_parse) again the pointer returned by this will become invalid.
+
+### cargo_get_unknown_copy ###
+
+```c
+const char **cargo_get_unknown_copy(cargo_t ctx, size_t *unknown_count);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**unknown_count**: A pointer to a `size_t` where the number of unknown options passed to [`cargo_parse`](api.md#cargo_parse) will be returned.
+
+---
+
+Same as [`cargo_get_unknown`](api.md#cargo_get_unknown) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
+
+
 ### cargo_get_args ###
 
 ```c
@@ -1051,6 +1220,22 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 ---
 
 This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
+
+### cargo_get_args_copy ###
+
+```c
+char **cargo_get_args_copy(cargo_t ctx, size_t *argc);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**argc**: A pointer to a `size_t` where the number of arguments passed to [`cargo_parse`](api.md#cargo_parse) that were not consumed is retruned.
+
+---
+
+Same as [`cargo_get_args`](api.md#cargo_get_args) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
 ### cargo_set_context ###
 
@@ -1463,5 +1648,19 @@ void cargo_free_commandline(char ***argv, int argc);
 
 ---
 
-This can be used to free and `NULL` an `argv` array that was split using [`cargo_split_commandline`](api.md#cargo_split_commandline)
+This can be used to free and `NULL` an `argv` array that was split using [`cargo_split_commandline`](api.md#cargo_split_commandline).
+
+Note that this function will both free and set `argv` to `NULL`.
+
+```c
+char **argv = NULL;
+int argc;
+
+argv = cargo_split_commandline(0, "some --command line", &argc);
+
+...
+
+// Free and NULL argv.
+cargo_free_commandline(&argv, argc);
+```
 

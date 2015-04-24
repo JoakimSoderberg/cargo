@@ -135,7 +135,10 @@ typedef enum cargo_flags_e
 	CARGO_NOERR_OUTPUT					= (1 << 2),
 	CARGO_NOERR_USAGE					= (1 << 3),
 	CARGO_ERR_STDOUT					= (1 << 4),
-	CARGO_NO_AUTOHELP					= (1 << 5)
+	CARGO_NO_AUTOHELP					= (1 << 5),
+	CARGO_NO_FAIL_UNKNOWN				= (1 << 6),
+	CARGO_UNIQUE_OPTS					= (1 << 7),
+	CARGO_NOWARN						= (1 << 8)
 } cargo_flags_t;
 
 typedef enum cargo_format_e
@@ -155,7 +158,8 @@ typedef enum cargo_option_flags_e
 	CARGO_OPT_UNIQUE					= (1 << 0),
 	CARGO_OPT_REQUIRED					= (1 << 1),
 	CARGO_OPT_NOT_REQUIRED				= (1 << 2),
-	CARGO_OPT_RAW_DESCRIPTION			= (1 << 3)
+	CARGO_OPT_RAW_DESCRIPTION			= (1 << 3),
+	CARGO_OPT_STOP						= (1 << 4)
 } cargo_option_flags_t;
 
 typedef enum cargo_mutex_group_flags_e
@@ -163,7 +167,9 @@ typedef enum cargo_mutex_group_flags_e
 	CARGO_MUTEXGRP_ONE_REQUIRED			= (1 << 0),
 	CARGO_MUTEXGRP_GROUP_USAGE			= (1 << 1),
 	CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE	= (1 << 2),
-	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3)
+	CARGO_MUTEXGRP_RAW_DESCRIPTION		= (1 << 3),
+	CARGO_MUTEXGRP_ORDER_BEFORE			= (1 << 4),
+	CARGO_MUTEXGRP_ORDER_AFTER			= (1 << 5)
 } cargo_mutex_group_flags_t;
 
 typedef enum cargo_group_flags_e
@@ -171,6 +177,20 @@ typedef enum cargo_group_flags_e
 	CARGO_GROUP_HIDE					= (1 << 0),
 	CARGO_GROUP_RAW_DESCRIPTION			= (1 << 1)
 } cargo_group_flags_t;
+
+typedef enum cargo_parse_result_e
+{
+	CARGO_PARSE_CALLBACK_ERR			= -8,
+	CARGO_PARSE_OPT_ALREADY_PARSED		= -7,
+	CARGO_PARSE_MUTEX_CONFLICT_ORDER	= -6,
+	CARGO_PARSE_MUTEX_CONFLICT			= -5,
+	CARGO_PARSE_MISS_REQUIRED			= -4,
+	CARGO_PARSE_FAIL_OPT				= -3,
+	CARGO_PARSE_NOMEM					= -2,
+	CARGO_PARSE_UNKNOWN_OPTS			= -1,
+	CARGO_PARSE_OK 						= 0,
+	CARGO_PARSE_SHOW_HELP 				= 1
+} cargo_parse_result_t;
 
 //
 // Callback types.
@@ -202,8 +222,13 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
-// TODO: Add flag. So one can set flag "per item" or "all".
 int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+
+int cargo_set_option_descriptionv(cargo_t ctx,
+								  char *optname, const char *fmt, va_list ap);
+
+int cargo_set_option_description(cargo_t ctx,
+								 char *optname, const char *fmt, ...);
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
@@ -223,13 +248,14 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
 
-int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const char *metavar);
+int cargo_mutex_group_set_metavar(cargo_t ctx,
+								const char *mutex_group,
+								const char *metavar);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
-int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, char **argv);
-
-void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
+cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
+								int start_index, int argc, char **argv);
 
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
@@ -249,7 +275,11 @@ const char *cargo_get_error(cargo_t ctx);
 
 const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 
+char **cargo_get_unknown_copy(cargo_t ctx, size_t *unknown_count);
+
 const char **cargo_get_args(cargo_t ctx, size_t *argc);
+
+char **cargo_get_args_copy(cargo_t ctx, size_t *argc);
 
 void cargo_set_context(cargo_t ctx, void *user);
 

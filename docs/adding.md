@@ -308,6 +308,11 @@ One of these variables is required:
 --alpha, --beta
 ```
 
+Order group
+-----------
+
+It is also possible to force the order options are parsed. See [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_before) and [`CARGO_MUTEXGRP_ORDER_AFTER`](api.md#cargo_mutexgrp_order_after) for details.
+
 Custom parsing
 ==============
 As you have seen in the previous examples, parsing native types such as `int`, `float`, `double` or a string is possible. But what if you want to parse something more advanced, a timestamp for example?
