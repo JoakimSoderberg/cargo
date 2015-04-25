@@ -723,6 +723,8 @@ typedef struct cargo_opt_s
 	cargo_bool_acc_op_t bool_acc_op;	// Operation used to accumulate.
 	size_t bool_acc_count;				// Current index into the accumulate vals.
 	size_t bool_acc_max_count;			// Number of accumulation values.
+
+	char *zero_or_one_default;	// Default value used for target value when
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
@@ -1420,8 +1422,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		return -1;
 	}
 
-	// TODO: For single options that are repeated this will cause write beyond buffer!
-	// --bla 1 --bla 2 <-- Second call will be written outside
 	opt->target_idx++;
 	CARGODBG(3, "UPDATED TARGET INDEX: %lu\n", opt->target_idx);
 
@@ -1615,15 +1615,33 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 
 	ctx->j = start;
 
-	if (opt->nargs == 0)
+	if (opt->type == CARGO_BOOL)
 	{
-		if (_cargo_zero_args_allowed(opt))
+		if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
 		{
-			if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
-			{
-				CARGODBG(1, "Failed to set value for no argument option\n");
-				return CARGO_PARSE_FAIL_OPT;
-			}
+			CARGODBG(1, "Failed to set value for no argument option\n");
+			return CARGO_PARSE_FAIL_OPT;
+		}
+	}
+	else if (opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
+	{
+		char *arg;
+
+		if ((args_to_look_for == 0)
+			|| _cargo_is_another_option(ctx, argv[ctx->j]))
+		{
+			arg = opt->zero_or_one_default;
+		}
+		else
+		{
+			arg = argv[ctx->j];
+		}
+
+		if ((ret = _cargo_set_target_value(ctx,
+						opt, name, arg) < 0))
+		{
+			CARGODBG(1, "Failed to set value for no argument option\n");
+			return CARGO_PARSE_FAIL_OPT;
 		}
 	}
 	else
@@ -5343,6 +5361,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			if (_cargo_fmt_token(&s) == '?')
 			{
 				o->nargs = CARGO_NARGS_ZERO_OR_ONE;
+				o->zero_or_one_default = va_arg(ap, char *);
 			}
 			else
 			{
@@ -5976,17 +5995,6 @@ _TEST_START(TEST_add_static_unsigned_long_long_int_array_option)
 	long long int a_expect[3] = { 1844674407370955161, 9223372036854775807, 3 };
 	char *args[] = { "program", "--beta", "1844674407370955161", "9223372036854775807", "3" };
 	_ADD_TEST_FIXED_ARRAY(".[U]#", "%llu");
-	_TEST_CLEANUP();
-}
-_TEST_END()
-
-_TEST_START(TEST_add_static_bool_array_option)
-{
-	// TODO: Hmmmm don't support this, bools should be for flags only.
-	int a[3];
-	int a_expect[3] = { 1, 1, 1 };
-	char *args[] = { "program", "--beta", "1", "2", "3" };
-	_ADD_TEST_FIXED_ARRAY(".[b]#", "%d");
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -7294,7 +7302,7 @@ _TEST_START(TEST_zero_or_more_with_arg)
 	int j = 0;
 	char *args[] = { "program", "--alpha", "789", "--beta", "123", "456" };
 
-	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j, "3");
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -7312,13 +7320,13 @@ _TEST_START(TEST_zero_or_more_without_arg)
 	int j = 5;
 	char *args[] = { "program", "--alpha", "--beta", "123", "456" };
 
-	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j, "3");
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Failed zero or more args parse");
-	cargo_assert(j == 5, "Expected j == 5");
+	cargo_assert(j == 3, "Expected j == 3");
 
 	_TEST_CLEANUP();
 }
@@ -7338,14 +7346,14 @@ _TEST_START(TEST_group)
 	cargo_assert(ret == 0, "Failed to add group");
 
 	// Add options to the group using inline method.
-	ret |= cargo_add_option(cargo, 0, "   <group1> --alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "   <group1> --alpha", "The alpha", "i?", &j, "3");
 	ret |= cargo_add_option(cargo, 0, "<group1> --beta -b", LOREM_IPSUM, "i", &i);
 
 	// Try using the API to add the option to the group.
-	ret |= cargo_add_option(cargo, 0, "--centauri", "The alpha centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The alpha centauri", "i?", &k, "4");
 	ret |= cargo_group_add_option(cargo, "group1", "--centauri");
 	
-	ret |= cargo_add_option(cargo, 0, "<group2> --delta", LOREM_IPSUM LOREM_IPSUM, "i?", &l);
+	ret |= cargo_add_option(cargo, 0, "<group2> --delta", LOREM_IPSUM LOREM_IPSUM, "i?", &l, "5");
 	cargo_assert(ret == 0, "Failed to add options");
 
 	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
@@ -7413,13 +7421,13 @@ _TEST_START(TEST_mutex_group_guard)
 	ret = cargo_add_mutex_group(cargo, 0, "mutex_group1", NULL, NULL);
 	cargo_assert(ret == 0, "Failed to add mutex group");
 
-	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j);
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "i?", &j, "3");
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--alpha");
 
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "The beta", "i", &i);
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
 
-	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k, "3");
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--centauri");
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -7450,13 +7458,14 @@ _TEST_START(TEST_mutex_group_require_one)
 	ret |= cargo_mutex_group_add_option(cargo, "mutex_group1", "--beta");
 
 	// Don't add this to te mutex group.
-	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
+	ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k, "3");
 	cargo_assert(ret == 0, "Failed to add options");
 
 	// We parse args with no members of the mutex group.
 	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret != 0,
 		"Succesfully parsed mutex group with no mutex member when 1 required");
+	cargo_assert(k == 5, "Expected k == 5");
 
 	_TEST_CLEANUP();
 }
@@ -8744,6 +8753,53 @@ _TEST_START(TEST_parse_stop)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_zero_or_one_with_arg)
+{
+	char *args[] = { "program", "--alpha", "6" };
+	int a = 0;
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i?", &a, "5");
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed parse");
+	cargo_assert(a == 6, "Unexpected value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_zero_or_one_without_arg)
+{
+	char *args[] = { "program", "--alpha" };
+	int a = 0;
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i?", &a, "5");
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed parse");
+	cargo_assert(a == 5, "Unexpected value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_zero_or_one_without_arg2)
+{
+	char *args[] = { "program", "--alpha", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i?", &a, "5");
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed parse");
+	cargo_assert(a == 5, "Unexpected value");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -8786,7 +8842,6 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_static_uint_array_option),
 	CARGO_ADD_TEST(TEST_add_static_long_long_int_array_option),
 	CARGO_ADD_TEST(TEST_add_static_unsigned_long_long_int_array_option),
-	CARGO_ADD_TEST(TEST_add_static_bool_array_option),
 	CARGO_ADD_TEST(TEST_add_static_float_array_option),
 	CARGO_ADD_TEST(TEST_add_static_double_array_option),
 	CARGO_ADD_TEST(TEST_add_static_string_array_option),
@@ -8876,7 +8931,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_get_unknown_copy),
 	CARGO_ADD_TEST(TEST_cargo_get_args_copy),
 	CARGO_ADD_TEST(TEST_cargo_set_option_description),
-	CARGO_ADD_TEST(TEST_parse_stop)
+	CARGO_ADD_TEST(TEST_parse_stop),
+	CARGO_ADD_TEST(TEST_cargo_zero_or_one_with_arg),
+	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg),
+	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg2)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

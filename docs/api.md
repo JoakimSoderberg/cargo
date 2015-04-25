@@ -186,10 +186,10 @@ char *str;
 ..., "s", &str);
 ```
 
-If an option has an optional value, you can append `?`:
+If an option has an optional value, you can append `?`. If no value was specified on the commandline for the option, the extra string parameter is used `"0.5"` in the example below:
 ```c
 float val = 0.3f;
-cargo_add_option(cargo, 0, "--opt", "description", "f?", &val);
+cargo_add_option(cargo, 0, "--opt", "description", "f?", &val, "0.5");
 ```
 
 ### Booleans / flags
