@@ -675,7 +675,8 @@ typedef enum cargo_bool_acc_op_e
 {
 	CARGO_BOOL_OP_PLUS,
 	CARGO_BOOL_OP_OR,
-	CARGO_BOOL_OP_AND
+	CARGO_BOOL_OP_AND,
+	CARGO_BOOL_OP_STORE
 } cargo_bool_acc_op_t;
 
 typedef struct cargo_group_s cargo_group_t;
@@ -719,7 +720,7 @@ typedef struct cargo_opt_s
 	int bool_count;				// If we should count occurances for bool flag.
 
 	// Bool accumulator related.
-	unsigned int *bool_acc;				// Values to accumulate.
+	int *bool_acc;				// Values to accumulate.
 	cargo_bool_acc_op_t bool_acc_op;	// Operation used to accumulate.
 	size_t bool_acc_count;				// Current index into the accumulate vals.
 	size_t bool_acc_max_count;			// Number of accumulation values.
@@ -1252,7 +1253,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				// handling -vvv as a special case here, to instead expanding it
 				// at the beginning of the parse... "-vvv" -> "-v", "-v", "-v"
 				size_t count;
-				size_t acc_val;
+				int acc_val;
 				size_t i = 0;
 				char *arg = ctx->argv[ctx->i];
 				CARGODBG(2, "           ARG: %s\n", arg);
@@ -1278,7 +1279,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				{
 					acc_val = opt->bool_acc[i];
 
-					CARGODBG(2, "       %lu Bool acc %lx\n", i, acc_val);
+					CARGODBG(2, "       %lu Bool acc %x\n", i, acc_val);
 					switch (opt->bool_acc_op)
 					{
 						case CARGO_BOOL_OP_OR:
@@ -1297,6 +1298,12 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 						{
 							CARGODBG(2, "       PLUS\n");
 							*val += acc_val;
+							break;
+						}
+						case CARGO_BOOL_OP_STORE:
+						{
+							CARGODBG(2, "       STORE\n");
+							*val = acc_val;
 							break;
 						}
 						default:
@@ -5235,6 +5242,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 				case '|':
 				case '+':
 				case '&':
+				case '_':
 				{
 					switch (_cargo_fmt_token(&s))
 					{
@@ -5242,13 +5250,14 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 						case '|': o->bool_acc_op = CARGO_BOOL_OP_OR; break;
 						case '+': o->bool_acc_op = CARGO_BOOL_OP_PLUS; break;
 						case '&': o->bool_acc_op = CARGO_BOOL_OP_AND; break;
+						case '_': o->bool_acc_op = CARGO_BOOL_OP_STORE; break;
 					}
 
 					o->bool_acc_count = 0;
 					o->bool_acc_max_count = (size_t)va_arg(ap, unsigned int);
 					CARGODBG(3, "Bool acc max count %lu\n", o->bool_acc_max_count);
 
-					if (!(o->bool_acc = calloc(o->bool_acc_max_count, sizeof(unsigned int))))
+					if (!(o->bool_acc = calloc(o->bool_acc_max_count, sizeof(int))))
 					{
 						CARGODBG(1, "Out of memory\n");
 						goto fail;
@@ -5256,7 +5265,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 					for (i = 0; i < o->bool_acc_max_count; i++)
 					{
-						o->bool_acc[i] = va_arg(ap, unsigned int);
+						o->bool_acc[i] = va_arg(ap, int);
 						CARGODBG(3, "  bool acc value %lu: 0x%x\n", i, o->bool_acc[i]);
 					}
 					break;
@@ -8579,6 +8588,41 @@ _TEST_START(TEST_bool_acc_plus)
 }
 _TEST_END()
 
+_TEST_START(TEST_bool_acc_store)
+{
+	unsigned int a = 0;
+	unsigned int b = 0;
+	unsigned int c = 0;
+	char *args[] = { "program", "-a", "-b", "-b", "123", "-ccc", "-b"};
+
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL,
+			"b_", &a, 1, 40);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", NULL,
+			"b_", &b, 2, 33, 44);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", NULL,
+			"b_", &c, 3, 11, 22, 33);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("a = Expect: %u Got: %u\n", 40, a);
+	cargo_assert(a == 40, "Expected a == 40");
+
+	printf("b = Expect: %u Got: %u\n", 44, b);
+	cargo_assert(b == 44, "Expected b == 44");
+
+	printf("c = Expect: %u Got: %u\n", 33, c);
+	cargo_assert(c == 33, "Expected c == 33");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 static char *_test_mutex_order_group(cargo_t cargo, cargo_mutex_group_flags_t flags,
 									 int args1_expect, int args2_expect)
 {
@@ -8812,6 +8856,8 @@ _TEST_END()
 // TODO: Test CARGO_NOWARN
 // TODO: Test cargo_parse_result_t
 
+// TODO: Add test to make sure bool array is not allowed.
+
 //
 // List of all test functions to run:
 //
@@ -8925,6 +8971,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_bool_acc_or),
 	CARGO_ADD_TEST(TEST_bool_acc_and),
 	CARGO_ADD_TEST(TEST_bool_acc_plus),
+	CARGO_ADD_TEST(TEST_bool_acc_store),
 	CARGO_ADD_TEST(TEST_mutex_order_group_before),
 	CARGO_ADD_TEST(TEST_mutex_order_group_after),
 	CARGO_ADD_TEST(TEST_medium_length_usage),

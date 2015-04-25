@@ -203,6 +203,7 @@ This behaviour can be changed by appending a set of specifiers after `b`:
 - `|` Bitwise OR. This is similar to how `!` works, except instead of simply counting the number of occurances, this will do a bitwise OR operation. To do this, you specify a set of extra arguments, the first denotes how many values are available. Followed by a list of the actual `unsigned int` values. For each time the given option occurs an item is popped from the list and a bitwise OR operation is done with the value of the target variable. This can be useful if you want to set values in a bit mask for instance.
 - `&` Works the same as `|` except that an bitwise AND is performed on the target value.
 - `+` Same as `|` except that an addition is made on the target value for each value in the list.
+- `_` Same as `|` except that for each repeat of the flag, the next value in the list overwrites the previous.
 
 Some examples:
 
