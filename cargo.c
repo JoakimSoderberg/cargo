@@ -696,31 +696,33 @@ typedef struct cargo_opt_s
 	size_t mutex_group_count;
 	char **mutex_group_names;
 
-	cargo_custom_cb_t custom;
-	void *custom_user;
-	size_t *custom_user_count;
+	cargo_custom_cb_t custom;	// Custom callback function.
+	void *custom_user;			// Custom user data passed to user callback.
+	size_t *custom_user_count;	// Used to return array count when parsing
+								// custom callbacks.
 
-	char **custom_target;		// Internal storage for args passed to callback
-	size_t custom_target_count;
+	char **custom_target;		// Internal storage for args passed to callback.
+	size_t custom_target_count;	// Internal count for args passed to callbac.
 
-	void **target;
-	size_t target_idx;
-	size_t *target_count;
-	size_t lenstr;
-	size_t max_target_count;
+	void **target;				// Pointer to target values.
+	size_t target_idx;			// Current index into target values.
+	size_t *target_count;		// Return value or number of parsed target values.
+	size_t lenstr;				// String length.
+	size_t max_target_count;	// Max values to store in an array.
 
-	int array;
+	int array;					// Is this option being parsed as an array?
 	int parsed;					// The argv index when we last parsed the option
 	cargo_option_flags_t flags;
-	int num_eaten;
+	int num_eaten;				// How many arguments consumed by this option.
 
-	int bool_store;
-	int bool_count;
+	int bool_store;				// Value to store when a bool flag is set.
+	int bool_count;				// If we should count occurances for bool flag.
 
-	unsigned int *bool_acc;
-	cargo_bool_acc_op_t bool_acc_op;
-	size_t bool_acc_count;
-	size_t bool_acc_max_count;
+	// Bool accumulator related.
+	unsigned int *bool_acc;				// Values to accumulate.
+	cargo_bool_acc_op_t bool_acc_op;	// Operation used to accumulate.
+	size_t bool_acc_count;				// Current index into the accumulate vals.
+	size_t bool_acc_max_count;			// Number of accumulation values.
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
