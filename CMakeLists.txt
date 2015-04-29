@@ -78,6 +78,8 @@ endif()
 
 if (CARGO_BUILD_STATIC_LIB)
 	add_library(cargo STATIC cargo.c cargo.h)
+	install(TARGETS cargo
+			DESTINATION "lib")
 endif()
 
 if (CARGO_BUILD_SHARED_LIB)
@@ -87,6 +89,8 @@ if (CARGO_BUILD_SHARED_LIB)
 	endif()
 
 	add_library(cargo_shared SHARED cargo.c cargo.h)
+	install(TARGETS cargo_shared
+			DESTINATION "lib")
 
 	if (UNIX)
 		set_target_properties(cargo_shared PROPERTIES OUTPUT_NAME cargo)
@@ -210,3 +214,19 @@ if (UNIX AND NOT CARGO_SHUTUP)
 	endforeach()
 endif()
 
+# For pkg-config file
+set(includedir "\${prefix}/include")
+set(libdir "\${prefix}/lib")
+set(PKG_CONFIG_LIBDIR "\${libdir}")
+set(PKG_CONFIG_INCLUDEDIR "\${includedir}")
+
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/pkg-config.pc.cmake"
+	"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pkgconfig/cargo.pc"
+)
+
+install(FILES cargo.h
+		DESTINATION "include")
+
+install(FILES "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/pkgconfig/cargo.pc"
+		DESTINATION "lib/pkgconfig")
