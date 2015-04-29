@@ -212,7 +212,7 @@ void cargo_set_flags(cargo_t ctx, cargo_flags_t flags);
 cargo_flags_t cargo_get_flags(cargo_t ctx);
 
 int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
-					  const char *optnames, 
+					  const char *optnames,
 					  const char *description,
 					  const char *fmt, va_list ap);
 

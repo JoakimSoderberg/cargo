@@ -659,7 +659,7 @@ typedef enum cargo_type_e
 	CARGO_ULONGLONG = 7
 } cargo_type_t;
 
-static const char *_cargo_type_map[] = 
+static const char *_cargo_type_map[] =
 {
 	"bool",
 	"int",
@@ -815,7 +815,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 
 	switch (t)
 	{
-		case CARGO_BOOL: 
+		case CARGO_BOOL:
 		case CARGO_INT: return sizeof(int);
 		case CARGO_UINT: return sizeof(unsigned int);
 		case CARGO_FLOAT: return sizeof(float);
@@ -830,7 +830,7 @@ static size_t _cargo_get_type_size(cargo_type_t t)
 
 static int _cargo_nargs_is_valid(int nargs)
 {
-	return (nargs >= 0) 
+	return (nargs >= 0)
 		|| (nargs == CARGO_NARGS_ZERO_OR_MORE)
 		|| (nargs == CARGO_NARGS_ONE_OR_MORE)
 		|| (nargs == CARGO_NARGS_ZERO_OR_ONE);
@@ -857,7 +857,7 @@ static char _cargo_is_prefix(cargo_t ctx, char c)
 	return 0;
 }
 
-static int _cargo_find_option_name(cargo_t ctx, const char *name, 
+static int _cargo_find_option_name(cargo_t ctx, const char *name,
 									size_t *opt_i, size_t *name_i)
 {
 	size_t i = 0;
@@ -880,7 +880,7 @@ static int _cargo_find_option_name(cargo_t ctx, const char *name,
 		}
 	}
 
-	return -1; 
+	return -1;
 }
 
 static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
@@ -975,7 +975,7 @@ static int _cargo_get_positional(cargo_t ctx, size_t *opt_i)
 	return -1;
 }
 
-static const char *_cargo_is_option_name(cargo_t ctx, 
+static const char *_cargo_is_option_name(cargo_t ctx,
 					cargo_opt_t *opt, const char *arg)
 {
 	size_t i;
@@ -999,7 +999,7 @@ static const char *_cargo_is_option_name(cargo_t ctx,
 	return NULL;
 }
 
-static const char *_cargo_is_option_name_compact(cargo_t ctx, 
+static const char *_cargo_is_option_name_compact(cargo_t ctx,
 					cargo_opt_t *opt, const char *arg)
 {
 	size_t i;
@@ -1150,7 +1150,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	assert(ctx);
 	assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_ULONGLONG));
 
-	if ((opt->type != CARGO_BOOL) 
+	if ((opt->type != CARGO_BOOL)
 		&& (opt->target_idx >= opt->max_target_count))
 	{
 		CARGODBG(1, "Target index out of bounds (%lu > max %lu)\n",
@@ -1222,7 +1222,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			// TODO: This could be more general to support
 			//       short command lines bundled together:
 			//       "-vaet" same as "-v -a -e -t"...
-	
+
 			// If BOOL COUNT is turned on, we allow multiple occurances of
 			// a bool option. "-v -v -v" will be parsed as 3.
 			if (opt->bool_count)
@@ -1272,8 +1272,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					count = 1;
 				}
 
-				for (i = opt->bool_acc_count; 
-					(i < opt->bool_acc_count + count) 
+				for (i = opt->bool_acc_count;
+					(i < opt->bool_acc_count + count)
 					&& (i < opt->bool_acc_max_count);
 					i++)
 				{
@@ -1385,7 +1385,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				else
 				{
 					CARGODBG(2, "          MAX LENGTH: %lu\n", opt->lenstr);
-					if (!(((char **)target)[opt->target_idx] 
+					if (!(((char **)target)[opt->target_idx]
 							= cargo_strndup(val, opt->lenstr)))
 					{
 						return -1;
@@ -1418,7 +1418,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 						_cargo_get_cflag(ctx), ctx->max_width,
 						2,
-						ctx->i - 1, "^"CARGO_COLOR_YELLOW, 
+						ctx->i - 1, "^"CARGO_COLOR_YELLOW,
 						ctx->j, "~"CARGO_COLOR_RED);
 
 		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
@@ -2086,12 +2086,12 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 			j1 = DB;
 			cost = ((s[ i - 1] == t[j - 1]) ? 0 : 1);
 
-			if (cost == 0) 
+			if (cost == 0)
 				DB = j;
 
-			d(i + 1, j + 1) = min4(d(i, j) + cost, 
+			d(i + 1, j + 1) = min4(d(i, j) + cost,
 							  d(i + 1, j) + 1,
-							  d(i, j + 1) + 1, 
+							  d(i, j + 1) + 1,
 							  d(i1, j1) + (i - i1 - 1) + 1 + (j - j1 - 1));
 		}
 
@@ -2211,7 +2211,7 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_astr_t *str,
 			// ---------------------------------------------------------
 			// --reallyreallyreallyreallylongoption
 			//              Description    <- First line but pad anyway.
-			//              continues here 
+			//              continues here
 			padding = max_name_len + name_padding;
 		}
 
@@ -2269,7 +2269,7 @@ static int _cargo_mutex_group_should_be_grouped(cargo_t ctx,
 	return 0;
 }
 
-static int _cargo_print_options(cargo_t ctx, 
+static int _cargo_print_options(cargo_t ctx,
 								size_t *opt_indices, size_t opt_count,
 								int show_positional, cargo_astr_t *str,
 								int max_name_len, int indent, int is_mutex,
@@ -2300,7 +2300,7 @@ static int _cargo_print_options(cargo_t ctx,
 		opt = &ctx->options[opt_i];
 
 		// We don't show this in its normal position since it is a member of
-		// a mutex group that should be grouped in the usage. 
+		// a mutex group that should be grouped in the usage.
 		if (_cargo_mutex_group_should_be_grouped(ctx, opt, 0) && !is_mutex)
 		{
 			continue;
@@ -2806,7 +2806,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 
 fail:
 	if (tmp) free(tmp);
-	
+
 	if (!ret && *grpname)
 	{
 		free(*grpname);
@@ -3236,7 +3236,7 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 		{
 			if (opt->parsed > first_i)
 			{
-				is_invalid = 1;	
+				is_invalid = 1;
 			}
 		}
 		else
@@ -4354,7 +4354,7 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 	{
 		return -1;
 	}
-	
+
 	fprintf(f, "%s\n", ret);
 	free(ret);
 	return 0;
@@ -4654,7 +4654,7 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 	cargo_opt_t *opt = NULL;
 	va_list apc;
 	assert(ctx);
- 
+
 	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
 	{
 		CARGODBG(1, "Failed to find option \"%s\"\n", optname);
@@ -4692,7 +4692,7 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	size_t name_i;
 	cargo_opt_t *opt;
 	assert(ctx);
- 
+
 	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
 	{
 		CARGODBG(1, "Failed to find option \"%s\"\n", optname);
@@ -4863,7 +4863,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 		int indent = 0;
 		grp = &ctx->groups[i];
 
-		if ((grp->flags & CARGO_GROUP_HIDE) || (grp->opt_count == 0)) 
+		if ((grp->flags & CARGO_GROUP_HIDE) || (grp->opt_count == 0))
 		{
 			continue;
 		}
@@ -5470,7 +5470,7 @@ fail:
 	{
 		_cargo_free_str_list(&optname_list, &optcount);
 	}
-	
+
 	return ret;
 }
 
@@ -5896,7 +5896,7 @@ _TEST_START(TEST_add_static_string_option)
 	char b[10];
 	char *args[] = { "program", "--beta", "abc" };
  	ret = cargo_add_option(cargo, 0, "--beta -b",
-							"Description", 
+							"Description",
 							".s#",
 							&b, sizeof(b));
 	cargo_assert(ret == 0, "Failed to add valid static string option");
@@ -5917,7 +5917,7 @@ _TEST_START(TEST_add_alloc_string_option)
 	char *b = NULL;
 	char *args[] = { "program", "--beta", "abc" };
  	ret = cargo_add_option(cargo, 0, "--beta -b",
-							"Description", 
+							"Description",
 							"s",
 							&b);
 	cargo_assert(ret == 0, "Failed to add valid alloc string option");
@@ -6037,7 +6037,7 @@ _TEST_START(TEST_add_static_string_array_option)
 	#define ARRAY2_SIZE (sizeof(a) / sizeof(a[0]))
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
-	_TEST_ARRAY_OPTION(a, ARRAY2_SIZE, args, ARG_SIZE, 
+	_TEST_ARRAY_OPTION(a, ARRAY2_SIZE, args, ARG_SIZE,
 						".[s#]#", &a, LENSTR, &count, ARRAY2_SIZE);
 
 	printf("Read %lu values from int array: %s, %s, %s\n",
@@ -6105,7 +6105,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option)
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE,
 						"[s#]#", &a, LENSTR, &count, 3);
 
 	cargo_assert(a != NULL, "Array is null");
@@ -6128,7 +6128,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option2)
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
 
-	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE, 
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE,
 						"[s]#", &a, &count, 3);
 
 	cargo_assert(a != NULL, "Array is null");
@@ -6196,12 +6196,12 @@ _TEST_START(TEST_print_usage)
 			"dolor in reprehenderit in voluptate velit esse cillum dolore eu "
 			"fugiat nulla pariatur. Excepteur sint occaecat cupidatat non "
 			"proident, sunt in culpa qui officia deserunt mollit anim id est "
-			"laborum", 
+			"laborum",
 			".[i]#",
 			&a, &a_count, sizeof(a) / sizeof(a[0]));
 
  	ret |= cargo_add_option(cargo, 0, "--beta -b",
-			"Shorter description", 
+			"Shorter description",
 			"f",
 			&b);
 	ret |= cargo_set_metavar(cargo, "--beta", "FLOAT");
@@ -6210,7 +6210,7 @@ _TEST_START(TEST_print_usage)
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
 			"accusantium doloremque laudantium, totam rem aperiam, eaque ipsa "
 			"quae ab illo inventore veritatis et quasi architecto beatae vitae "
-			"dicta sunt explicabo", 
+			"dicta sunt explicabo",
 			"d",
 			&c);
 
@@ -6218,7 +6218,7 @@ _TEST_START(TEST_print_usage)
 			"Sed ut perspiciatis unde omnis iste natus error sit voluptatem "
 			"accusantium doloremque laudantium, totam rem aperiam, eaque ipsa "
 			"quae ab illo inventore veritatis et quasi architecto beatae vitae "
-			"dicta sunt explicabo", 
+			"dicta sunt explicabo",
 			"s",
 			&s);
 
@@ -6446,7 +6446,7 @@ _TEST_START(TEST_cargo_split)
 {
 	size_t i;
 	size_t j;
-	
+
 	char *in[] =
 	{
 		" abc def   ghi   ",
@@ -6454,7 +6454,7 @@ _TEST_START(TEST_cargo_split)
 		NULL
 	};
 	#define NUM (sizeof(in) / sizeof(in[0]))
-	
+
 	char *expect0[] = { "abc", "def", "ghi" };
 	char *expect1[] = { "abc" };
 	char *expect2[] = { NULL };
@@ -6481,7 +6481,7 @@ _TEST_START(TEST_cargo_split)
 
 		for (j = 0; j < out_count[i]; j++)
 		{
-			printf("\"%s\"%s ", 
+			printf("\"%s\"%s ",
 				out[i][j], ((j + 1) != out_count[i]) ? "," : "");
 		}
 
@@ -7361,7 +7361,7 @@ _TEST_START(TEST_group)
 	// Try using the API to add the option to the group.
 	ret |= cargo_add_option(cargo, 0, "--centauri", "The alpha centauri", "i?", &k, "4");
 	ret |= cargo_group_add_option(cargo, "group1", "--centauri");
-	
+
 	ret |= cargo_add_option(cargo, 0, "<group2> --delta", LOREM_IPSUM LOREM_IPSUM, "i?", &l, "5");
 	cargo_assert(ret == 0, "Failed to add options");
 
@@ -7404,7 +7404,7 @@ _TEST_START(TEST_many_groups)
 			ret |= cargo_add_option(cargo, 0, optname, LOREM_IPSUM, "i", &vals[i][j]);
 			ret |= cargo_group_add_option(cargo, grpname, optname);
 			cargo_assert(ret == 0, "Failed to add option");
-		}	
+		}
 	}
 
 	cargo_assert(ret == 0, "Failed to add groups");
@@ -8100,7 +8100,7 @@ _TEST_END()
 
 _TEST_START(TEST_cargo_get_option_mutex_groups)
 {
-	size_t i; 
+	size_t i;
 	size_t count = 0;
 	const char **mgroups = NULL;
 	int a = 0;
@@ -8316,7 +8316,7 @@ _TEST_START(TEST_mutex_group_usage2)
 		"MGROUP1_DESCRIPTION should be shown when grouped");
 	cargo_assert(!strstr(s, "MGROUP2_DESCRIPTION"),
 		"MGROUP2_DESCRIPTION should not show by default");
-	
+
 	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
 	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
 	cargo_assert(strstr(s, "--beta"), "Missing --beta");
@@ -8645,7 +8645,7 @@ static char *_test_mutex_order_group(cargo_t cargo, cargo_mutex_group_flags_t fl
 	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --beta -b", LOREM_IPSUM, "b", &b);
 	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --centauri -c", "bla bla" LOREM_IPSUM, "b", &c);
 	ret |= cargo_add_option(cargo, 0, "<!mgroup1> --delta -d", "bla bla" LOREM_IPSUM, "b", &d);
-	
+
 	ret |= cargo_add_option(cargo, 0, "--error -e", "AAWESOME" LOREM_IPSUM, "b", &d);
 	ret |= cargo_add_option(cargo, 0, "--fail -f", "Fail " LOREM_IPSUM, "b", &d);
 
@@ -8848,8 +8848,8 @@ _TEST_END()
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 
-// TODO: Test CARGO_NO_FAIL_UNKNOWN and make 
-// sure they are still added to the list of unknown options, 
+// TODO: Test CARGO_NO_FAIL_UNKNOWN and make
+// sure they are still added to the list of unknown options,
 // but that the parse does not fail
 
 // TODO: Test CARGO_UNIQUE_OPTS
