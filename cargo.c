@@ -1716,7 +1716,7 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 
 	if (opt->flags & CARGO_OPT_STOP)
 	{
-		ctx->stopped = (opt->positional) ? ctx->j : ctx->j + 1;
+		ctx->stopped = ctx->j;
 		CARGODBG(2, "%s: Stopping parse (index %d)\n", opt->name[0], ctx->stopped);
 	}
 
@@ -3407,13 +3407,15 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 	if (ctx->flags & CARGO_UNKNOWN_EARLY)
 	{
 		CARGODBG(2, "Check for unknown options before parsing.\n"
-			        "   CARGO_UNKNOWN_EARLY is set\n");
+			        "   CARGO_UNKNOWN_EARLY is set\n"
+			        "    Check between %d and %d\n", ctx->start, ctx->stopped);
 		_cargo_check_unknown_options_gather(ctx, ctx->start, ctx->argc);
 	}
 	else
 	{
 		CARGODBG(2, "Check for unknown options after parsing.\n"
-			        "    CARGO_UNKNOWN_EARLY is NOT set\n");
+			        "    CARGO_UNKNOWN_EARLY is NOT set\n"
+			        "    Check between %d and %d\n", ctx->start, ctx->stopped);
 		_cargo_check_unknown_options_gather(ctx, ctx->start, ctx->stopped);
 	}
 
@@ -8987,6 +8989,7 @@ _TEST_START(TEST_late_unknown_options_no_fail)
 	size_t expected_count = sizeof(expected) / sizeof(expected[0]);
 	int a = 0;
 	int b = 0;
+	size_t i = 0;
 	const char **unknowns = NULL;
 	size_t unknown_count = 0;
 	char **unknowns_cpy = NULL;
@@ -9008,14 +9011,58 @@ _TEST_START(TEST_late_unknown_options_no_fail)
 
 	unknowns = cargo_get_unknown(cargo, &unknown_count);
 	cargo_assert(unknowns, "Got NULL unknowns list");
-	cargo_assert(unknown_count == expected_count,
-		"Got unexpected unknown count");
+	for (i = 0; i < unknown_count; i++) printf("%s\n", unknowns[i]);
 	cargo_assert_str_array(unknown_count, expected_count, unknowns, expected);
 
 	unknowns_cpy = cargo_get_unknown_copy(cargo, &unknown_count_cpy);
 	cargo_assert(unknowns_cpy, "Got NULL unknowns list (copy)");
-	cargo_assert(unknown_count_cpy == expected_count,
-		"Got unexpected unknown count (copy)");
+	for (i = 0; i < unknown_count_cpy; i++) printf("%s\n", unknowns_cpy[i]);
+	cargo_assert_str_array(unknown_count_cpy, expected_count, unknowns_cpy, expected);
+
+	_TEST_CLEANUP();
+	cargo_free_commandline(&unknowns_cpy, unknown_count_cpy);
+}
+_TEST_END()
+
+_TEST_START(TEST_late_unknown_options_no_fail_stop)
+{
+	char *args[] =
+	{
+		"program", "--alpha", "123", "--centauri", "--delta", "--beta", "3",
+		"--bla", "--blo", "--many", "--other", "options"
+	};
+	char *expected[] = { "--centauri", "--delta" };
+	size_t expected_count = sizeof(expected) / sizeof(expected[0]);
+	int a = 0;
+	int b = 0;
+	size_t i = 0;
+	const char **unknowns = NULL;
+	size_t unknown_count = 0;
+	char **unknowns_cpy = NULL;
+	size_t unknown_count_cpy = 0;
+
+	cargo_set_flags(cargo, CARGO_NO_FAIL_UNKNOWN);
+
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i", &a);
+	ret = cargo_add_option(cargo, CARGO_OPT_STOP, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failure on unknown option (late, no fail)");
+
+	printf("a = %d\n", a);
+	printf("b = %d\n", b);
+	cargo_assert(a == 123, "a != 123 after unknown option (check after)");
+	cargo_assert(b == 3,   "b != 3 after unknown option (check after)");
+
+	unknowns = cargo_get_unknown(cargo, &unknown_count);
+	cargo_assert(unknowns, "Got NULL unknowns list");
+	for (i = 0; i < unknown_count; i++) printf("%s\n", unknowns[i]);
+	cargo_assert_str_array(unknown_count, expected_count, unknowns, expected);
+
+	unknowns_cpy = cargo_get_unknown_copy(cargo, &unknown_count_cpy);
+	cargo_assert(unknowns_cpy, "Got NULL unknowns list (copy)");
+	for (i = 0; i < unknown_count_cpy; i++) printf("%s\n", unknowns_cpy[i]);
 	cargo_assert_str_array(unknown_count_cpy, expected_count, unknowns_cpy, expected);
 
 	_TEST_CLEANUP();
@@ -9159,7 +9206,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg2),
 	CARGO_ADD_TEST(TEST_late_unknown_options),
 	CARGO_ADD_TEST(TEST_early_unknown_options),
-	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail)
+	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail),
+	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
