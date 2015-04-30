@@ -193,6 +193,11 @@ typedef enum cargo_parse_result_e
 	CARGO_PARSE_SHOW_HELP 				= 1
 } cargo_parse_result_t;
 
+typedef enum cargo_err_flags_e
+{
+	CARGO_ERR_DEFAULT					= 0
+} cargo_err_flags_t;
+
 //
 // Callback types.
 //
@@ -273,6 +278,12 @@ int cargo_print_usage(cargo_t ctx, cargo_usage_t flags);
 const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags);
 
 const char *cargo_get_error(cargo_t ctx);
+
+void cargo_set_errorv(cargo_t ctx, cargo_err_flags_t flags,
+					const char *fmt, va_list ap);
+
+void cargo_set_error(cargo_t ctx,
+					cargo_err_flags_t flags, const char *fmt, ...);
 
 const char **cargo_get_unknown(cargo_t ctx, size_t *unknown_count);
 

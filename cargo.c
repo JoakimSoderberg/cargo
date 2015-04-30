@@ -3426,7 +3426,7 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 
 		if (ctx->error)
 		{
-			cargo_aappendf(&str, "%s\n\n", ctx->error);
+			cargo_aappendf(&str, "%s\n", ctx->error);
 		}
 
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
@@ -4621,6 +4621,37 @@ fail:
 	_cargo_cleanup_option_values(ctx);
 	ctx->flags = global_flags;
 	return ret;
+}
+
+void cargo_set_errorv(cargo_t ctx, cargo_err_flags_t flags,
+					const char *fmt, va_list ap)
+{
+	int ret = 0;
+	char *error = NULL;
+	assert(ctx);
+
+	ret = cargo_vasprintf(&error, fmt, ap);
+
+	if (ret >= 0)
+	{
+		if (ctx->error)
+		{
+			free(ctx->error);
+			ctx->error = NULL;
+		}
+
+		ctx->error = error;
+	}
+}
+
+void cargo_set_error(cargo_t ctx,
+					cargo_err_flags_t flags, const char *fmt, ...)
+{
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	cargo_set_errorv(ctx, flags, fmt, ap);
+	va_end(ap);
 }
 
 const char *cargo_get_error(cargo_t ctx)
@@ -8925,15 +8956,6 @@ _TEST_START(TEST_cargo_zero_or_one_without_arg2)
 }
 _TEST_END()
 
-static int unknown_opt_cb(cargo_t ctx, void *user, const char *optname,
-								int argc, char **argv)
-{
-	int *i = (int *)user;
-	*i = 1;
-
-	return argc;
-}
-
 _TEST_START(TEST_late_unknown_options)
 {
 	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
@@ -9067,6 +9089,16 @@ _TEST_START(TEST_late_unknown_options_no_fail_stop)
 
 	_TEST_CLEANUP();
 	cargo_free_commandline(&unknowns_cpy, unknown_count_cpy);
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_set_error)
+{
+	cargo_set_error(cargo, 0, "Hello %s\n", "world");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello world\n"),
+		"Unexpected string");
+
+	_TEST_CLEANUP();
 }
 _TEST_END()
 
@@ -9207,7 +9239,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_late_unknown_options),
 	CARGO_ADD_TEST(TEST_early_unknown_options),
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail),
-	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop)
+	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop),
+	CARGO_ADD_TEST(TEST_cargo_set_error)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

@@ -574,6 +574,12 @@ If an option has already been parsed before (specified more than once) and eithe
 #### (-8) `CARGO_PARSE_CALLBACK_ERR` ####
 If a custom option user callback parses an option and indicates that an error has occurred.
 
+### cargo_err_flags_t ###
+
+These are flags for the [`cargo_set_error`](api.md#cargo_set_error) function.
+
+Currently this is not used, but exists so that different behavior can be added in the future without changing the ABI.
+
 ## Functions ##
 
 Here you find the core API for cargo.
@@ -1175,6 +1181,51 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags);
 This returns a string containing the usage for the given cargo context. 
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
+
+### cargo_set_error ###
+
+```c
+void cargo_set_error(cargo_t ctx,
+                     cargo_err_flags_t flags,
+                     const char *fmt, ...)
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: Flags [`cargo_err_flags_t`](api.md#cargo_err_flags_t). Not used at the moment.
+
+**fmt**: Format string, same as for `printf`.
+
+**...**: Variable arguments for format string.
+
+---
+
+This is meant to be used inside of [`custom callback`](api.md#cargo_custom_cb_t) function to set errors when parsing custom values.
+
+### ###
+
+```c
+void cargo_set_errorv(cargo_t ctx,
+                      cargo_err_flags_t flags,
+                      const char *fmt,
+                      va_list ap)
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: Flags [`cargo_err_flags_t`](api.md#cargo_err_flags_t). Not used at the moment.
+
+**fmt**: Format string, same as for `printf`.
+
+**ap**: Variable arguments for format string.
+
+---
+
+Varargs version of [`cargo_set_error`](api.md#cargo_set_error).
 
 ### cargo_get_error ###
 
