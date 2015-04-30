@@ -3775,7 +3775,7 @@ static const char *_cargo_option_get_group(cargo_t ctx, const char *opt,
 	return groups[o->group_index].name;
 }
 
-static const void _cargo_mutex_group_short_usage(cargo_t ctx,
+static void _cargo_mutex_group_short_usage(cargo_t ctx,
 						cargo_astr_t *str, size_t indent)
 {
 	int ret = 0;
