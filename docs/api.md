@@ -1036,21 +1036,6 @@ For example if the reason for the failed parse is that unknown options where fou
 
 Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#CARGO_PARSE_SHOW_HELP) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) flag is set in [`cargo_init`](api.md#cargo_init).
 
-### cargo_set_option_count_hint ###
-
-```c
-void cargo_set_option_count_hint(cargo_t ctx, size_t option_count);
-```
-
----
-
-**ctx**: A [`cargo_t`](api.md#cargo_t) context.
-
-**option_count**: The number of options you will add to cargo.
-
----
-
-This gives cargo a hint about how many options you will be adding so that it can allocate the correct number of options right away instead of having to do a reallocation.
 
 ### cargo_set_prefix ###
 
