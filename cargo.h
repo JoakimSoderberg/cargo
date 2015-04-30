@@ -281,6 +281,8 @@ const char **cargo_get_args(cargo_t ctx, size_t *argc);
 
 char **cargo_get_args_copy(cargo_t ctx, size_t *argc);
 
+int cargo_get_stop_index(cargo_t ctx);
+
 void cargo_set_context(cargo_t ctx, void *user);
 
 void *cargo_get_context(cargo_t ctx);

@@ -4958,6 +4958,12 @@ fail:
 	return ret;
 }
 
+int cargo_get_stop_index(cargo_t ctx)
+{
+	assert(ctx);
+	return ctx->stopped;
+}
+
 int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_usage_t flags)
 {
 	const char *s;
