@@ -138,7 +138,8 @@ typedef enum cargo_flags_e
 	CARGO_NO_AUTOHELP					= (1 << 5),
 	CARGO_NO_FAIL_UNKNOWN				= (1 << 6),
 	CARGO_UNIQUE_OPTS					= (1 << 7),
-	CARGO_NOWARN						= (1 << 8)
+	CARGO_NOWARN						= (1 << 8),
+	CARGO_UNKNOWN_EARLY					= (1 << 9)
 } cargo_flags_t;
 
 typedef enum cargo_format_e

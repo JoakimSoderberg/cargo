@@ -1716,8 +1716,8 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 
 	if (opt->flags & CARGO_OPT_STOP)
 	{
-		CARGODBG(2, "%s: Stopping parse\n", opt->name[0]);
-		ctx->stopped = 1;
+		ctx->stopped = (opt->positional) ? ctx->j : ctx->j + 1;
+		CARGODBG(2, "%s: Stopping parse (index %d)\n", opt->name[0], ctx->stopped);
 	}
 
 	return (opt->positional) ? opt->num_eaten : (opt->num_eaten + 1);
@@ -3362,21 +3362,16 @@ static int _cargo_is_arg_negative_integer(const char *arg)
 	return (i < 0);
 }
 
-static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
+static void _cargo_check_unknown_options_gather(cargo_t ctx,
+												int start, int end)
 {
-	cargo_parse_result_t ret = CARGO_PARSE_UNKNOWN_OPTS;
-	size_t i;
 	cargo_opt_t *opt = NULL;
-	cargo_highlight_t *highlights = NULL;
-	cargo_astr_t str;
-	char *error = NULL;
-	const char *name = NULL;
 	char *arg = NULL;
-	memset(&str, 0, sizeof(str));
-	str.s = &error;
+	const char *name = NULL;
+	assert(ctx);
 
 	// TODO: Add support for options with negative numbers.
-	for (ctx->i = ctx->start; ctx->i < ctx->argc; )
+	for (ctx->i = start; ctx->i < end; )
 	{
 		arg = ctx->argv[ctx->i];
 
@@ -3394,11 +3389,43 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 
 		ctx->i++;
 	}
+}
+
+static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
+{
+	cargo_parse_result_t ret = CARGO_PARSE_UNKNOWN_OPTS;
+	size_t i;
+	cargo_highlight_t *highlights = NULL;
+	cargo_astr_t str;
+	char *error = NULL;
+	memset(&str, 0, sizeof(str));
+	str.s = &error;
+	assert(ctx);
+
+	// We could do a first pass for unknown options the first thing we do.
+	// Default is to wait until after parsing.
+	if (ctx->flags & CARGO_UNKNOWN_EARLY)
+	{
+		CARGODBG(2, "Check for unknown options before parsing.\n"
+			        "   CARGO_UNKNOWN_EARLY is set\n");
+		_cargo_check_unknown_options_gather(ctx, ctx->start, ctx->argc);
+	}
+	else
+	{
+		CARGODBG(2, "Check for unknown options after parsing.\n"
+			        "    CARGO_UNKNOWN_EARLY is NOT set\n");
+		_cargo_check_unknown_options_gather(ctx, ctx->start, ctx->stopped);
+	}
 
 	if (ctx->unknown_opts_count > 0)
 	{
 		const char *suggestion = NULL;
 		char *s = NULL;
+
+		if (ctx->error)
+		{
+			cargo_aappendf(&str, "%s\n\n", ctx->error);
+		}
 
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		cargo_aappendf(&str, "Unknown options:\n");
@@ -3460,6 +3487,33 @@ fail:
 	if (highlights) free(highlights);
 
 	return ret;
+}
+
+static cargo_parse_result_t _cargo_check_unknown_options_after(cargo_t ctx)
+{
+	assert(ctx);
+
+	// This check has already been done.
+	if (ctx->flags & CARGO_UNKNOWN_EARLY)
+	{
+		return CARGO_PARSE_OK;
+	}
+
+	// We must have a stop index so we know for what span to check for unknown
+	// options. Any options remaining after the stop index will be excluded in
+	// this check.
+	if (!ctx->stopped)
+	{
+		CARGODBG(2, "Stop at end of argv after parse: %d\n", ctx->argc);
+		ctx->stopped = ctx->argc;
+	}
+	else
+	{
+		CARGODBG(2, "Stopped by option at index: %d\n", ctx->stopped);
+	}
+
+	// TODO: Only append errors.
+	return _cargo_check_unknown_options(ctx);
 }
 
 static void _cargo_parse_show_error(cargo_t ctx)
@@ -4436,8 +4490,9 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 
 	CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
 
-	// Check for unknown options first.
-	if (_cargo_check_unknown_options(ctx))
+	// Check for unknown options early.
+	if ((ctx->flags & CARGO_UNKNOWN_EARLY)
+		&& _cargo_check_unknown_options(ctx))
 	{
 		ret = CARGO_PARSE_UNKNOWN_OPTS; goto fail;
 	}
@@ -4471,7 +4526,6 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 		}
 		else
 		{
-			// TODO: Optional to fail on unknown options and arguments!
 			size_t opt_i = 0;
 			CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
 
@@ -4516,6 +4570,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 		#endif // CARGO_DEBUG
 	}
 
+	// Print automatic help.
 	if (ctx->help)
 	{
 		cargo_print_usage(ctx, 0);
@@ -4533,6 +4588,11 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 		goto fail;
 	}
 
+	if ((ret = _cargo_check_unknown_options_after(ctx)))
+	{
+		goto fail;
+	}
+
 	// Shows warnings.
 	if (!(ctx->flags & CARGO_NOWARN))
 	{
@@ -4541,7 +4601,20 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 
 	ctx->flags = global_flags;
 	return CARGO_PARSE_OK;
+
 fail:
+	// Let unknown options override other errors.
+	// But don't check for them more than once.
+	if (ctx->unknown_opts_count == 0)
+	{
+		int unknown_ret = 0;
+		if ((unknown_ret = _cargo_check_unknown_options_after(ctx)))
+		{
+			CARGODBG(1, "Unknown option overrides previous error\n");
+			ret = unknown_ret;
+		}
+	}
+
 	_cargo_parse_show_error(ctx);
 	_cargo_cleanup_option_values(ctx);
 	ctx->flags = global_flags;
@@ -8850,13 +8923,109 @@ _TEST_START(TEST_cargo_zero_or_one_without_arg2)
 }
 _TEST_END()
 
+static int unknown_opt_cb(cargo_t ctx, void *user, const char *optname,
+								int argc, char **argv)
+{
+	int *i = (int *)user;
+	*i = 1;
+
+	return argc;
+}
+
+_TEST_START(TEST_late_unknown_options)
+{
+	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Parse success on unknown option (late)");
+
+	printf("a = %d\n", a);
+	printf("b = %d\n", b);
+	cargo_assert(a == 123, "a != 123 after unknown option (check after)");
+	cargo_assert(b == 3,   "b != 3 after unknown option (check after)");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_early_unknown_options)
+{
+	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+
+	cargo_set_flags(cargo, CARGO_UNKNOWN_EARLY);
+
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret != 0, "Parse success on unknown option (early)");
+
+	printf("a = %d\n", a);
+	printf("b = %d\n", b);
+	cargo_assert(a == 0, "a != 0, when early unknown option");
+	cargo_assert(b == 0, "b != 0, when early unknown option");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_late_unknown_options_no_fail)
+{
+	char *args[] =
+	{
+		"program", "--alpha", "123", "--centauri", "--delta", "--beta", "3"
+	};
+	char *expected[] = { "--centauri", "--delta" };
+	size_t expected_count = sizeof(expected) / sizeof(expected[0]);
+	int a = 0;
+	int b = 0;
+	const char **unknowns = NULL;
+	size_t unknown_count = 0;
+	char **unknowns_cpy = NULL;
+	size_t unknown_count_cpy = 0;
+
+	cargo_set_flags(cargo, CARGO_NO_FAIL_UNKNOWN);
+
+	ret = cargo_add_option(cargo, 0, "--alpha", "an option", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failure on unknown option (late, no fail)");
+
+	printf("a = %d\n", a);
+	printf("b = %d\n", b);
+	cargo_assert(a == 123, "a != 123 after unknown option (check after)");
+	cargo_assert(b == 3,   "b != 3 after unknown option (check after)");
+
+	unknowns = cargo_get_unknown(cargo, &unknown_count);
+	cargo_assert(unknowns, "Got NULL unknowns list");
+	cargo_assert(unknown_count == expected_count,
+		"Got unexpected unknown count");
+	cargo_assert_str_array(unknown_count, expected_count, unknowns, expected);
+
+	unknowns_cpy = cargo_get_unknown_copy(cargo, &unknown_count_cpy);
+	cargo_assert(unknowns_cpy, "Got NULL unknowns list (copy)");
+	cargo_assert(unknown_count_cpy == expected_count,
+		"Got unexpected unknown count (copy)");
+	cargo_assert_str_array(unknown_count_cpy, expected_count, unknowns_cpy, expected);
+
+	_TEST_CLEANUP();
+	cargo_free_commandline(&unknowns_cpy, unknown_count_cpy);
+}
+_TEST_END()
+
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
-
-// TODO: Test CARGO_NO_FAIL_UNKNOWN and make
-// sure they are still added to the list of unknown options,
-// but that the parse does not fail
 
 // TODO: Test CARGO_UNIQUE_OPTS
 // TODO: Test CARGO_NOWARN
@@ -8987,7 +9156,10 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_parse_stop),
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_with_arg),
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg),
-	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg2)
+	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg2),
+	CARGO_ADD_TEST(TEST_late_unknown_options),
+	CARGO_ADD_TEST(TEST_early_unknown_options),
+	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
