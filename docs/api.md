@@ -373,6 +373,19 @@ Don't show warnings.
 
 For example when [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is not set and an option is specified more than once, a warning will be shown that the first value is ignored. This suppresses this.
 
+#### `CARGO_UNKNOWN_EARLY` ####
+When parsing arguments cargo will by default do it in this order:
+
+- Go through all arguments and try to parse them.
+- Check for unknown options and fail if they're found.
+
+This option instead moves this check to **before** the parsing is performed:
+
+- Check for unknown options and fail if they're found.
+- Go through all arguments and try to parse them.
+
+Note that since we parse the arguments after we check for unknown options, using the option flag [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) will work differently in regards to unknown options. Options found after the stop point will still be processed during the unknown check.
+
 ### cargo_usage_t ###
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
@@ -426,6 +439,16 @@ This makes the option description considered literal by cargo, and no automatic 
 
 To enable this for all options instead the [`CARGO_USAGE_RAW_OPT_DESCRIPTIONS`](api.md#cargo_usage_raw_opt_descriptions) flag can be passed to [`cargo_init`](api.md#cargo_init)
 
+#### `CARGO_OPT_STOP` ####
+Settings this flag for an option will cause the [`cargo_parse`](api.md#cargo_parse) to stop parsing any further arguments after the first occurance of that option in a given argument list.
+
+To get the index the parser stopped at you can use [`cargo_get_stop_index`](api.md#cargo_get_stop_index).
+
+Note that it will still process all remaining arguments, but it will not try to parse them as options or consume any of the values. Instead all remaining arguments are put in the **extra arguments** list that can be fetched [`cargo_get_args`](api.md#cargo_get_args) together with other remaining arguments.
+
+Any options after the stop point won't show up in the unknown options list either, unless the [`CARGO_UNKNOWN_EARLY`](api.md#cargo_unknown_early) flag is used.
+
+This can be useful if you're only parsing part of the arguments using one parser, and then want to pass the remaining arguments on to another parser to proccess the rest of the arguments. Simply pass the same `argv` and then use the `stop` index as the `start` index for the second parser.
 
 ### cargo_mutex_group_flags_t ###
 
@@ -1168,6 +1191,22 @@ const char *cargo_get_error(cargo_t ctx);
 This will return any error that was set by [`cargo_parse`](api.md#cargo_parse) in the last call to it. This is useful if you want to customize exactly how the error is shown. By default this will be printed to `stderr`. See [`cargo_flags_t`](api.md#cargo_flags_t) to turn that behaviour off.
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
+
+### cargo_get_stop_index ###
+
+```c
+int cargo_get_stop_index(cargo_t ctx);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+---
+
+Gets the index where the parse was stopped. This will either be the end index passed in `argc` or it can be the index of an option with the [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) flag set.
+
+This can be useful when using multiple parsers, or simply wanting to stop parsing for some other reason. See details [`CARGO_OPT_STOP`](api.md#cargo_opt_stop).
 
 ### cargo_get_unknown ###
 
