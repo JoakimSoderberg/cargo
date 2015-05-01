@@ -228,13 +228,21 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 
 int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
-int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+int cargo_set_metavarv(cargo_t ctx,
+					const char *optname,
+					const char *fmt, va_list ap);
+
+int cargo_set_metavar(cargo_t ctx,
+					const char *optname,
+					const char *fmt, ...);
 
 int cargo_set_option_descriptionv(cargo_t ctx,
-								  char *optname, const char *fmt, va_list ap);
+								  const char *optname,
+								  const char *fmt, va_list ap);
 
 int cargo_set_option_description(cargo_t ctx,
-								 char *optname, const char *fmt, ...);
+								 const char *optname,
+								 const char *fmt, ...);
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 					const char *title, const char *description);
@@ -254,9 +262,13 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
 								const char *opt);
 
+int cargo_mutex_group_set_metavarv(cargo_t ctx,
+								   const char *mutex_group,
+								   const char *fmt, va_list ap);
+
 int cargo_mutex_group_set_metavar(cargo_t ctx,
-								const char *mutex_group,
-								const char *metavar);
+								  const char *mutex_group,
+								  const char *fmt, ...);
 
 void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags);
 
@@ -267,9 +279,13 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width);
 
-void cargo_set_description(cargo_t ctx, const char *description);
+void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap);
 
-void cargo_set_epilog(cargo_t ctx, const char *epilog);
+void cargo_set_description(cargo_t ctx, const char *fmt, ...);
+
+void cargo_set_epilogv(cargo_t ctx, const char *fmt, va_list ap);
+
+void cargo_set_epilog(cargo_t ctx, const char *fmt, ...);
 
 int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_usage_t flags);
 

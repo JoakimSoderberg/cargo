@@ -849,7 +849,9 @@ Adds an option to a mutex group.
 ### cargo_mutex_group_set_metavar ###
 
 ```c
-int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const char *metavar);
+int cargo_mutex_group_set_metavar(cargo_t ctx,
+                  const char *mutex_group,
+                  const char *fmt, ...);
 ```
 
 ---
@@ -858,7 +860,9 @@ int cargo_mutex_group_set_metavar(cargo_t ctx, const char *mutex_group, const ch
 
 **group**: The name of the mutex group.
 
-**metavar**: The meta variable name.
+**fmt**: printf style format string for the meta variable name.
+
+**...**: Formatting arguments.
 
 ---
 
@@ -888,6 +892,17 @@ Usage: program [--alpha ALPHA] VARS
 
 For another setting related how the mutex group is shown in the usage see [`CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE`](api.md#cargo_mutexgrp_no_group_short_usage).
 
+### cargo_mutex_group_set_metavarv ###
+
+```c
+int cargo_mutex_group_set_metavarv(cargo_t ctx,
+                   const char *mutex_group,
+                   const char *fmt, va_list ap);
+```
+
+Variadic version of [`cargo_mutex_group_set_metavar`](api.md#cargo_mutex_group_set_metavar).
+
+
 ### cargo_set_option_description ###
 
 ```c
@@ -916,24 +931,14 @@ int cargo_set_option_descriptionv(cargo_t ctx,
                   char *optname, const char *fmt, va_list ap);
 ```
 
----
-
-**ctx**: A [`cargo_t`](api.md#cargo_t) context.
-
-**optname**: The option name you want to set the metavar for.
-
-**fmt**: Printf format string.
-
-**ap**: Variable arguments for printf.
-
----
-
 Variadic version of [`cargo_set_option_description`](api.md#cargo_set_option_description).
 
 ### cargo_set_metavar ###
 
 ```c
-int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
+int cargo_set_metavar(cargo_t ctx,
+          const char *optname,
+          const char *fmt, ...);
 ```
 
 ---
@@ -942,7 +947,9 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar);
 
 **optname**: The option name you want to set the metavar for.
 
-**metavar**: The meta variable name.
+**fmt**: printf style format string for the meta variable name.
+
+**...**: Formatting arguments.
 
 ---
 
@@ -957,7 +964,7 @@ The default is to simply use the option name in uppercase:
 So you can change this to whatever you want:
 
 ```c
-ret = cargo_set_metavar(cargo, "--option", "THEVALUE");
+ret = cargo_set_metavar(cargo, "--option", "THE%s", "VALUE");
 ```
 
 Which gives:
@@ -965,6 +972,19 @@ Which gives:
 ```c
 --option THEVALUE
 ```
+
+Note that this function allows you to use `printf` formatting.
+
+### cargo_set_metavarv ###
+
+```c
+int cargo_set_metavarv(cargo_t ctx,
+          const char *optname,
+          const char *fmt, va_list ap);
+```
+
+Variadic version of [`cargo_set_metavar`](api.md#cargo_set_metavar).
+
 
 ### cargo_set_internal_usage_flags ###
 
@@ -1094,18 +1114,28 @@ This sets the description shown first in the usage output, before the list of op
 ### cargo_set_epilog ###
 
 ```c
-void cargo_set_epilog(cargo_t ctx, const char *epilog);
+void cargo_set_epilog(cargo_t ctx, const char *fmt, ...);
 ```
 
 ---
 
 **ctx**: A [`cargo_t`](api.md#cargo_t) context.
 
-**epilog**: The usage epilog.
+**fmt**: printf style formatting for the usage epilog.
+
+**...**: Formatting arguments.
 
 ---
 
 This sets the epilog, the text shown after the list of options.
+
+### cargo_set_epilogv ###
+
+```c
+void cargo_set_epilogv(cargo_t ctx, const char *fmt, va_list ap);
+```
+
+Variadic verison of [`cargo_set_epilog`](api.md#cargo_set_epilog)
 
 ### cargo_fprint_usage ###
 

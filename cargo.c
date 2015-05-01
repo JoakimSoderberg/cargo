@@ -686,7 +686,7 @@ typedef struct cargo_opt_s
 	char *name[CARGO_NAME_COUNT];
 	size_t name_count;
 	char *description;
-	const char *metavar;
+	char *metavar;
 	int positional;
 	cargo_type_t type;
 	int nargs;
@@ -736,7 +736,7 @@ struct cargo_group_s
 	char *name;
 	char *title;
 	char *description;
-	const char *metavar;
+	char *metavar;
 	size_t flags;			// This is either cargo_group_flags_t
 							// or cargo_mutex_group_flags_t depending on type.
 
@@ -749,8 +749,8 @@ struct cargo_group_s
 typedef struct cargo_s
 {
 	const char *progname;
-	const char *description;
-	const char *epilog;
+	char *description;
+	char *epilog;
 	size_t max_width;
 	cargo_usage_t usage_flags;
 	cargo_flags_t flags;
@@ -2830,6 +2830,7 @@ static void _cargo_group_destroy(cargo_group_t *g)
 	if (g->name) free(g->name);
 	if (g->title) free(g->title);
 	if (g->description) free(g->description);
+	if (g->metavar) free(g->metavar);
 
 	g->option_indices = NULL;
 	g->opt_count = 0;
@@ -4142,6 +4143,18 @@ void cargo_destroy(cargo_t *ctx)
 			c->usage = NULL;
 		}
 
+		if (c->description)
+		{
+			free(c->description);
+			c->description = NULL;
+		}
+
+		if (c->epilog)
+		{
+			free(c->epilog);
+			c->epilog = NULL;
+		}
+
 		free(*ctx);
 		ctx = NULL;
 	}
@@ -4165,16 +4178,49 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 	ctx->prefix = prefix_chars;
 }
 
-void cargo_set_description(cargo_t ctx, const char *description)
+void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap)
 {
 	assert(ctx);
-	ctx->description = description;
+
+	if (ctx->description)
+	{
+		free(ctx->description);
+		ctx->description = NULL;
+	}
+
+	cargo_vasprintf(&ctx->description, fmt, ap);
 }
 
-void cargo_set_epilog(cargo_t ctx, const char *epilog)
+void cargo_set_description(cargo_t ctx, const char *fmt, ...)
+{
+	va_list ap;
+	assert(ctx);
+
+	va_start(ap, fmt);
+	cargo_set_descriptionv(ctx, fmt, ap);
+	va_end(ap);
+}
+
+void cargo_set_epilogv(cargo_t ctx, const char *fmt, va_list ap)
 {
 	assert(ctx);
-	ctx->epilog = epilog;
+
+	if (ctx->epilog)
+	{
+		free(ctx->epilog);
+		ctx->epilog = NULL;
+	}
+
+	cargo_vasprintf(&ctx->epilog, fmt, ap);
+}
+
+void cargo_set_epilog(cargo_t ctx, const char *fmt, ...)
+{
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	cargo_set_epilogv(ctx, fmt, ap);
+	va_end(ap);
 }
 
 typedef struct cargo_phighlight_s
@@ -4752,7 +4798,8 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 }
 
 int cargo_set_option_descriptionv(cargo_t ctx,
-								  char *optname, const char *fmt, va_list ap)
+								  const char *optname,
+								  const char *fmt, va_list ap)
 {
 	int ret = 0;
 	size_t opt_i = 0;
@@ -4776,12 +4823,12 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 	}
 
 	ret = cargo_vasprintf(&opt->description, fmt, ap);
-
 	return (ret >= 0) ? 0 : -1;
 }
 
 int cargo_set_option_description(cargo_t ctx,
-								 char *optname, const char *fmt, ...)
+								 const char *optname,
+								 const char *fmt, ...)
 {
 	int ret = 0;
 	va_list ap;
@@ -4792,8 +4839,11 @@ int cargo_set_option_description(cargo_t ctx,
 	return ret;
 }
 
-int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
+int cargo_set_metavarv(cargo_t ctx,
+					const char *optname,
+					const char *fmt, va_list ap)
 {
+	int ret = 0;
 	size_t opt_i;
 	size_t name_i;
 	cargo_opt_t *opt;
@@ -4806,14 +4856,35 @@ int cargo_set_metavar(cargo_t ctx, const char *optname, const char *metavar)
 	}
 
 	opt = &ctx->options[opt_i];
-	opt->metavar = metavar; // TODO: strdup?
 
-	return 0;
+	if (opt->metavar)
+	{
+		free(opt->metavar);
+		opt->metavar = NULL;
+	}
+
+	ret = cargo_vasprintf(&opt->metavar, fmt, ap);
+	return (ret >= 0) ? 0 : -1;
 }
 
-int cargo_mutex_group_set_metavar(cargo_t ctx,
-		const char *mutex_group, const char *metavar)
+int cargo_set_metavar(cargo_t ctx,
+					const char *optname,
+					const char *fmt, ...)
 {
+	int ret = 0;
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	ret = cargo_set_metavarv(ctx, optname, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
+int cargo_mutex_group_set_metavarv(cargo_t ctx,
+								   const char *mutex_group,
+								   const char *fmt, va_list ap)
+{
+	int ret = 0;
 	cargo_group_t *g = NULL;
 	assert(ctx);
 	assert(mutex_group);
@@ -4825,9 +4896,28 @@ int cargo_mutex_group_set_metavar(cargo_t ctx,
 		return -1;
 	}
 
-	g->metavar = metavar; // TODO: strdup?
+	if (g->metavar)
+	{
+		free(g->metavar);
+		g->metavar = NULL;
+	}
 
-	return 0;
+	ret = cargo_vasprintf(&g->metavar, fmt, ap);
+
+	return (ret >= 0) ? 0 : -1;
+}
+
+int cargo_mutex_group_set_metavar(cargo_t ctx,
+								  const char *mutex_group,
+								  const char *fmt, ...)
+{
+	int ret = 0;
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	ret = cargo_mutex_group_set_metavarv(ctx, mutex_group, fmt, ap);
+	va_end(ap);
+	return ret;
 }
 
 const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
