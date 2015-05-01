@@ -2633,6 +2633,12 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 		o->description = NULL;
 	}
 
+	if (o->metavar)
+	{
+		free(o->metavar);
+		o->metavar = NULL;
+	}
+
 	if (o->bool_acc)
 	{
 		free(o->bool_acc);
