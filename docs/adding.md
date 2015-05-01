@@ -21,10 +21,10 @@ int main(int argc, char **argv)
 Before you can use this instance you need to initialize it using [`cargo_init`](api.md#cargo_init).
 
 ```c
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname); 
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
 ```
 
-The `progname` is the program name you want cargo to display in usage information and such. In most cases this will be `argv[0]`.
+The `progname` is the program name you want cargo to display in usage information and such. In most cases this will be `argv[0]`. Note that `printf` style formatting is supported for this.
 
 ```c
 cargo_init(&cargo, 0, argv[0]);

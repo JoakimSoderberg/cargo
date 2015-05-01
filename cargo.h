@@ -209,7 +209,7 @@ typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
 // Functions.
 //
 
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname);
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
 
 void cargo_destroy(cargo_t *ctx);
 

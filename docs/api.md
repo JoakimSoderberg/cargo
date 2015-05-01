@@ -587,7 +587,7 @@ Here you find the core API for cargo.
 ### cargo_init ###
 
 ```c
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
 ```
 
 Initializes a [`cargo_t`](api.md#cargo_t) context. See [Initializing cargo](api.md#initializing_cargo) for an example. You need to free this context using [`cargo_destroy`](api.md#cargo_destroy).
@@ -600,7 +600,9 @@ Initializes a [`cargo_t`](api.md#cargo_t) context. See [Initializing cargo](api.
 
 **flags**: Flags for setting global behavior for cargo. See [`cargo_flags_t`](api.md#cargo_flags_t).
 
-**progname**: The name of the executable. Usually this will be set to `argv[0]`.
+**progname**: The name of the executable. Usually this will be set to `argv[0]`. But this is also a printf style formatting string for more advanced uses.
+
+**...**: Formatting arguments for `progname`.
 
 ---
 

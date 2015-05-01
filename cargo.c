@@ -748,7 +748,7 @@ struct cargo_group_s
 
 typedef struct cargo_s
 {
-	const char *progname;
+	char *progname;
 	char *description;
 	char *epilog;
 	size_t max_width;
@@ -4060,8 +4060,9 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...)
 {
+	va_list ap;
 	cargo_s *c;
 	assert(ctx);
 
@@ -4073,9 +4074,12 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname)
 
 	c->max_opts = CARGO_DEFAULT_MAX_OPTS;
 	c->flags = flags;
-	c->progname = progname;
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
+
+	va_start(ap, progname);
+	cargo_vasprintf(&c->progname, progname, ap);
+	va_end(ap);
 
 	// By default we show only short usage on errors.
 	c->usage_flags = CARGO_USAGE_SHORT_USAGE;
@@ -4159,6 +4163,12 @@ void cargo_destroy(cargo_t *ctx)
 		{
 			free(c->epilog);
 			c->epilog = NULL;
+		}
+
+		if (c->progname)
+		{
+			free(c->progname);
+			c->progname = NULL;
 		}
 
 		free(*ctx);
