@@ -205,6 +205,10 @@ typedef enum cargo_err_flags_e
 typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
 								int argc, char **argv);
 
+typedef void *(*cargo_malloc_f)(size_t bytes);
+typedef void (*cargo_free_f)(void *ptr);
+typedef void *(*cargo_realloc_f)(void *ptr, size_t bytes);
+
 //
 // Functions.
 //

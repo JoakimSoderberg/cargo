@@ -39,6 +39,99 @@
 #include <wordexp.h>
 #endif // _WIN32
 
+static cargo_malloc_f 	replaced_cargo_malloc	= NULL;
+static cargo_free_f		replaced_cargo_free		= NULL;
+static cargo_realloc_f	replaced_cargo_realloc	= NULL;
+
+static void *_cargo_malloc(size_t size)
+{
+	if (size == 0)
+		return NULL;
+
+	if (replaced_cargo_malloc)
+		return replaced_cargo_malloc(size);
+
+	return malloc(size);
+}
+
+static void *_cargo_realloc(void *ptr, size_t size)
+{
+	return replaced_cargo_realloc ? replaced_cargo_realloc(ptr, size) : realloc(ptr, size);
+}
+
+static void _cargo_free(void *ptr)
+{
+	if (replaced_cargo_free)
+		replaced_cargo_free(ptr);
+	else
+		free(ptr);
+}
+
+static void *_cargo_calloc(size_t count, size_t size)
+{
+	void *p = NULL;
+
+	if (!count || !size)
+		return NULL;
+
+	if (replaced_cargo_malloc)
+	{
+		size_t sz = count * size;
+		// TODO: If count > (size_t max / size), goto fail.
+		p = replaced_cargo_malloc(sz);
+
+		if (p)
+			return memset(p, 0, sz);
+	}
+
+	p = calloc(count, size);
+
+	#ifdef WIN32
+	// Windows doesn't set ENOMEM properly.
+	if (!p)
+		goto fail;
+	#endif
+
+	return p;
+fail:
+	errno = ENOMEM;
+	return NULL;
+}
+
+static char *_cargo_strdup(const char *str)
+{
+	if (!str)
+	{
+		errno = EINVAL;
+		return NULL;
+	}
+
+	if (replaced_cargo_malloc)
+	{
+		size_t len = strlen(str);
+		void *p = NULL;
+
+		if (len == ((size_t)-1))
+			goto fail;
+
+		if ((p = replaced_cargo_malloc(len + 1)))
+		{
+			return memcpy(p, str, len + 1);
+		}
+	}
+	else
+	{
+		#ifdef WIN32
+		return _strdup(str);
+		#else
+		return strdup(str);
+		#endif
+	}
+fail:
+	errno = ENOMEM;
+	return NULL;
+}
+
 int cargo_suppress_debug;
 
 #ifdef CARGO_DEBUG
@@ -152,7 +245,7 @@ char *cargo_strndup(const char *s, size_t n)
 		len = n;
 	}
 
-	if (!(res = (char *) malloc(len + 1)))
+	if (!(res = (char *)_cargo_malloc(len + 1)))
 	{
 		return NULL;
 	}
@@ -212,7 +305,7 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 
 		str->offset = 0;
 
-		if (!(*str->s = calloc(1, str->l)))
+		if (!(*str->s = _cargo_calloc(1, str->l)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return -1;
@@ -242,7 +335,7 @@ int cargo_avappendf(cargo_astr_t *str, const char *format, va_list ap)
 			str->l *= 2;
 			CARGODBG(4, "Realloc %lu\n", str->l);
 
-			if (!(*str->s = realloc(*str->s, str->l)))
+			if (!(*str->s = _cargo_realloc(*str->s, str->l)))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				return -1;
@@ -305,7 +398,7 @@ int cargo_vasprintf(char **strp, const char *format, va_list ap)
 
 	if (count == 0)
 	{
-		*strp = strdup("");
+		*strp = _cargo_strdup("");
 		return 0;
 	}
 	else if (count < 0)
@@ -315,7 +408,7 @@ int cargo_vasprintf(char **strp, const char *format, va_list ap)
 	}
 
 	// Allocate memory for our string
-	if (!(*strp = malloc(count + 1)))
+	if (!(*strp = _cargo_malloc(count + 1)))
 	{
 		return -1;
 	}
@@ -623,7 +716,7 @@ void cargo_fprintf(FILE *fd, const char *fmt, ...)
 		cargo_print_ansicolor(fd, s);
 	}
 
-	if (s) free(s);
+	if (s) _cargo_free(s);
 }
 
 // Overload the normal printf!
@@ -800,7 +893,7 @@ static void _cargo_xfree(void *p)
 
 	if (*pp)
 	{
-		free(*pp);
+		_cargo_free(*pp);
 		*pp = NULL;
 	}
 }
@@ -935,7 +1028,7 @@ static int _cargo_grow_options(cargo_opt_t **options,
 
 	if (!*options)
 	{
-		if (!((*options) = calloc(*max_opts, sizeof(cargo_opt_t))))
+		if (!((*options) = _cargo_calloc(*max_opts, sizeof(cargo_opt_t))))
 		{
 			CARGODBG(1, "Out of memory\n");
 			return -1;
@@ -950,7 +1043,7 @@ static int _cargo_grow_options(cargo_opt_t **options,
 
 		(*max_opts) *= 2;
 
-		if (!(new_options = realloc(*options,
+		if (!(new_options = _cargo_realloc(*options,
 									(*max_opts) * sizeof(cargo_opt_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
@@ -1067,12 +1160,12 @@ static void _cargo_free_str_list(char ***s, size_t *count)
 	{
 		for (i = 0; i < *count; i++)
 		{
-			free((*s)[i]);
+			_cargo_free((*s)[i]);
 			(*s)[i] = NULL;
 		}
 	}
 
-	free(*s);
+	_cargo_free(*s);
 	*s = NULL;
 done:
 	if (count)
@@ -1110,7 +1203,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 				}
 				else
 				{
-					free(*opt->target);
+					_cargo_free(*opt->target);
 					*opt->target = NULL;
 				}
 			}
@@ -1121,7 +1214,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 				if (opt->type == CARGO_STRING)
 				{
 					CARGODBG(4, "    String\n");
-					free(*opt->target);
+					_cargo_free(*opt->target);
 					*opt->target = NULL;
 				}
 			}
@@ -1198,7 +1291,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					alloc_count = opt->max_target_count;
 			}
 
-			if (!(new_target = (void **)calloc(alloc_count,
+			if (!(new_target = (void **)_cargo_calloc(alloc_count,
 						_cargo_get_type_size(opt->type))))
 			{
 				CARGODBG(1, "Out of memory!\n");
@@ -1386,7 +1479,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
 					CARGODBG(2, "          COPY FULL STRING\n");
 
-					if (!(*t = strdup(val)))
+					if (!(*t = _cargo_strdup(val)))
 					{
 						return -1;
 					}
@@ -1434,7 +1527,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
 				s, val, _cargo_type_map[opt->type], opt->name[0]);
 
-		if (s) free(s);
+		_cargo_xfree(&s);
 		_cargo_set_error(ctx, error);
 		return -1;
 	}
@@ -1531,7 +1624,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
 			cargo_aappendf(&str, "%s\n Error: %s was already specified before.\n", s, name);
-			if (s) free(s);
+			_cargo_xfree(&s);
 			_cargo_set_error(ctx, error);
 			return -1;
 		}
@@ -1817,7 +1910,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 
 	// Sort the names by length.
 	{
-		if (!(sorted_names = calloc(opt->name_count, sizeof(char *))))
+		if (!(sorted_names = _cargo_calloc(opt->name_count, sizeof(char *))))
 		{
 			CARGODBG(1, "%s", "Out of memory\n");
 			return -1;
@@ -1825,7 +1918,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 
 		for (i = 0; i < opt->name_count; i++)
 		{
-			if (!(sorted_names[i] = strdup(opt->name[i])))
+			if (!(sorted_names[i] = _cargo_strdup(opt->name[i])))
 			{
 				ret = -1; goto fail;
 			}
@@ -1882,11 +1975,11 @@ fail:
 	{
 		if (sorted_names[i])
 		{
-			free(sorted_names[i]);
+			_cargo_free(sorted_names[i]);
 		}
 	}
 
-	free(sorted_names);
+	_cargo_free(sorted_names);
 	return ret;
 }
 
@@ -1909,7 +2002,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	if (!*s)
 		return NULL;
 
-	if (!(scpy = strdup(s)))
+	if (!(scpy = _cargo_strdup(s)))
 		return NULL;
 
 	p = scpy;
@@ -1942,7 +2035,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 		p += strspn(p, splitchars) + 1;
 	}
 
-	if (!(ss = calloc(*count, sizeof(char *))))
+	if (!(ss = _cargo_calloc(*count, sizeof(char *))))
 		goto fail;
 
 	p = strtok(scpy, splitchars);
@@ -1952,7 +2045,7 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	{
 		p += strspn(p, splitchars);
 
-		if (!(ss[i] = strdup(p)))
+		if (!(ss[i] = _cargo_strdup(p)))
 		{
 			goto fail;
 		}
@@ -1964,18 +2057,18 @@ static char **_cargo_split(const char *s, const char *splitchars, size_t *count)
 	// The count and number of strings must match.
 	assert(i == *count);
 
-	free(scpy);
+	_cargo_free(scpy);
 
 	return ss;
 fail:
-	if (scpy) free(scpy);
+	_cargo_xfree(&scpy);
 	_cargo_free_str_list(&ss, count);
 	return NULL;
 }
 
 static char *_cargo_linebreak(cargo_t ctx, const char *str, size_t width)
 {
-	char *s = strdup(str);
+	char *s = _cargo_strdup(str);
 	char *start = s;
 	char *prev = s;
 	char *p = s;
@@ -2065,7 +2158,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 	int m = (int)strlen(t);
 	int max_dist = n + m;
 
-	if (!(dd = (int *)malloc((n + 2) * (m + 2) * sizeof(int))))
+	if (!(dd = (int *)_cargo_malloc((n + 2) * (m + 2) * sizeof(int))))
 	{
 		return -1;
 	}
@@ -2109,7 +2202,7 @@ static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 	}
 
 	cost = d(n + 1, m + 1);
-	free(dd);
+	_cargo_free(dd);
 	return cost;
 
 	#undef d
@@ -2293,7 +2386,7 @@ static int _cargo_print_options(cargo_t ctx,
 	assert(ctx);
 
 	// TODO: Replace with cargo_astr_t so we don't have to prealloc max_width
-	if (!(name = malloc(ctx->max_width)))
+	if (!(name = _cargo_malloc(ctx->max_width)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return -1;
@@ -2482,11 +2575,7 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 
 		if (ret == 1)
 		{
-			if (opt_s)
-			{
-				free(opt_s);
-				opt_s = NULL;
-			}
+			_cargo_xfree(&opt_s);
 			continue;
 		}
 
@@ -2497,8 +2586,7 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 		if (opt_s)
 		{
 			cargo_aappendf(str, "%s", opt_s);
-			free(opt_s);
-			opt_s = NULL;
+			_cargo_xfree(&opt_s);
 		}
 	}
 
@@ -2518,7 +2606,7 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 	assert(ctx);
 	assert(optcount);
 
-	if (!(tmp = strdup(optnames)))
+	if (!(tmp = _cargo_strdup(optnames)))
 	{
 		return NULL;
 	}
@@ -2557,7 +2645,7 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 		}
 	}
 
-	free(tmp);
+	_cargo_free(tmp);
 	return optname_list;
 
 fail:
@@ -2590,7 +2678,7 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 		return NULL;
 	}
 
-	if (!(optname = strdup(name)))
+	if (!(optname = _cargo_strdup(name)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return NULL;
@@ -2599,7 +2687,7 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
 	o->name[o->name_count] = optname;
 	o->name_count++;
 
-	if (description && !(o->description = strdup(description)))
+	if (description && !(o->description = _cargo_strdup(description)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return NULL;
@@ -2620,8 +2708,7 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	for (j = 0; j < o->name_count; j++)
 	{
 		CARGODBG(2, "###### FREE OPTION NAME: %s\n", o->name[j]);
-		free(o->name[j]);
-		o->name[j] = NULL;
+		_cargo_xfree(&o->name[j]);
 	}
 
 	o->name_count = 0;
@@ -2772,7 +2859,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 
 		if (s[0] == '!')
 		{
-			if (!(*mutex_grpname = strdup(&s[1])))
+			if (!(*mutex_grpname = _cargo_strdup(&s[1])))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				goto fail;
@@ -2780,7 +2867,7 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 		}
 		else
 		{
-			if (!(*grpname = strdup(s)))
+			if (!(*grpname = _cargo_strdup(s)))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				goto fail;
@@ -2889,7 +2976,7 @@ static int _cargo_add_group(cargo_t ctx,
 	{
 		(*max_groups) = CARGO_DEFAULT_MAX_GROUPS;
 
-		if (!((*groups) = calloc(*max_groups, sizeof(cargo_group_t))))
+		if (!((*groups) = _cargo_calloc(*max_groups, sizeof(cargo_group_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			return -1;
@@ -2907,7 +2994,7 @@ static int _cargo_add_group(cargo_t ctx,
 	{
 		(*max_groups) *= 2;
 
-		if (!((*groups) = realloc(*groups,
+		if (!((*groups) = _cargo_realloc(*groups,
 			sizeof(cargo_group_t) * (*max_groups))))
 		{
 			CARGODBG(1, "Out of memory!\n");
@@ -2918,7 +3005,7 @@ static int _cargo_add_group(cargo_t ctx,
 	grp = &(*groups)[*group_count];
 	memset(grp, 0, sizeof(cargo_group_t));
 
-	if (!(grp->name = strdup(name)))
+	if (!(grp->name = _cargo_strdup(name)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		goto fail;
@@ -2926,7 +3013,7 @@ static int _cargo_add_group(cargo_t ctx,
 
 	if (title)
 	{
-		if (!(grp->title = strdup(title)))
+		if (!(grp->title = _cargo_strdup(title)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -2934,7 +3021,7 @@ static int _cargo_add_group(cargo_t ctx,
 	}
 	else
 	{
-		if (!(grp->title = strdup(name)))
+		if (!(grp->title = _cargo_strdup(name)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -2943,7 +3030,7 @@ static int _cargo_add_group(cargo_t ctx,
 
 	if (description)
 	{
-		if (!(grp->description = strdup(description)))
+		if (!(grp->description = _cargo_strdup(description)))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -2954,7 +3041,7 @@ static int _cargo_add_group(cargo_t ctx,
 	grp->max_opt_count = CARGO_DEFAULT_MAX_GROUP_OPTS;
 	grp->opt_count = 0;
 
-	if (!(grp->option_indices = calloc(grp->max_opt_count, sizeof(size_t))))
+	if (!(grp->option_indices = _cargo_calloc(grp->max_opt_count, sizeof(size_t))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		goto fail;
@@ -3021,7 +3108,7 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 
 		g->max_opt_count *= 2;
 
-		if (!(g->option_indices = realloc(g->option_indices,
+		if (!(g->option_indices = _cargo_realloc(g->option_indices,
 				g->max_opt_count * sizeof(size_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
@@ -3086,7 +3173,7 @@ static void _cargo_print_mutex_group_highlights(cargo_t ctx,
 	}
 
 	cargo_aappendf(str, "%s\n", s);
-	free(s);
+	_cargo_free(s);
 }
 
 static int _cargo_check_mutex_group(cargo_t ctx,
@@ -3106,7 +3193,7 @@ static int _cargo_check_mutex_group(cargo_t ctx,
 
 	// We create a list of highlights, so if more than one option in the
 	// mutex groups is parsed, we can highlight it.
-	if (!(parse_highlights = calloc(g->opt_count,
+	if (!(parse_highlights = _cargo_calloc(g->opt_count,
 								sizeof(cargo_highlight_t))))
 	{
 		CARGODBG(1, "Out of memory!\n");
@@ -3173,7 +3260,7 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 
 	// We create a list of highlights, so if more than one option in the
 	// mutex groups is parsed, we can highlight it.
-	if (!(parse_highlights = calloc(g->opt_count,
+	if (!(parse_highlights = _cargo_calloc(g->opt_count,
 								sizeof(cargo_highlight_t))))
 	{
 		CARGODBG(1, "Out of memory!\n");
@@ -3398,7 +3485,7 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 		CARGODBG(2, "Unknown options count: %lu\n", ctx->unknown_opts_count);
 		cargo_aappendf(&str, "Unknown options:\n");
 
-		if (!(highlights = calloc(ctx->unknown_opts_count,
+		if (!(highlights = _cargo_calloc(ctx->unknown_opts_count,
 								sizeof(cargo_highlight_t))))
 		{
 			ret = CARGO_PARSE_NOMEM; goto fail;
@@ -3517,7 +3604,7 @@ static int _cargo_get_max_name_length(cargo_t ctx,
 	(*option_count) = 0;
 
 	// TODO: Replace with cargo_astr_t so we don't have to prealloc max_width
-	if (!(name = malloc(ctx->max_width)))
+	if (!(name = _cargo_malloc(ctx->max_width)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return -1;
@@ -3825,8 +3912,7 @@ static void _cargo_mutex_group_short_usage(cargo_t ctx,
 			if (opt_s)
 			{
 				cargo_aappendf(str, "%s", opt_s);
-				free(opt_s);
-				opt_s = NULL;
+				_cargo_xfree(&opt_s);
 			}
 
 			continue;
@@ -3930,7 +4016,7 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 	_cargo_get_short_option_usages(ctx, &str, indent, 1);
 
 	// Reallocate the memory used for the string so it's too big.
-	if (!(b = realloc(b, str.offset + 1)))
+	if (!(b = _cargo_realloc(b, str.offset + 1)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return NULL;
@@ -3956,7 +4042,7 @@ char **_cargo_copy_string_list(char **strs, size_t count, size_t *target_count)
 		return NULL;
 	}
 
-	if (!(ret = calloc(count, sizeof(char *))))
+	if (!(ret = _cargo_calloc(count, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return NULL;
@@ -3966,7 +4052,7 @@ char **_cargo_copy_string_list(char **strs, size_t count, size_t *target_count)
 
 	for (i = 0; i < count; i++)
 	{
-		if (!(ret[i] = strdup(strs[i])))
+		if (!(ret[i] = _cargo_strdup(strs[i])))
 		{
 			CARGODBG(1, "Out of memory\n");
 			goto fail;
@@ -3980,10 +4066,10 @@ fail:
 		count = i;
 		for (i = 0; i < count; i++)
 		{
-			free(ret[i]);
+			_cargo_free(ret[i]);
 		}
 
-		free(ret);
+		_cargo_free(ret);
 	}
 
 	if (target_count) *target_count = 0;
@@ -4013,7 +4099,7 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...)
 	cargo_s *c;
 	assert(ctx);
 
-	*ctx = (cargo_s *)calloc(1, sizeof(cargo_s));
+	*ctx = (cargo_s *)_cargo_calloc(1, sizeof(cargo_s));
 	c = *ctx;
 
 	if (!c)
@@ -4083,7 +4169,7 @@ void cargo_destroy(cargo_t *ctx)
 		_cargo_xfree(&c->epilog);
 		_cargo_xfree(&c->progname);
 
-		free(*ctx);
+		_cargo_free(*ctx);
 		ctx = NULL;
 	}
 }
@@ -4168,7 +4254,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 
 	max_width = _cargo_process_max_width(max_width);
 
-	if (!(highlights = calloc(highlight_count, sizeof(cargo_phighlight_t))))
+	if (!(highlights = _cargo_calloc(highlight_count, sizeof(cargo_phighlight_t))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		return NULL;
@@ -4234,7 +4320,7 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	out_size += 2; // New lines.
 	out_size *= 2; // Two rows, one for args and one for highlighting.
 
-	if (!(out = malloc(out_size)))
+	if (!(out = _cargo_malloc(out_size)))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		goto fail;
@@ -4269,7 +4355,10 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 			char *highlvec;
 			int has_color = strlen(h->c) > 1;
 
-			if (!(highlvec = malloc(h->highlight_len)))
+			if (h->highlight_len == 0)
+				continue;
+
+			if (!(highlvec = _cargo_malloc(h->highlight_len)))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				goto fail;
@@ -4297,15 +4386,15 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 				cargo_appendf(&str, "%s", CARGO_COLOR_RESET);
 			}
 
-			free(highlvec);
+			_cargo_free(highlvec);
 		}
 	}
 
 	ret = out;
 
 fail:
-	if (!ret) free(out);
-	free(highlights);
+	if (!ret) _cargo_free(out);
+	_cargo_free(highlights);
 
 	return ret;
 }
@@ -4320,7 +4409,7 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start,
 	cargo_highlight_t *highlights = NULL;
 
 	// Create a list of indices to highlight from the va_args.
-	if (!(highlights = calloc(highlight_count, sizeof(cargo_highlight_t))))
+	if (!(highlights = _cargo_calloc(highlight_count, sizeof(cargo_highlight_t))))
 	{
 		CARGODBG(1, "Out of memory trying to allocate %lu highlights!\n",
 				highlight_count);
@@ -4373,7 +4462,7 @@ int cargo_fprint_args(FILE *f, int argc, char **argv, int start,
 	}
 
 	fprintf(f, "%s\n", ret);
-	free(ret);
+	_cargo_free(ret);
 	return 0;
 }
 
@@ -4390,7 +4479,7 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 	}
 
 	fprintf(f, "%s\n", ret);
-	free(ret);
+	_cargo_free(ret);
 	return 0;
 }
 
@@ -4433,19 +4522,19 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	// called more than once.
 	_cargo_cleanup_option_values(ctx);
 
-	if (!(ctx->args = (char **)calloc(argc, sizeof(char *))))
+	if (!(ctx->args = (char **)_cargo_calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		ret = CARGO_PARSE_NOMEM; goto fail;
 	}
 
-	if (!(ctx->unknown_opts = (char **)calloc(argc, sizeof(char *))))
+	if (!(ctx->unknown_opts = (char **)_cargo_calloc(argc, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory!\n");
 		ret = CARGO_PARSE_NOMEM; goto fail;
 	}
 
-	if (!(ctx->unknown_opts_idxs = calloc(argc, sizeof(int))))
+	if (!(ctx->unknown_opts_idxs = _cargo_calloc(argc, sizeof(int))))
 	{
 		CARGODBG(1, "Out of memory");
 		ret = CARGO_PARSE_NOMEM; goto fail;
@@ -4694,7 +4783,7 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 		return -1;
 	}
 
-	if (!(opt->name[opt->name_count] = strdup(alias)))
+	if (!(opt->name[opt->name_count] = _cargo_strdup(alias)))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return -1;
@@ -4890,7 +4979,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 				goto fail;
 			}
 			cargo_aappendf(&str, "\n%s\n", lb_desc);
-			free(lb_desc);
+			_cargo_free(lb_desc);
 		}
 	}
 
@@ -4935,7 +5024,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 			goto fail;
 		}
 		cargo_aappendf(&str, "\n%s\n", lb_desc);
-		free(lb_desc);
+		_cargo_free(lb_desc);
 
 		// Positional.
 		if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
@@ -5022,7 +5111,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 				goto fail;
 			}
 			cargo_aappendf(&str, "\n%s\n", lb_epilog);
-			free(lb_epilog);
+			_cargo_free(lb_epilog);
 		}
 	}
 
@@ -5379,7 +5468,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 					o->bool_acc_max_count = (size_t)va_arg(ap, unsigned int);
 					CARGODBG(3, "Bool acc max count %lu\n", o->bool_acc_max_count);
 
-					if (!(o->bool_acc = calloc(o->bool_acc_max_count, sizeof(int))))
+					if (!(o->bool_acc = _cargo_calloc(o->bool_acc_max_count, sizeof(int))))
 					{
 						CARGODBG(1, "Out of memory\n");
 						goto fail;
@@ -5609,12 +5698,10 @@ void cargo_free_commandline(char ***argv, int argc)
 	{
 		for (i = 0; i < (size_t)argc; i++)
 		{
-			if ((*argv)[i]) free((*argv)[i]);
-			(*argv)[i] = NULL;
+			_cargo_xfree(&((*argv)[i]));
 		}
 
-		free(*argv);
-		*argv = NULL;
+		_cargo_xfree(argv);
 	}
 }
 
@@ -5642,7 +5729,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 
 		*argc = p.we_wordc;
 
-		if (!(argv = calloc(*argc, sizeof(char *))))
+		if (!(argv = _cargo_calloc(*argc, sizeof(char *))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -5650,7 +5737,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 
 		for (i = 0; i < p.we_wordc; i++)
 		{
-			if (!(argv[i] = strdup(p.we_wordv[i])))
+			if (!(argv[i] = _cargo_strdup(p.we_wordv[i])))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				goto fail;
@@ -5671,7 +5758,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 		wchar_t *cmdlinew = NULL;
 		size_t len = strlen(cmdline) + 1;
 
-		if (!(cmdlinew = calloc(len, sizeof(wchar_t))))
+		if (!(cmdlinew = _cargo_calloc(len, sizeof(wchar_t))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -5689,7 +5776,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 			goto fail;
 		}
 
-		if (!(argv = calloc(*argc, sizeof(char *))))
+		if (!(argv = _cargo_calloc(*argc, sizeof(char *))))
 		{
 			CARGODBG(1, "Out of memory!\n");
 			goto fail;
@@ -5703,7 +5790,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 			needed = WideCharToMultiByte(CP_ACP, 0, wargs[i], -1,
 										NULL, 0, NULL, NULL);
 
-			if (!(argv[i] = malloc(needed)))
+			if (!(argv[i] = _cargo_malloc(needed)))
 			{
 				CARGODBG(1, "Out of memory!\n");
 				goto fail;
@@ -5731,7 +5818,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 			_cargo_xfree(&argv[i]);
 		}
 
-		free(argv);
+		_cargo_free(argv);
 	}
 
 	return NULL;
@@ -5814,7 +5901,7 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 		return (const char **)o->mutex_group_names;
 	}
 
-	if (!(o->mutex_group_names = calloc(o->mutex_group_count, sizeof(char *))))
+	if (!(o->mutex_group_names = _cargo_calloc(o->mutex_group_count, sizeof(char *))))
 	{
 		CARGODBG(1, "Out of memory\n");
 		return NULL;
@@ -5823,7 +5910,7 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 	for (i = 0; i < o->mutex_group_count; i++)
 	{
 		mgrp = &ctx->mutex_groups[o->mutex_group_idxs[i]];
-		o->mutex_group_names[i] = strdup(mgrp->name);
+		o->mutex_group_names[i] = _cargo_strdup(mgrp->name);
 	}
 
 	if (count) *count = o->mutex_group_count;
@@ -5903,6 +5990,45 @@ do 																				\
 			"Array contains unexpected value");									\
 	}																			\
 } while (0)
+
+static int malloc_fail_count;
+static int malloc_current;
+static int realloc_fail_count;
+static int realloc_current;
+
+void _cargo_test_set_malloc_fail_count(int count)
+{
+	malloc_current = 0;
+	malloc_fail_count = count;
+}
+
+void *_cargo_test_malloc(size_t sz)
+{
+	malloc_current++;
+
+	if ((malloc_fail_count > 0)
+		&& (malloc_current >= malloc_fail_count))
+		return NULL;
+
+	return malloc(sz);
+}
+
+void _cargo_test_set_realloc_fail_count(int count)
+{
+	realloc_current = 0;
+	realloc_fail_count = count;
+}
+
+void *_cargo_test_realloc(void *ptr, size_t sz)
+{	
+	realloc_current++;
+
+	if ((realloc_fail_count > 0)
+		&& (realloc_current >= realloc_fail_count))
+		return NULL;
+
+	return realloc(ptr, sz);
+}
 
 //
 // Some helper macros for creating test functions.
@@ -6040,7 +6166,7 @@ _TEST_START(TEST_add_alloc_string_option)
 	cargo_assert(!strcmp(b, "abc"), "Failed to parse correct value abc");
 
 	_TEST_CLEANUP();
-	free(b);
+	_cargo_free(b);
 }
 _TEST_END()
 
@@ -6168,7 +6294,7 @@ _TEST_START(TEST_add_alloc_fixed_int_array_option)
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[i]#", "%d");
 	_TEST_CLEANUP();
-	free(a);
+	_cargo_free(a);
 }
 _TEST_END()
 
@@ -6179,7 +6305,7 @@ _TEST_START(TEST_add_alloc_fixed_uint_array_option)
 	char *args[] = { "program", "--beta", "1", "2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[u]#", "%u");
 	_TEST_CLEANUP();
-	free(a);
+	_cargo_free(a);
 }
 _TEST_END()
 
@@ -6190,7 +6316,7 @@ _TEST_START(TEST_add_alloc_fixed_float_array_option)
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
 	_ADD_TEST_FIXED_ARRAY("[f]#", "%f");
 	_TEST_CLEANUP();
-	free(a);
+	_cargo_free(a);
 }
 _TEST_END()
 
@@ -6201,7 +6327,7 @@ _TEST_START(TEST_add_alloc_fixed_double_array_option)
 	char *args[] = { "program", "--beta", "1.1", "-2.2", "3.3" };
 	_ADD_TEST_FIXED_ARRAY("[d]#", "%f");
 	_TEST_CLEANUP();
-	free(a);
+	_cargo_free(a);
 }
 _TEST_END()
 
@@ -6262,7 +6388,7 @@ _TEST_START(TEST_add_alloc_dynamic_int_array_option)
 	char *args[] = { "program", "--beta", "1", "-2", "3" };
 	_ADD_TEST_FIXED_ARRAY("[i]+", "%d");
 	_TEST_CLEANUP();
-	free(a);
+	_cargo_free(a);
 }
 _TEST_END()
 
@@ -6675,8 +6801,7 @@ _TEST_START(TEST_parse_twice)
 
 		// TODO: Remove this and make sure these are freed at cargo_parse instead
 		_cargo_free_str_list(&vals, &vals_count);
-		if (name) free(name);
-		name = NULL;
+		_cargo_xfree(&name);
 		memset(&ports, 0, sizeof(ports));
 	}
 
@@ -6692,7 +6817,7 @@ _TEST_START(TEST_parse_twice)
 
 	_TEST_CLEANUP();
 	_cargo_free_str_list(&vals, &vals_count);
-	if (name) free(name);
+	_cargo_xfree(&name);
 }
 _TEST_END()
 
@@ -6786,7 +6911,7 @@ _TEST_START(TEST_parse_same_option_twice_string)
 	cargo_assert(s && !strcmp(s, "def"), "Expected --alpha to have value \"def\"");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -6827,7 +6952,7 @@ _TEST_START(TEST_parse_same_option_twice_string_with_unique)
 	cargo_assert(s == NULL, "Expected --alpha to have value NULL");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -7081,7 +7206,7 @@ _TEST_START(TEST_multiple_positional_array_argument3)
 	cargo_assert_array(m_count, 4, m, m_expect);
 
 	_TEST_CLEANUP();
-	if (m) free(m);
+	_cargo_xfree(&m);
 }
 _TEST_END()
 
@@ -7121,7 +7246,7 @@ _TEST_START_EX(TEST_autoclean_flag_off, 0)
 	_TEST_CLEANUP();
 	cargo_destroy(&cargo);
 	if (s == NULL) return "Expected \"s\" to be non-NULL";
-	free(s);
+	_cargo_free(s);
 }
 _TEST_END_NODESTROY()
 
@@ -7356,7 +7481,7 @@ static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
 	_test_data_t **u = (_test_data_t **)user;
 	_test_data_t *data;
 
-	if (!(*u = calloc(argc, sizeof(_test_data_t))))
+	if (!(*u = _cargo_calloc(argc, sizeof(_test_data_t))))
 	{
 		return -1;
 	}
@@ -7409,7 +7534,7 @@ _TEST_START(TEST_custom_callback_array)
 	}
 
 	_TEST_CLEANUP();
-	if (data) free(data);
+	_cargo_xfree(&data);
 }
 _TEST_END()
 
@@ -7762,7 +7887,7 @@ _TEST_START(TEST_cargo_aapendf)
 	cargo_assert(astr.l > lbefore, "Expected realloc");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -7803,8 +7928,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
 	cargo_assert(strstr(s, "*"), "Expected * highlight");
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
-	free(s);
-	s = NULL;
+	_cargo_xfree(&s);
 
 	// Other start index.
 	start = 1;
@@ -7829,8 +7953,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 	cargo_assert(strstr(s, "~"), "Expected ~ highlight");
 	cargo_assert(strstr(s, "*"), "Expected red color for *");
 	cargo_assert(strstr(s, CARGO_COLOR_CYAN), "Expected red color for *");
-	free(s);
-	s = NULL;
+	_cargo_xfree(&s);
 
 	// Pass a list instead of var args.
 	for (i = 0; i < argc+1; i++)
@@ -7872,8 +7995,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 			cargo_assert(!strstr(s, CARGO_COLOR_GREEN), "Expected NO red color for =");
 		}
 
-		free(s);
-		s = NULL;
+		_cargo_xfree(&s);
 	}
 
 	ret = cargo_fprintl_args(stdout, argc, argv, 0, 0, CARGO_DEFAULT_MAX_WIDTH,
@@ -7882,7 +8004,7 @@ _TEST_START(TEST_cargo_get_fprint_args)
 	cargo_assert(ret == 0, "Expected success");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -7911,7 +8033,7 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	cargo_assert(strstr(s, "^"), "Missing \"^\" highlight");
 	cargo_assert(strstr(s, "~"), "Missing \"~\" highlight");
 	cargo_assert(strstr(s, "*"), "Missing \"*\" highlight");
-	free(s);
+	_cargo_free(s);
 
 	s = cargo_get_fprint_args(argc, argv,
 							0,		// start.
@@ -7930,7 +8052,7 @@ _TEST_START(TEST_cargo_get_fprint_args_long)
 	cargo_assert(!strstr(s, "*"), "Got \"*\" highlight when it should be off screen");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 	cargo_free_commandline(&argv, argc);
 }
 _TEST_END()
@@ -7945,7 +8067,7 @@ _TEST_START(TEST_cargo_fprintf)
 		CARGO_COLOR_YELLOW, CARGO_COLOR_RESET);
 
 	cargo_assert(s, "Got NULL string");
-	free(s);
+	_cargo_free(s);
 
 	ret = cargo_asprintf(&s, "");
 	cargo_assert(ret == 0, "Expected empty string");
@@ -7954,7 +8076,7 @@ _TEST_START(TEST_cargo_fprintf)
 	cargo_print_ansicolor(stdout, "Test " CARGO_COLOR_RED "RED" CARGO_COLOR_RESET "\n");
 
 	_TEST_CLEANUP();
-	if (s) free(s);
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -8105,7 +8227,7 @@ static int _test_TEST_group_user_context_cb(cargo_t ctx, void *user,
 		cargo_cb_assert(!strcmp(mgrpctx->name, "great"), "--delta not member of mutex group 1");
 		cargo_cb_assert(mgrpctx->val == 60, "Got unexpected mutex group 1 value");
 
-		*d = strdup(argv[0]);
+		*d = _cargo_strdup(argv[0]);
 		cargo_cb_assert(!strcmp(*d, "bla"), "Unexpected --delta value");
 		cargo_cb_assert(grpctx->val == 40, "Unexpected group context value");
 	}
@@ -8183,7 +8305,7 @@ _TEST_START(TEST_group_user_context)
 	cargo_assert(ret != 0, "Able to set group context for un-existent group");
 
 	_TEST_CLEANUP();
-	if (d) free(d);
+	_cargo_xfree(&d);
 }
 _TEST_END()
 
@@ -9098,14 +9220,11 @@ _TEST_START(TEST_cargo_set_error)
 }
 _TEST_END()
 
-
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
-
 // TODO: Test CARGO_UNIQUE_OPTS
 // TODO: Test CARGO_NOWARN
 // TODO: Test cargo_parse_result_t
-
 // TODO: Add test to make sure bool array is not allowed.
 
 //
