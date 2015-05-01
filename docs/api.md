@@ -1107,18 +1107,28 @@ The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#CARGO_MAX_MAX_W
 ### cargo_set_description ###
 
 ```c
-void cargo_set_description(cargo_t ctx, const char *description);
+void cargo_set_description(cargo_t ctx, const char *fmt, ...);
 ```
 
 ---
 
 **ctx**: A [`cargo_t`](api.md#cargo_t) context.
 
-**description**: The usage description.
+**fmt**: Format string for the usage description.
+
+**...**: Format arguments.
 
 ---
 
 This sets the description shown first in the usage output, before the list of options.
+
+### cargo_set_descriptionv ###
+
+```c
+void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap);
+``
+
+Variadic version of [`cargo_set_description`](api.md#cargo_set_description).
 
 ### cargo_set_epilog ###
 
