@@ -5073,11 +5073,25 @@ int cargo_print_usage(cargo_t ctx, cargo_usage_t flags)
 }
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
-					const char *title, const char *description)
+					const char *title, const char *description, ...)
 {
-	return _cargo_add_group(ctx, &ctx->groups, &ctx->group_count,
+	char *d = NULL;
+	int ret = 0;
+	va_list ap;
+	assert(ctx);
+
+	if (description)
+	{
+		va_start(ap, description);
+		cargo_vasprintf(&d, description, ap);
+		va_end(ap);
+	}
+
+	ret = _cargo_add_group(ctx, &ctx->groups, &ctx->group_count,
 							&ctx->max_groups,
-							(size_t)flags, name, title, description);
+							(size_t)flags, name, title, d);
+	_cargo_xfree(&d);
+	return ret;
 }
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt)
@@ -5109,11 +5123,25 @@ int cargo_add_mutex_group(cargo_t ctx,
 						cargo_mutex_group_flags_t flags,
 						const char *name,
 						const char *title,
-						const char *description)
+						const char *description, ...)
 {
-	return _cargo_add_group(ctx, &ctx->mutex_groups, &ctx->mutex_group_count,
+	char *d = NULL;
+	int ret = 0;
+	va_list ap;
+	assert(ctx);
+
+	if (description)
+	{
+		va_start(ap, description);
+		cargo_vasprintf(&d, description, ap);
+		va_end(ap);
+	}
+
+	ret = _cargo_add_group(ctx, &ctx->mutex_groups, &ctx->mutex_group_count,
 							&ctx->mutex_max_groups,
-							(size_t)flags, name, title, description);
+							(size_t)flags, name, title, d);
+	_cargo_xfree(&d);
+	return ret;
 }
 
 int cargo_mutex_group_add_option(cargo_t ctx, const char *group, const char *opt)

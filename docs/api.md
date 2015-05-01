@@ -721,8 +721,11 @@ You cannot add aliases to positional arguments (options starting without a prefi
 ### cargo_add_group ###
 
 ```c
-int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
-					const char *title, const char *description)
+int cargo_add_group(cargo_t ctx,
+                    cargo_group_flags_t flags,
+                    const char *name,
+					          const char *title,
+                    const char *description, ...)
 ```
 
 ---
@@ -735,7 +738,9 @@ int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
 
 **title**: The title shown in the usage output `Group Name`.
 
-**description**: The description shown in the usage for the group.
+**description**: printf style format string for the description shown in the usage for the group.
+
+**...**: Format arguments.
 
 ---
 
@@ -807,7 +812,7 @@ int cargo_add_mutex_group(cargo_t ctx,
             cargo_mutex_group_flags_t flags,
             const char *name,
             const char *title,
-            const char *description);
+            const char *description, ...);
 ```
 
 ---
@@ -820,7 +825,9 @@ int cargo_add_mutex_group(cargo_t ctx,
 
 **title**: The title of the mutex group.
 
-**description**: A description of the mutex group.
+**description**: printf style format string for description of the mutex group.
+
+**...**: Formatting arguments.
 
 ---
 

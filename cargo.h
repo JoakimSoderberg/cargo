@@ -245,7 +245,7 @@ int cargo_set_option_description(cargo_t ctx,
 								 const char *fmt, ...);
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
-					const char *title, const char *description);
+					const char *title, const char *description, ...);
 
 int cargo_group_add_option(cargo_t ctx, const char *group, const char *opt);
 
@@ -256,7 +256,7 @@ int cargo_add_mutex_group(cargo_t ctx,
 						cargo_mutex_group_flags_t flags,
 						const char *name,
 						const char *title,
-						const char *description);
+						const char *description, ...);
 
 int cargo_mutex_group_add_option(cargo_t ctx,
 								const char *group,
