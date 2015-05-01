@@ -791,15 +791,25 @@ typedef struct cargo_s
 	void *user;
 } cargo_s;
 
+static void _cargo_xfree(void *p)
+{
+	void **pp;
+	assert(p);
+
+	pp = (void **)p;
+
+	if (*pp)
+	{
+		free(*pp);
+		*pp = NULL;
+	}
+}
+
 static void _cargo_set_error(cargo_t ctx, char *error)
 {
 	assert(ctx);
 
-	if (ctx->error)
-	{
-		free(ctx->error);
-	}
-
+	_cargo_xfree(&ctx->error);
 	ctx->error = error;
 }
 
@@ -1541,7 +1551,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			// --abc 1 2 3 ... or why not --abc 1 --def 5 --abc 2 3
 			// (probably a bad idea :D)
 			_cargo_cleanup_option_value(opt);
-			if (s) free(s);
+			_cargo_xfree(&s);
 			_cargo_set_error(ctx, error);
 		}
 	}
@@ -2225,11 +2235,7 @@ static int _cargo_fit_optnames_and_description(cargo_t ctx, cargo_astr_t *str,
 
 	ret = 0;
 fail:
-	if (opt_description)
-	{
-		free(opt_description);
-	}
-
+	_cargo_xfree(&opt_description);
 	_cargo_free_str_list(&desc_lines, &line_count);
 
 	return ret;
@@ -2357,11 +2363,7 @@ static int _cargo_print_options(cargo_t ctx,
 	ret = 0;
 
 fail:
-	if (name)
-	{
-		free(name);
-	}
-
+	_cargo_xfree(&name);
 	return ret;
 }
 
@@ -2502,7 +2504,7 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 
 	return 0;
 fail:
-	if (opt_s) free(opt_s);
+	_cargo_xfree(&opt_s);
 	return -1;
 }
 
@@ -2559,11 +2561,8 @@ static char **_cargo_split_and_verify_option_names(cargo_t ctx,
 	return optname_list;
 
 fail:
-	if (tmp) free(tmp);
-	if (optname_list)
-	{
-		_cargo_free_str_list(&optname_list, optcount);
-	}
+	_cargo_xfree(&tmp);
+	_cargo_free_str_list(&optname_list, optcount);
 
 	return NULL;
 }
@@ -2627,33 +2626,15 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 
 	o->name_count = 0;
 
-	if (o->description)
-	{
-		free(o->description);
-		o->description = NULL;
-	}
-
-	if (o->metavar)
-	{
-		free(o->metavar);
-		o->metavar = NULL;
-	}
-
-	if (o->bool_acc)
-	{
-		free(o->bool_acc);
-		o->bool_acc = NULL;
-		o->bool_acc_count = 0;
-		o->bool_acc_max_count = 0;
-	}
+	_cargo_xfree(&o->description);
+	_cargo_xfree(&o->metavar);
+	_cargo_xfree(&o->bool_acc);
+	o->bool_acc_count = 0;
+	o->bool_acc_max_count = 0;
 
 	// Special case for custom callback target, it is allocated
 	// internally so we should always auto clean it.
-	if (o->custom)
-	{
-		_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
-	}
-
+	_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
 	_cargo_free_str_list(&o->mutex_group_names, &o->mutex_group_count);
 }
 
@@ -2811,19 +2792,14 @@ static const char *_cargo_get_option_group_names(cargo_t ctx,
 	ret = optnames;
 
 fail:
-	if (tmp) free(tmp);
+	_cargo_xfree(&tmp);
 
-	if (!ret && *grpname)
+	if (!ret)
 	{
-		free(*grpname);
-		*grpname = NULL;
+		_cargo_xfree(grpname);
+		_cargo_xfree(mutex_grpname);
 	}
 
-	if (!ret && *mutex_grpname)
-	{
-		free(*mutex_grpname);
-		*mutex_grpname = NULL;
-	}
 	_cargo_free_str_list(&groups, &count);
 
 	return ret;
@@ -2832,17 +2808,12 @@ fail:
 static void _cargo_group_destroy(cargo_group_t *g)
 {
 	if (!g) return;
-	if (g->option_indices) free(g->option_indices);
-	if (g->name) free(g->name);
-	if (g->title) free(g->title);
-	if (g->description) free(g->description);
-	if (g->metavar) free(g->metavar);
-
-	g->option_indices = NULL;
+	_cargo_xfree(&g->option_indices);
+	_cargo_xfree(&g->name);
+	_cargo_xfree(&g->title);
+	_cargo_xfree(&g->description);
+	_cargo_xfree(&g->metavar);
 	g->opt_count = 0;
-	g->name = NULL;
-	g->title = NULL;
-	g->description = NULL;
 }
 
 static void _cargo_groups_destroy(cargo_t ctx)
@@ -2857,8 +2828,7 @@ static void _cargo_groups_destroy(cargo_t ctx)
 			_cargo_group_destroy(&ctx->groups[i]);
 		}
 
-		free(ctx->groups);
-		ctx->groups = NULL;
+		_cargo_xfree(&ctx->groups);
 	}
 
 	if (ctx->mutex_groups)
@@ -2868,8 +2838,7 @@ static void _cargo_groups_destroy(cargo_t ctx)
 			_cargo_group_destroy(&ctx->mutex_groups[i]);
 		}
 
-		free(ctx->mutex_groups);
-		ctx->mutex_groups = NULL;
+		_cargo_xfree(&ctx->mutex_groups);
 	}
 }
 
@@ -3174,12 +3143,7 @@ static int _cargo_check_mutex_group(cargo_t ctx,
 	ret = 0;
 
 fail:
-	if (parse_highlights)
-	{
-		free(parse_highlights);
-		parse_highlights = NULL;
-	}
-
+	_cargo_xfree(&parse_highlights);
 	return ret;
 }
 
@@ -3276,12 +3240,7 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 	ret = 0;
 
 fail:
-	if (parse_highlights)
-	{
-		free(parse_highlights);
-		parse_highlights = NULL;
-	}
-
+	_cargo_xfree(&parse_highlights);
 	return ret;
 }
 
@@ -3471,11 +3430,8 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 			cargo_aappendf(&str, "\n");
 		}
 
-		free(highlights);
-		highlights = NULL;
-
-		free(s);
-		s = NULL;
+		_cargo_xfree(&highlights);
+		_cargo_xfree(&s);
 
 		if (!(ctx->flags & CARGO_NO_FAIL_UNKNOWN))
 		{
@@ -3492,9 +3448,8 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
 
 fail:
 	// We failed to set the error...
-	if (error) free(error);
-	if (highlights) free(highlights);
-
+	_cargo_xfree(&error);
+	_cargo_xfree(&highlights);
 	return ret;
 }
 
@@ -3600,7 +3555,7 @@ static int _cargo_get_max_name_length(cargo_t ctx,
 	}
 
 fail:
-	if (name) free(name);
+	_cargo_xfree(&name);
 
 	return max_name_len;
 }
@@ -3648,11 +3603,7 @@ static int _cargo_get_group_description(cargo_t ctx, cargo_astr_t *str,
 
 	ret = 0;
 fail:
-	if (lb_desc)
-	{
-		free(lb_desc);
-	}
-
+	_cargo_xfree(&lb_desc);
 	_cargo_free_str_list(&desc_lines, &line_count);
 
 	return ret;
@@ -3925,8 +3876,7 @@ static void _cargo_mutex_group_short_usage(cargo_t ctx,
 			if (opt_s)
 			{
 				cargo_aappendf(str, "%s", opt_s);
-				free(opt_s);
-				opt_s = NULL;
+				_cargo_xfree(&opt_s);
 			}
 		}
 	}
@@ -3987,10 +3937,7 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 	}
 
 	// We are always responsible to free this.
-	if (ctx->short_usage)
-	{
-		free(ctx->short_usage);
-	}
+	_cargo_xfree(&ctx->short_usage);
 
 	ctx->short_usage = b;
 
@@ -4120,8 +4067,7 @@ void cargo_destroy(cargo_t *ctx)
 				_cargo_option_destroy(opt);
 			}
 
-			free(c->options);
-			c->options = NULL;
+			_cargo_xfree(&c->options);
 		}
 
 		_cargo_groups_destroy(c);
@@ -4129,47 +4075,13 @@ void cargo_destroy(cargo_t *ctx)
 		_cargo_free_str_list(&c->args, NULL);
 		_cargo_free_str_list(&c->unknown_opts, NULL);
 
-		if (c->unknown_opts_idxs)
-		{
-			free(c->unknown_opts_idxs);
-			c->unknown_opts_idxs = NULL;
-		}
-
-		if (c->error)
-		{
-			free(c->error);
-			c->error = NULL;
-		}
-
-		if (c->short_usage)
-		{
-			free(c->short_usage);
-			c->short_usage = NULL;
-		}
-
-		if (c->usage)
-		{
-			free(c->usage);
-			c->usage = NULL;
-		}
-
-		if (c->description)
-		{
-			free(c->description);
-			c->description = NULL;
-		}
-
-		if (c->epilog)
-		{
-			free(c->epilog);
-			c->epilog = NULL;
-		}
-
-		if (c->progname)
-		{
-			free(c->progname);
-			c->progname = NULL;
-		}
+		_cargo_xfree(&c->unknown_opts_idxs);
+		_cargo_xfree(&c->error);
+		_cargo_xfree(&c->short_usage);
+		_cargo_xfree(&c->usage);
+		_cargo_xfree(&c->description);
+		_cargo_xfree(&c->epilog);
+		_cargo_xfree(&c->progname);
 
 		free(*ctx);
 		ctx = NULL;
@@ -4197,13 +4109,7 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap)
 {
 	assert(ctx);
-
-	if (ctx->description)
-	{
-		free(ctx->description);
-		ctx->description = NULL;
-	}
-
+	_cargo_xfree(&ctx->description);
 	cargo_vasprintf(&ctx->description, fmt, ap);
 }
 
@@ -4211,7 +4117,6 @@ void cargo_set_description(cargo_t ctx, const char *fmt, ...)
 {
 	va_list ap;
 	assert(ctx);
-
 	va_start(ap, fmt);
 	cargo_set_descriptionv(ctx, fmt, ap);
 	va_end(ap);
@@ -4220,13 +4125,7 @@ void cargo_set_description(cargo_t ctx, const char *fmt, ...)
 void cargo_set_epilogv(cargo_t ctx, const char *fmt, va_list ap)
 {
 	assert(ctx);
-
-	if (ctx->epilog)
-	{
-		free(ctx->epilog);
-		ctx->epilog = NULL;
-	}
-
+	_cargo_xfree(&ctx->epilog);
 	cargo_vasprintf(&ctx->epilog, fmt, ap);
 }
 
@@ -4438,7 +4337,7 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start,
 								highlight_count, highlights);
 
 fail:
-	if (highlights) free(highlights);
+	_cargo_xfree(&highlights);
 
 	return ret;
 }
@@ -4527,7 +4426,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	ctx->arg_count = 0;
 
 	_cargo_free_str_list(&ctx->unknown_opts, NULL);
-	if (ctx->unknown_opts_idxs) free(ctx->unknown_opts_idxs);
+	_cargo_xfree(&ctx->unknown_opts_idxs);
 	ctx->unknown_opts_count = 0;
 
 	// Make sure we start over, if this function is
@@ -4696,12 +4595,7 @@ void cargo_set_errorv(cargo_t ctx, cargo_err_flags_t flags,
 
 	if (ret >= 0)
 	{
-		if (ctx->error)
-		{
-			free(ctx->error);
-			ctx->error = NULL;
-		}
-
+		_cargo_xfree(&ctx->error);
 		ctx->error = error;
 	}
 }
@@ -4832,11 +4726,7 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 
 	opt = &ctx->options[opt_i];
 
-	if (opt->description)
-	{
-		free(opt->description);
-		opt->description = NULL;
-	}
+	_cargo_xfree(&opt->description);
 
 	ret = cargo_vasprintf(&opt->description, fmt, ap);
 	return (ret >= 0) ? 0 : -1;
@@ -4873,11 +4763,7 @@ int cargo_set_metavarv(cargo_t ctx,
 
 	opt = &ctx->options[opt_i];
 
-	if (opt->metavar)
-	{
-		free(opt->metavar);
-		opt->metavar = NULL;
-	}
+	_cargo_xfree(&opt->metavar);
 
 	ret = cargo_vasprintf(&opt->metavar, fmt, ap);
 	return (ret >= 0) ? 0 : -1;
@@ -4912,11 +4798,7 @@ int cargo_mutex_group_set_metavarv(cargo_t ctx,
 		return -1;
 	}
 
-	if (g->metavar)
-	{
-		free(g->metavar);
-		g->metavar = NULL;
-	}
+	_cargo_xfree(&g->metavar);
 
 	ret = cargo_vasprintf(&g->metavar, fmt, ap);
 
@@ -5150,20 +5032,14 @@ fail:
 	// A real failure!
 	if (!ret)
 	{
-		if (b)
-		{
-			free(b);
-		}
+		_cargo_xfree(&b);
 	}
 
 	// Save the usage and destroy it on exit,
 	// we want the user to be able to do things like this:
 	// printf("%s\nYou're bad at typing!\n", cargo_get_usage(cargo, 0));
 	// without leaking memory.
-	if (ctx->usage)
-	{
-		free(ctx->usage);
-	}
+	_cargo_xfree(&ctx->usage);
 
 	ctx->usage = ret;
 
@@ -5674,20 +5550,9 @@ fail:
 		}
 	}
 
-	if (grpname)
-	{
-		free(grpname);
-	}
-
-	if (mutex_grpname)
-	{
-		free(mutex_grpname);
-	}
-
-	if (optname_list)
-	{
-		_cargo_free_str_list(&optname_list, &optcount);
-	}
+	_cargo_xfree(&grpname);
+	_cargo_xfree(&mutex_grpname);
+	_cargo_free_str_list(&optname_list, &optcount);
 
 	return ret;
 }
@@ -5822,12 +5687,12 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 		}
 
 		if (wargs) LocalFree(wargs);
-		if (cmdlinew) free(cmdlinew);
+		_cargo_xfree(&cmdlinew);
 		return argv;
 
 	fail:
 		if (wargs) LocalFree(wargs);
-		if (cmdlinew) free(cmdlinew);
+		_cargo_xfree(&cmdlinew);
 	}
 	#endif // WIN32
 
@@ -5835,10 +5700,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 	{
 		for (i = 0; i < *argc; i++)
 		{
-			if (argv[i])
-			{
-				free(argv[i]);
-			}
+			_cargo_xfree(&argv[i]);
 		}
 
 		free(argv);
