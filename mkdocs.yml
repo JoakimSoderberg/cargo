@@ -8,4 +8,5 @@ pages:
 - ['tutorial.md', 'Examples', 'Tutorial']
 - ['api.md', 'Reference', 'API reference']
 theme: readthedocs
+strict: true
 markdown_extensions: ['fenced_code', 'nl2br', 'codehilite(css_class=hljs)', 'tables', 'toc(permalink=True)']
