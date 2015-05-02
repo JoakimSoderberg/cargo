@@ -1115,6 +1115,8 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 					cargo_opt_t *opt, const char *arg)
 {
 	size_t i;
+	size_t j;
+	int found = 0;
 	const char *name;
 
 	// This looks for the format -vvv when we have
@@ -1127,6 +1129,8 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 	if (!_cargo_starts_with_prefix(ctx, arg))
 		return NULL;
 
+	arg += strspn(arg, ctx->prefix);
+
 	for (i = 0; i < opt->name_count; i++)
 	{
 		name = opt->name[i];
@@ -1136,15 +1140,19 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
 
 		// "-vvv" -> "vvv"
 		name += strspn(name, ctx->prefix);
-		arg += strspn(arg, ctx->prefix);
+		found = 0;
 
 		// Compare only the beginning of the arg we're given.
 		// So if the opt has an alias "-v", we remove the "-"
 		// and compare "v" with strlen("v") characters in the
 		// input string: strncmp("v", "vvv", 1) == 0
-		if (!strncmp(name, arg, strlen(name)))
+		for (j = 0; j < strlen(arg); j++)
 		{
-			// We must have the bool count flag set for this to be allowed.
+			found = (*name == arg[j]);
+		}
+
+		if (found)
+		{
 			if (opt->bool_count || opt->bool_acc)
 			{
 				CARGODBG(3, "  Found matching option \"%s\", alias \"%s\"\n",
