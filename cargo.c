@@ -43,6 +43,15 @@ static cargo_malloc_f 	replaced_cargo_malloc	= NULL;
 static cargo_free_f		replaced_cargo_free		= NULL;
 static cargo_realloc_f	replaced_cargo_realloc	= NULL;
 
+void cargo_set_memfunctions(cargo_malloc_f malloc_replacement,
+							cargo_realloc_f realloc_replacement,
+							cargo_free_f free_replacement)
+{
+	replaced_cargo_malloc = malloc_replacement;
+	replaced_cargo_realloc = realloc_replacement;
+	replaced_cargo_free = free_replacement;
+}
+
 static void *_cargo_malloc(size_t size)
 {
 	if (size == 0)
@@ -9220,6 +9229,48 @@ _TEST_START(TEST_cargo_set_error)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_set_memfunctions)
+{
+	int i;
+	const char *s = NULL;
+	cargo_set_memfunctions(_cargo_test_malloc, _cargo_test_realloc, free);
+
+	_cargo_test_set_malloc_fail_count(0);
+	_cargo_test_set_realloc_fail_count(0);
+	s = TEST_add_integer_option();
+	cargo_assert(s == NULL, "Got unexpected mem error");
+
+	for (i = 1; i < 20; i++)
+	{
+		_cargo_test_set_malloc_fail_count(i);
+		s = TEST_add_integer_option();
+		cargo_assert(s != NULL, "Did not get expected mem error");
+	}
+
+	_cargo_test_set_malloc_fail_count(0);
+	_cargo_test_set_realloc_fail_count(0);
+	s = TEST_many_groups();
+	cargo_assert(s == NULL, "Got unexpected mem error");
+
+	for (i = 1; i < 20; i++)
+	{
+		_cargo_test_set_malloc_fail_count(i);
+		s = TEST_many_groups();
+		cargo_assert(s != NULL, "Did not get expected mem error TEST_many_groups");
+	}
+
+	for (i = 1; i < 20; i++)
+	{
+		_cargo_test_set_realloc_fail_count(i);
+		s = TEST_many_groups();
+		cargo_assert(s != NULL, "Did not get expected mem error TEST_many_groups");
+	}
+
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9355,7 +9406,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_early_unknown_options),
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail),
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop),
-	CARGO_ADD_TEST(TEST_cargo_set_error)
+	CARGO_ADD_TEST(TEST_cargo_set_error),
+	CARGO_ADD_TEST(TEST_cargo_set_memfunctions)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

@@ -335,6 +335,10 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 										const char *opt,
 										size_t *count);
 
+void cargo_set_memfunctions(cargo_malloc_f malloc_replacement,
+							cargo_realloc_f realloc_replacement,
+							cargo_free_f free_replacement);
+
 //
 // Utility types.
 //

@@ -1527,6 +1527,26 @@ This will get the list of mutex groups associated with a given option.
 
 Note that the list is kept internally in cargo and should not be freed by the caller.
 
+### cargo_set_memfunctions ###
+
+```c
+void cargo_set_memfunctions(cargo_malloc_f malloc_replacement,
+                            cargo_realloc_f realloc_replacement,
+                            cargo_free_f free_replacement);
+```
+
+---
+
+**malloc_replacement**: Replacement function for malloc.
+
+**realloc_replacement**: Replacement function for realloc.
+
+**free_replacement**: Replacement function for free.
+
+---
+
+This is used to change the memory allocation functions used by cargo.
+
 ## Utility flags ##
 
 ### cargo_fprint_flags_t ###
