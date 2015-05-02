@@ -9268,6 +9268,9 @@ _TEST_START(TEST_cargo_set_memfunctions)
 
 
 	_TEST_CLEANUP();
+	cargo_set_memfunctions(NULL, NULL, NULL);
+	_cargo_test_set_malloc_fail_count(0);
+	_cargo_test_set_realloc_fail_count(0);
 }
 _TEST_END()
 
