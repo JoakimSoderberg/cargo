@@ -450,6 +450,9 @@ Any options after the stop point won't show up in the unknown options list eithe
 
 This can be useful if you're only parsing part of the arguments using one parser, and then want to pass the remaining arguments on to another parser to proccess the rest of the arguments. Simply pass the same `argv` and then use the `stop` index as the `start` index for the second parser.
 
+#### `CARGO_OPT_HIDE` ####
+Hides the option in the usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
+
 ### cargo_mutex_group_flags_t ###
 
 These flags control how a mutex group created using [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group) behaves.

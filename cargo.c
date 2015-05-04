@@ -2415,6 +2415,11 @@ static int _cargo_print_options(cargo_t ctx,
 		opt_i = opt_indices[i];
 		opt = &ctx->options[opt_i];
 
+		if (opt->flags & CARGO_OPT_HIDE)
+		{
+			continue;
+		}
+
 		// We don't show this in its normal position since it is a member of
 		// a mutex group that should be grouped in the usage.
 		if (_cargo_mutex_group_should_be_grouped(ctx, opt, 0) && !is_mutex)
@@ -2490,6 +2495,11 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	assert(opt);
 	assert(str);
 
+	if (opt->flags & CARGO_OPT_HIDE)
+	{
+		return 0;
+	}
+
 	// Positional arguments.
 	if (is_positional && !opt->positional)
 	{
@@ -2525,10 +2535,13 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 
 	if (!opt->positional)
 	{
-		cargo_aappendf(str, "%s ", opt->name[0]);
+		cargo_aappendf(str, "%s", opt->name[0]);
 	}
 
-	cargo_aappendf(str, "%s", metavar);
+	if (metavar && *metavar)
+	{
+		cargo_aappendf(str, " %s", metavar);
+	}
 
 	if (show_is_optional && !is_req)
 	{
@@ -2574,6 +2587,11 @@ static int _cargo_get_short_option_usages(cargo_t ctx,
 		memset(&opt_str, 0, sizeof(opt_str));
 		opt_str.s = &opt_s;
 		opt = &ctx->options[i];
+
+		if (opt->flags & CARGO_OPT_HIDE)
+		{
+			continue;
+		}
 
 		// We display this seperately in _cargo_mutex_group_short_usage
 		if (_cargo_mutex_group_should_be_grouped(ctx, opt, 1))
@@ -3630,6 +3648,11 @@ static int _cargo_get_max_name_length(cargo_t ctx,
 	for (i = 0; i < ctx->opt_count; i++)
 	{
 		opt = &ctx->options[i];
+
+		if (opt->flags & CARGO_OPT_HIDE)
+		{
+			continue;
+		}
 
 		if (opt->positional)
 		{
@@ -6526,6 +6549,9 @@ _TEST_START(TEST_get_usage_settings)
 		{
 			char *s = tus[j].expect[k];
 			char *found = strstr(usage, s);
+			printf("-------------------------------------\n");
+			printf("%s\n", usage);
+			printf("-------------------------------------\n");
 			printf("Expecting to find in usage: \"%s\"\n", s);
 			cargo_assert(found != NULL,
 				"Usage formatting unexpected");
@@ -9282,6 +9308,29 @@ _TEST_START(TEST_cargo_set_memfunctions)
 }
 _TEST_END()
 
+_TEST_START(TEST_test_hidden_option)
+{
+	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+	const char *usage = NULL;
+	ret = cargo_add_option(cargo, CARGO_OPT_HIDE, "--alpha", "the hidden", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	usage = cargo_get_usage(cargo, 0);
+	printf("%s\n", usage);
+
+	cargo_assert(strstr(usage, "--alpha") == NULL,
+		"Found hidden option in usage");
+
+	cargo_assert(strstr(usage, "the hidden") == NULL,
+		"Found hidden option description in usage");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9418,7 +9467,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail),
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop),
 	CARGO_ADD_TEST(TEST_cargo_set_error),
-	CARGO_ADD_TEST(TEST_cargo_set_memfunctions)
+	CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
+	CARGO_ADD_TEST(TEST_test_hidden_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

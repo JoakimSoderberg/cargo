@@ -365,7 +365,7 @@ static int parse_rect_cb(cargo_t ctx, void *user, const char *optname,
     assert(user);
 
     // We expect a rect_t structure to be passed to us.
-    rect_t *u = (rect_ *)user;
+    rect_t *u = (rect_t *)user;
     memset(u, 0, sizeof(rect_t));
 
     if (argc > 0)
