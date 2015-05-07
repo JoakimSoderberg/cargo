@@ -151,7 +151,9 @@ typedef enum cargo_format_e
 	CARGO_USAGE_RAW_EPILOG				= (1 << 3),
 	CARGO_USAGE_HIDE_DESCRIPTION		= (1 << 4),
 	CARGO_USAGE_HIDE_EPILOG				= (1 << 5),
-	CARGO_USAGE_HIDE_SHORT				= (1 << 6)
+	CARGO_USAGE_HIDE_SHORT				= (1 << 6),
+	CARGO_USAGE_OVERRIDE_SHORT			= (1 << 7),
+	CARGO_USAGE_NO_STRIP_PROGNAME		= (1 << 8)
 } cargo_usage_t;
 
 typedef enum cargo_option_flags_e
@@ -283,6 +285,10 @@ cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width);
+
+void cargo_set_prognamev(cargo_t ctx, const char *fmt, va_list ap);
+
+void cargo_set_progname(cargo_t ctx, const char *fmt, ...);
 
 void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap);
 

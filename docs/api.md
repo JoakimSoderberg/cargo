@@ -27,7 +27,7 @@ This can also be changed using the function [`cargo_set_option_count_hint`](api.
 
 ### `CARGO_DEFAULT_MAX_WIDTH` ###
 
-The default max width for the usage output if we cannot get the console width from the operating system. By default the max width is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#CARGO_AUTO_MAX_WIDTH).
+The default max width for the usage output if we cannot get the console width from the operating system. By default the max width is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#cargo_auto_max_width).
 
 This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width).
 
@@ -416,6 +416,11 @@ Hides the epilog.
 #### `CARGO_USAGE_HIDE_SHORT` ####
 Hide the short usage information but show the rest.
 
+#### `CARGO_USAGE_OVERRIDE_SHORT` ####
+The program name specified in [`cargo_init`](api.md#cargo_init) overrides the automatically generated short usage.
+
+#### `CARGO_USAGE_NO_STRIP_PROGNAME` ####
+By default the program name passed to [`cargo_init`](api.md#cargo_init) will have the path stripped from it so that `/usr/bin/program` becomes simple `program`.
 
 ### cargo_option_flags_t ###
 
@@ -462,7 +467,7 @@ By default none of the options in a mutex group is required.
 
 This flag will require that at one of the members of the group is specified (but only one of course), otherwise an error is given.
 
-Note that you probably want to make sure that the [`CARGO_OPT_NOT_REQUIRED`](api.md#CARGO_OPT_NOT_REQUIRED) flag is set for all options that are part of the mutex group, otherwise you will get conflicting requirements.
+Note that you probably want to make sure that the [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required) flag is set for all options that are part of the mutex group, otherwise you will get conflicting requirements.
 
 #### `CARGO_MUTEXGRP_GROUP_USAGE` ####
 By default any members that are part of a mutex group are not shown together, but rather in whatever order they were added in.
@@ -595,6 +600,10 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
 
 Initializes a [`cargo_t`](api.md#cargo_t) context. See [Initializing cargo](api.md#initializing_cargo) for an example. You need to free this context using [`cargo_destroy`](api.md#cargo_destroy).
 
+The program name passed will be displayed in the short usage part. You can format this using `printf` formatting. This can also be set using [`cargo_set_progname`](api.md#cargo_set_progname).
+
+If you want to specify your own short usage instead of the one cargo generates automatically you can set the usage_flag [`CARGO_USAGE_OVERRIDE_SHORT`](api.md#cargo_usage_override_short) when calling [`cargo_get_usage`](api.md#cargo_get_usage) and friends, as well as for [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags).
+
 ---
 
 **Return value**: -1 on fatal error. 0 on success.
@@ -715,7 +724,7 @@ This can be used to add an alias to an option name. So if you have an option wit
 ret = cargo_add_alias(cargo, "--option", "-o");
 ```
 
-Note that you can have max [`CARGO_NAME_COUNT - 1`](api.md#CARGO_NAME_COUNT) aliases for an option name.
+Note that you can have max [`CARGO_NAME_COUNT - 1`](api.md#cargo_name_count) aliases for an option name.
 
 Also note that this is usually best done directly when calling [`cargo_add_option`](api.md#cargo_add_option) instead.
 
@@ -1016,7 +1025,7 @@ This sets the internal usage flags used when cargo automatically outputs errors 
 
 These are the same flags that you set when calling [`cargo_get_usage`](api.md#cargo_get_usage).
 
-By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL_USAGE`](api.md#CARGO_USAGE_FULL_USAGE) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
+By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL_USAGE`](api.md#cargo_usage_full_usage) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
 
 ### cargo_parse ###
 
@@ -1066,7 +1075,7 @@ For errors a negative value is always returned, however instead of simply using 
 
 For example if the reason for the failed parse is that unknown options where found, [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts) will be returned, and you can use that knowledge to get the list of unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
 
-Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#CARGO_PARSE_SHOW_HELP) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) flag is set in [`cargo_init`](api.md#cargo_init).
+Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#cargo_parse_show_help) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#cargo_no_autohelp) flag is set in [`cargo_init`](api.md#cargo_init).
 
 
 ### cargo_set_prefix ###
@@ -1083,7 +1092,7 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 ---
 
-This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX) which is `"-"` unless it has been overriden in `"cargo_config.h"`.
+This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#cargo_default_prefix) which is `"-"` unless it has been overriden in `"cargo_config.h"`.
 
 For instance you can allow both `"-"` and `"+"` by setting this to `"-+"`. So then you can add an option such as `"--option"` or `"++option"`.
 
@@ -1101,11 +1110,41 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width);
 
 ---
 
-Sets the max width that the usage output must fit inside. By default this is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#CARGO_AUTO_MAX_WIDTH) or `0`. In this mode cargo will attempt to set the max width to the current width of the console it is running in.
+Sets the max width that the usage output must fit inside. By default this is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#cargo_auto_max_width) or `0`. In this mode cargo will attempt to set the max width to the current width of the console it is running in.
 
-If it fails to get the console width from the operating system it will fall back to using [`CARGO_DEFAULT_MAX_WIDTH`](api.md#CARGO_DEFAULT_MAX_WIDTH) which is `80` characters unless it has been overridden.
+If it fails to get the console width from the operating system it will fall back to using [`CARGO_DEFAULT_MAX_WIDTH`](api.md#cargo_default_max_width) which is `80` characters unless it has been overridden.
 
-The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#CARGO_MAX_MAX_WIDTH). 
+The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#cargo_max_max_width).
+
+### cargo_set_progname ###
+
+```c
+void cargo_set_progname(cargo_t ctx, const char *fmt, ...);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**fmt**: Format string for the usage program name.
+
+**...**: Format arguments.
+
+---
+
+Sets the program name used in the short usage message.
+
+This is the same as you can set using [`cargo_init`](api.md#cargo_init).
+
+Note that by default this will be followed by the automatically generated option usage, unless [`CARGO_USAGE_OVERRIDE_SHORT`](api.md#cargo_usage_override_short) is specified. See [`cargo_usage_t`](api.md#cargo_usage_t) for more usage flags.
+
+### cargo_set_prognamev ###
+
+```c
+void cargo_set_prognamev(cargo_t ctx, const char *fmt, va_list ap);
+```
+
+Variadic version of [`cargo_set_progname`](api.md#cargo_set_progname).
 
 ### cargo_set_description ###
 
@@ -1692,7 +1731,7 @@ cargo has a set of predefined colors with the `CARGO_COLOR_*` macros. But any AN
 
 Note that cargo internally also supports outputting these ANSI colors on **Windows** which does not have native ANSI console color support normally.
 
-If you prefer to return the output the result without any colors applied you can pass the [`CARGO_FPRINT_NOCOLOR`](api.md#CARGO_FPRINT_NOCOLOR) flag.
+If you prefer to return the output the result without any colors applied you can pass the [`CARGO_FPRINT_NOCOLOR`](api.md#cargo_fprint_nocolor) flag.
 
 ### cargo_get_fprintl_args ###
 

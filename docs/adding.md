@@ -79,13 +79,13 @@ As with all of the cargo API it takes a [`cargo_t`](api.md#cargo_t) context inst
 
 ### Flags
 
-The option `flags` let you set some specific flags for the option, such as it being required [`CARGO_OPT_REQUIRED`](api.md#CARGO_OPT_REQUIRED), or the opposite for *positional* arguments [`CARGO_OPT_NOT_REQUIRED`](api.md#CARGO_OPT_NOT_REQUIRED). See the [API reference](api.md#cargo_option_flags_t) for details.
+The option `flags` let you set some specific flags for the option, such as it being required [`CARGO_OPT_REQUIRED`](api.md#cargo_opt_required), or the opposite for *positional* arguments [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required). See the [API reference](api.md#cargo_option_flags_t) for details.
 
 ### Option names
 
-The `optnames` argument specifies the command line option name, for instance `"--myoption"`. You can also pass a set of aliases to this option, like this `"--myoption -m"`. You can add up to [`CARGO_NAME_COUNT`](api.md#CARGO_NAME_COUNT) (which defaults to 4) option names/aliases to an option, see [getting started](gettingstarted.md) for details on how to raise this if needed.
+The `optnames` argument specifies the command line option name, for instance `"--myoption"`. You can also pass a set of aliases to this option, like this `"--myoption -m"`. You can add up to [`CARGO_NAME_COUNT`](api.md#cargo_name_count) (which defaults to 4) option names/aliases to an option, see [getting started](gettingstarted.md) for details on how to raise this if needed.
 
-In the examples above the `'-'` character is referred to as the option **prefix**, in this example we use the default character as specified by [`CARGO_DEFAULT_PREFIX`](api.md#CARGO_DEFAULT_PREFIX). However if you want to support another prefix character you can change it using [`cargo_set_prefix`](api.md#cargo_set_prefix). It is possible to specify multiple prefix characters.
+In the examples above the `'-'` character is referred to as the option **prefix**, in this example we use the default character as specified by [`CARGO_DEFAULT_PREFIX`](api.md#cargo_default_prefix). However if you want to support another prefix character you can change it using [`cargo_set_prefix`](api.md#cargo_set_prefix). It is possible to specify multiple prefix characters.
 
 Adding an option that doesn't start with a prefix character will make it a **positional argument**. These are not allowed to have any aliases (that would make no sense anyway).
 
@@ -93,7 +93,7 @@ By default all *options* are **optional** and all *positional* arguments are **r
 
 ### Description
 
-The `description` is self explanatory. Note that this will be automatically formatted unless you explicitly set it not to via the  [`CARGO_FORMAT_RAW_OPT_DESCRIPTION`](api.md#CARGO_FORMAT_RAW_OPT_DESCRIPTION) flag. More on that in the [API reference](api.md#cargo_format_t)
+The `description` is self explanatory. Note that this will be automatically formatted unless you explicitly set it not to via the  [`CARGO_FORMAT_RAW_OPT_DESCRIPTION`](api.md#cargo_format_raw_opt_description) flag. More on that in the [API reference](api.md#cargo_format_t)
 
 ### Format
 
@@ -165,7 +165,7 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
 Automatic --help option
 =======================
-People in need wants `--help`, so by default cargo will create this option for you. If you for some reason hate helping people you can turn this behaviour off by passing [`CARGO_NO_AUTOHELP`](api.md#CARGO_NO_AUTOHELP) to [`cargo_init`](api.md#cargo_init)
+People in need wants `--help`, so by default cargo will create this option for you. If you for some reason hate helping people you can turn this behaviour off by passing [`CARGO_NO_AUTOHELP`](api.md#cargo_no_autohelp) to [`cargo_init`](api.md#cargo_init)
 
 Groups
 ======
@@ -278,7 +278,7 @@ Only one of these variables allowed at the same time:
 One required
 ------------
 
-If you want to require that one of the options is always picked, you can pass the flag [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#CARGO_MUTEXGRP_ONE_REQUIRED) to [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group).
+If you want to require that one of the options is always picked, you can pass the flag [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#cargo_mutexgrp_one_required) to [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group).
 
 ```c
 ret = cargo_add_mutex_group(cargo,
@@ -345,7 +345,7 @@ There are also functions available to get the group and mutex groups for an opti
 
 Example
 -------
-So let's say we want to parse a rectangle value wher the dimensions are specified by the width and height in this format: `WxH`. And we want to put it in our struct `rect_t`:
+So let's say we want to parse a rectangle value wher the dimensions are specified by the width and height in this format: `WxH`. And we want to put it                                                                                                                                                                                                                                                                                                                                  in our struct `rect_t`:
 
 ```c
 typedef struct rect_s

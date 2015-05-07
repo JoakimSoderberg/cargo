@@ -4026,7 +4026,7 @@ static const char *_cargo_strip_path_from_progname(const char *org_progname)
 	return progname;
 }
 
-static const char *_cargo_get_short_usage(cargo_t ctx)
+static const char *_cargo_get_short_usage(cargo_t ctx, cargo_usage_t flags)
 {
 	char *b = NULL;
 	size_t indent = 0;
@@ -4040,20 +4040,29 @@ static const char *_cargo_get_short_usage(cargo_t ctx)
 	memset(&str, 0, sizeof(str));
 	str.s = &b;
 
-	// TODO: Let the user completly override the short usage.
+	if ((flags & CARGO_USAGE_NO_STRIP_PROGNAME))
+	{
+		progname = ctx->progname;
+	}
+	else
+	{
+		progname = _cargo_strip_path_from_progname(ctx->progname);
+	}
 
-	cargo_aappendf(&str, "Usage: %s",
-		_cargo_strip_path_from_progname(ctx->progname));
+	cargo_aappendf(&str, "Usage: %s", progname);
 
-	indent = str.offset;
+	if (!(flags & CARGO_USAGE_OVERRIDE_SHORT))
+	{
+		indent = str.offset;
 
-	// Options.
-	_cargo_get_short_option_usages(ctx, &str, indent, 0);
+		// Options.
+		_cargo_get_short_option_usages(ctx, &str, indent, 0);
 
-	_cargo_mutex_group_short_usage(ctx, &str, indent);
+		_cargo_mutex_group_short_usage(ctx, &str, indent);
 
-	// Positional arguments at the end.
-	_cargo_get_short_option_usages(ctx, &str, indent, 1);
+		// Positional arguments at the end.
+		_cargo_get_short_option_usages(ctx, &str, indent, 1);
+	}
 
 	// Reallocate the memory used for the string so it's too big.
 	if (!(b = _cargo_realloc(b, str.offset + 1)))
@@ -4230,6 +4239,22 @@ void cargo_set_prefix(cargo_t ctx, const char *prefix_chars)
 {
 	assert(ctx);
 	ctx->prefix = prefix_chars;
+}
+
+void cargo_set_prognamev(cargo_t ctx, const char *fmt, va_list ap)
+{
+	assert(ctx);
+	_cargo_xfree(&ctx->progname);
+	cargo_vasprintf(&ctx->progname, fmt, ap);
+}
+
+void cargo_set_progname(cargo_t ctx, const char *fmt, ...)
+{
+	va_list ap;
+	assert(ctx);
+	va_start(ap, fmt);
+	cargo_set_prognamev(ctx, fmt, ap);
+	va_end(ap);
 }
 
 void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap)
@@ -4964,7 +4989,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 
 	if (!(flags & CARGO_USAGE_HIDE_SHORT))
 	{
-		if (!(short_usage = _cargo_get_short_usage(ctx)))
+		if (!(short_usage = _cargo_get_short_usage(ctx, flags)))
 		{
 			CARGODBG(1, "Failed to get short usage\n");
 			return NULL;
@@ -9331,6 +9356,54 @@ _TEST_START(TEST_test_hidden_option)
 }
 _TEST_END()
 
+_TEST_START(TEST_override_short_usage)
+{
+	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+	const char *usage = NULL;
+	ret = cargo_add_option(cargo, CARGO_OPT_HIDE, "--alpha", "the hidden", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	cargo_set_progname(cargo, "%s [options] args", args[0]);
+	usage = cargo_get_usage(cargo,
+		CARGO_USAGE_OVERRIDE_SHORT |
+		CARGO_USAGE_SHORT_USAGE);
+	printf("%s\n", usage);
+
+	cargo_assert(strstr(usage, "--help") == NULL,
+		"Short usage not overridden, found --help");
+
+	cargo_assert(strstr(usage, "--beta") == NULL,
+		"Short usage not overridden, found --beta");
+
+	cargo_assert(!strcmp(usage, "Usage: program [options] args"),
+		"Did not find overriden short usage");
+
+	// Test stripping path. First no strip.
+	cargo_set_progname(cargo, "%s [options] args", "some/long/path/program");
+	usage = cargo_get_usage(cargo,
+		CARGO_USAGE_OVERRIDE_SHORT |
+		CARGO_USAGE_SHORT_USAGE);
+	printf("STRIP:\n%s\n", usage);
+
+	cargo_assert(strstr(usage, "some/long/path/") == NULL,
+		"Found path when stripping");
+
+	usage = cargo_get_usage(cargo,
+		CARGO_USAGE_NO_STRIP_PROGNAME |
+		CARGO_USAGE_OVERRIDE_SHORT |
+		CARGO_USAGE_SHORT_USAGE);
+	printf("NO STRIP:\n%s\n", usage);
+
+	cargo_assert(strstr(usage, "some/long/path/"),
+		"Did not find path when no strip");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9468,7 +9541,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop),
 	CARGO_ADD_TEST(TEST_cargo_set_error),
 	CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
-	CARGO_ADD_TEST(TEST_test_hidden_option)
+	CARGO_ADD_TEST(TEST_test_hidden_option),
+	CARGO_ADD_TEST(TEST_override_short_usage)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
