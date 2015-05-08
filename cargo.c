@@ -5024,6 +5024,8 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	str.l = 1024;
 	str.offset = 0;
 
+	// TODO: Break all this into separate functions.
+
 	if (short_usage && !(flags & CARGO_USAGE_HIDE_SHORT))
 	{
 		cargo_aappendf(&str, "%s\n", short_usage);
@@ -5062,7 +5064,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	// Start by printing mutually exclusive groups
 	for (i = 0; i < ctx->mutex_group_count; i++)
 	{
-		int indent = 0;
+		int indent = 2;
 		char *lb_desc;
 		const char *description = NULL;
 		grp = &ctx->mutex_groups[i];
@@ -5074,7 +5076,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 
 		if (grp->title)
 		{
-			cargo_aappendf(&str, "\n%s:", grp->title);
+			cargo_aappendf(&str, "\n%s:\n", grp->title);
 		}
 
 		description = grp->description;
@@ -5084,12 +5086,10 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 			description = "Specify one of the following.";
 		}
 
-		if (!(lb_desc = _cargo_linebreak(ctx, description, ctx->max_width)))
+		if (_cargo_get_group_description(ctx, &str, grp, indent))
 		{
 			goto fail;
 		}
-		cargo_aappendf(&str, "\n%s\n", lb_desc);
-		_cargo_free(lb_desc);
 
 		// Positional.
 		if (_cargo_print_options(ctx, grp->option_indices, grp->opt_count,
@@ -5179,6 +5179,8 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 			_cargo_free(lb_epilog);
 		}
 	}
+
+	// TODO: Realloc the buffer to minimize size.
 
 	ret = b;
 
