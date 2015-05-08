@@ -3306,7 +3306,7 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 	first_opt = &ctx->options[g->option_indices[0]];
 	first_i = first_opt->parsed;
 
-	parse_highlights[invalid_order_count].i = i + ctx->start;
+	parse_highlights[invalid_order_count].i = first_i;
 	parse_highlights[invalid_order_count].c = "^"CARGO_COLOR_GREEN;
 
 	invalid_order_count = 1;
@@ -3351,6 +3351,7 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 
 	if (invalid_order_count > 1)
 	{
+		CARGODBG(3, "  Invalid order highlight count: %lu\n", invalid_order_count);
 		_cargo_print_mutex_group_highlights(ctx, str, parse_highlights, invalid_order_count);
 		cargo_aappendf(str, "These options must all be specified %s \"%s\":\n",
 			(g->flags & CARGO_MUTEXGRP_ORDER_BEFORE) ? "before" : "after",
@@ -4300,6 +4301,13 @@ typedef struct cargo_phighlight_s
 	int show;
 } cargo_phighlight_t;
 
+static int _cargo_compare_highlights(const void *a, const void *b)
+{
+	cargo_phighlight_t *ha = (cargo_phighlight_t *)a;
+	cargo_phighlight_t *hb = (cargo_phighlight_t *)b;
+	return (ha->i - hb->i);
+}
+
 char *cargo_get_fprintl_args(int argc, char **argv, int start,
 							cargo_fprint_flags_t flags,
 							size_t max_width,
@@ -4329,7 +4337,19 @@ char *cargo_get_fprintl_args(int argc, char **argv, int start,
 	{
 		highlights[i].i = highlights_in[i].i;
 		highlights[i].c = highlights_in[i].c;
+		CARGODBG(6, "  Highlight %d: %d\n", i, highlights[i].i);
 	}
+
+	CARGODBG(6, "  Sort highlights:\n");
+	qsort(highlights, highlight_count,
+		sizeof(cargo_phighlight_t), _cargo_compare_highlights);
+
+	#if (CARGO_DEBUG >= 6)
+	for (i = 0; i < (int)highlight_count; i++)
+	{
+		CARGODBG(6, "  Highlight %d: %d\n", i, highlights[i].i);
+	}
+	#endif
 
 	// Get buffer size and highlight data.
 	for (i = 0, j = 0; i < argc; i++)
@@ -7035,6 +7055,7 @@ _TEST_START(TEST_highlight_args)
 		"--beta", "def", "ghi",
 		"--crazy", "banans"
 	};
+	char *s = NULL;
 	int argc = sizeof(args) / sizeof(args[0]);
 
 	printf("With color highlight & args:\n");
@@ -7089,7 +7110,26 @@ _TEST_START(TEST_highlight_args)
 						1, "^"CARGO_COLOR_RED, 3, "~"CARGO_COLOR_GREEN, 4, "-");
 	cargo_assert(ret == 0, "Failed call cargo_fprint_args");
 
+	printf("With default & not ordered:\n");
+	printf("-------------------------\n");
+	s = cargo_get_fprint_args(
+						argc,
+						args,
+						1, // Start index.
+						0, // flags
+						CARGO_DEFAULT_MAX_WIDTH,
+						3, // Highlight count.
+						3, "~"CARGO_COLOR_GREEN, 1, "^"CARGO_COLOR_RED, 4, "-");
+	cargo_assert(s, "Failed call cargo_get_fprint_args");
+	printf("%s\n", s);
+	cargo_assert(strstr(s, "~~~~~~"), "Did not find highlight for --beta");
+	cargo_assert(strstr(s, "^^^^^^^"), "Did not find highlight for --alpha");
+	cargo_assert(strstr(s, "---"), "Did not find highlight for 'def'");
+	cargo_assert(strstr(s, "^^^^^^^") < strstr(s, "---"),
+		"--beta highlight after --alpha");
+
 	_TEST_CLEANUP();
+	_cargo_xfree(&s);
 }
 _TEST_END()
 
