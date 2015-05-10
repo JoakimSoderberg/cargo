@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     ret |= cargo_add_option(cargo, 0, "<group1> --hello", "Hello there", "D");
 
     // Second mutex group.
-    // (Add existing options to the group).
+    // (Add existing options to the group, one option required)
     ret |= cargo_add_mutex_group(cargo,
             CARGO_MUTEXGRP_ONE_REQUIRED,
             "mgroup2", "Mutex group two", NULL);
@@ -89,7 +89,27 @@ int main(int argc, char **argv)
     // Add an existing option to this group, it will be "stolen" from group1.
     ret |= cargo_mutex_group_add_option(cargo, "mgroup3", "--fact");
 
-    cargo_set_epilog(cargo, "This is a text at the end a so called %s", "epilog");
+    // Fourth mutex group.
+    // (Force order)
+    ret |= cargo_add_mutex_group(cargo,
+            CARGO_MUTEXGRP_ORDER_AFTER,
+            "mgroup4", "Mutex group three", "These must be after --alpha");
+    // All following options must be AFTER the first option added to the group.
+    ret |= cargo_mutex_group_add_option(cargo, "mgroup4", "--alpha");
+
+    ret |= cargo_mutex_group_add_option(cargo, "mgroup4", "--ignore");
+    ret |= cargo_mutex_group_add_option(cargo, "mgroup4", "--joke");
+    ret |= cargo_mutex_group_add_option(cargo, "mgroup4", "--great");
+    ret |= cargo_mutex_group_add_option(cargo, "mgroup4", "--hello");
+
+    cargo_set_epilog(cargo,
+        "This is a text at the end a so called %s. It's a great place for "
+        "examples and such.\n"
+        "\n"
+        "Here are some example command lines you can test:\n"
+        "  %s --beta --alpha --delta --elastic\n"
+        "  %s  --centauri --ignore --alpha --hello --great"
+        , "epilog", argv[0], argv[0]);
     assert(ret == 0);
 
     if (cargo_parse(cargo, 0, 1, argc, argv))
