@@ -4834,9 +4834,17 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias)
 	cargo_opt_t *opt;
 	assert(ctx);
 
+	if (!_cargo_find_option_name(ctx, alias, &opt_i, &name_i))
+	{
+		CARGODBG(1, "Alias %s already used by option %s. Cannot add to %s.\n",
+				alias, ctx->options[opt_i].name[0], optname);
+		return -1;
+	}
+
 	if (_cargo_find_option_name(ctx, optname, &opt_i, &name_i))
 	{
-		CARGODBG(1, "Failed alias %s to %s, not found.\n", optname, alias);
+		CARGODBG(1, "Failed to add alias %s to %s, option not found.\n",
+				alias, optname);
 		return -1;
 	}
 
@@ -9446,6 +9454,28 @@ _TEST_START(TEST_override_short_usage)
 }
 _TEST_END()
 
+_TEST_START(TEST_duplicate_alias)
+{
+	const char *usage = NULL;
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "D");
+	cargo_assert(ret == 0, "Failed to add option");
+
+	ret = cargo_add_option(cargo, 0, "--bravo -b", "another option", "D");
+	cargo_assert(ret != 0, "Successfully added option with taken alias");
+
+	ret = cargo_add_option(cargo, 0, "--bravo", "another option", "D");
+	cargo_assert(ret == 0, "Failed to add valid option");
+
+	ret = cargo_add_alias(cargo, "--bravo", "-r");
+	cargo_assert(ret == 0, "Failed to add valid alias");
+
+	ret = cargo_add_alias(cargo, "--bravo", "-b");
+	cargo_assert(ret != 0, "Successfully added option with taken alias");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9584,7 +9614,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_error),
 	CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
 	CARGO_ADD_TEST(TEST_test_hidden_option),
-	CARGO_ADD_TEST(TEST_override_short_usage)
+	CARGO_ADD_TEST(TEST_override_short_usage),
+	CARGO_ADD_TEST(TEST_duplicate_alias)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
