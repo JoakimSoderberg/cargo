@@ -5,7 +5,8 @@
 [![Semaphore Build Status][semaphore_img]][semaphore]
 [![Shippable Build Status][shippable_img]][shippable]
 [![Solano build status][solano_img]][solano]
-[![Coverage Status][coveralls_img]][coveralls]
+[![Coveralls Status][coveralls_img]][coveralls]
+[![Codecov Status][codecov_img]][codecov]
 [![Coverity Statical Analysis Status][coverity_img]][coverity]
 [![Codeship Status for JoakimSoderberg/cargo][codeship_img]][codeship]
 [![Documentation Status][docs_img]][docs]
@@ -82,6 +83,8 @@ Or on Windows using the visual studio command line:
 [solano_img]: https://ci.solanolabs.com:443/JoakimSoderberg/cargo/badges/193238.png
 [coveralls]: https://coveralls.io/r/JoakimSoderberg/cargo
 [coveralls_img]: https://coveralls.io/repos/JoakimSoderberg/cargo/badge.svg
+[codecov]: http://codecov.io/github/JoakimSoderberg/cargo?branch=master
+[codecov_img]: http://codecov.io/github/JoakimSoderberg/cargo/coverage.svg?branch=master
 [coverity]: https://scan.coverity.com/projects/3566
 [coverity_img]: https://scan.coverity.com/projects/3566/badge.svg
 [codeship]: https://codeship.com/projects/66740
