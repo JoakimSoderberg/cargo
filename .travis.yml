@@ -27,6 +27,9 @@ script:
   - if [ "$COVERITY_SCAN_BRANCH" != 1 ]; then mkdir build && cd build && cmake -DCARGO_DEBUG=4 $CMAKE_ARGS .. && make && ctest --output-on-failure; fi
   - if [ "$COVERITY_SCAN_BRANCH" != 1 ] && [ "$CARGO_METHOD" == "coveralls" ]; then cmake -DCARGO_DEBUG=0 .. && make && make coveralls; fi
 
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
+
 addons:
   coverity_scan:
     project:
