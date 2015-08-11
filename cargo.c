@@ -749,18 +749,6 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 #define CARGO_NARGS_ZERO_OR_MORE	-2
 #define CARGO_NARGS_ZERO_OR_ONE		-3
 
-typedef enum cargo_type_e
-{
-	CARGO_BOOL = 0,
-	CARGO_INT = 1,
-	CARGO_UINT = 2,
-	CARGO_FLOAT = 3,
-	CARGO_DOUBLE = 4,
-	CARGO_STRING = 5,
-	CARGO_LONGLONG = 6,
-	CARGO_ULONGLONG = 7
-} cargo_type_t;
-
 static const char *_cargo_type_map[] =
 {
 	"bool",
@@ -5982,7 +5970,7 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 
 	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
 	{
-		CARGODBG(1, "No such options \"%s\"\n", opt);
+		CARGODBG(1, "No such option \"%s\"\n", opt);
 		return NULL;
 	}
 
@@ -6016,6 +6004,24 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 	}
 
 	return (const char **)o->mutex_group_names;
+}
+
+cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt)
+{
+	cargo_opt_t *o = NULL;
+	size_t opt_i;
+	assert(ctx);
+	assert(opt);
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, NULL))
+	{
+		CARGODBG(1, "No such option \"%s\"\n", opt);
+		return -1;
+	}
+
+	o = &ctx->options[opt_i];
+
+	return o->type;
 }
 
 // -----------------------------------------------------------------------------
@@ -9476,6 +9482,33 @@ _TEST_START(TEST_duplicate_alias)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_get_option_type)
+{
+	int a;
+	int b;
+	float c;
+	char *s;
+	const char *usage = NULL;
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "an option", "b");
+	cargo_assert(ret == 0, "Failed to add option");
+	cargo_assert(cargo_get_option_type(cargo, "--alpha") == CARGO_BOOL,
+				"Expected alpha to be a bool");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", "another option", "i");
+	cargo_assert(ret == 0, "Failed to add option");
+	cargo_assert(cargo_get_option_type(cargo, "--beta") == CARGO_INT,
+				"Expected beta to be a int");
+
+	ret = cargo_add_option(cargo, 0, "--centauri -c", "another option", "f");
+	cargo_assert(ret == 0, "Failed to add option");
+	cargo_assert(cargo_get_option_type(cargo, "--centauri") == CARGO_FLOAT,
+				"Expected centauri to be a float");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9615,7 +9648,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
 	CARGO_ADD_TEST(TEST_test_hidden_option),
 	CARGO_ADD_TEST(TEST_override_short_usage),
-	CARGO_ADD_TEST(TEST_duplicate_alias)
+	CARGO_ADD_TEST(TEST_duplicate_alias),
+	CARGO_ADD_TEST(TEST_cargo_get_option_type)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

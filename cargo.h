@@ -124,6 +124,18 @@ const char *cargo_get_version();
 
 typedef struct cargo_s *cargo_t;
 
+typedef enum cargo_type_e
+{
+	CARGO_BOOL 							= 0,
+	CARGO_INT 							= 1,
+	CARGO_UINT 							= 2,
+	CARGO_FLOAT 						= 3,
+	CARGO_DOUBLE 						= 4,
+	CARGO_STRING 						= 5,
+	CARGO_LONGLONG 						= 6,
+	CARGO_ULONGLONG 					= 7
+} cargo_type_t;
+
 //
 // Flags.
 //
@@ -345,6 +357,8 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 void cargo_set_memfunctions(cargo_malloc_f malloc_replacement,
 							cargo_realloc_f realloc_replacement,
 							cargo_free_f free_replacement);
+
+cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt);
 
 //
 // Utility types.

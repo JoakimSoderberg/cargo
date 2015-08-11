@@ -298,6 +298,11 @@ This is the type of the cargo context. This type is opaque and should never be m
 To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
 
+## cargo_type_t ##
+
+This is an enum of the different types an option can be. This is only used
+internally by the API. The reason this is a part of the public API is so that
+it is possible to do some introspection.
 
 ## Flags ##
 
@@ -1568,6 +1573,24 @@ const char **cargo_get_option_mutex_groups(cargo_t ctx,
 This will get the list of mutex groups associated with a given option.
 
 Note that the list is kept internally in cargo and should not be freed by the caller.
+
+### cargo_get_option_type ###
+
+```c
+cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**opt**: The option name to get the list of mutex groups for.
+
+---
+
+This returns the [`cargo_type_t`](api.md#cargo_type_t) type of a given option.
+
+If the option name is invalid -1 is returned.
 
 ### cargo_set_memfunctions ###
 
