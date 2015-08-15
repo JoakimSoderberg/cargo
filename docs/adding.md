@@ -219,9 +219,11 @@ For example, say you have three options `--alpha`, `--beta` and `--centauri`. Th
 You can create a mutex group by using [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group):
 
 ```c
-int cargo_add_mutex_group(cargo_t ctx,
-                        cargo_mutex_group_flags_t flags,
-                        const char *name);
+cargo_add_mutex_group(cargo_t ctx,
+            cargo_mutex_group_flags_t flags,
+            const char *name,
+            const char *title,
+            const char *description, ...);
 ```
 
 And then add options to it using [`cargo_mutex_group_add_option`](api.md#cargo_mutex_group_add_option):

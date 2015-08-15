@@ -3690,7 +3690,6 @@ static int _cargo_get_group_description(cargo_t ctx, cargo_astr_t *str,
 
 	if (!grp->description || strlen(grp->description) == 0)
 	{
-		cargo_aappendf(str,  "\n");
 		return 0;
 	}
 
@@ -5141,7 +5140,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 			indent = 2;
 		}
 
-		if (!is_default_group) cargo_aappendf(&str, "\n%s:\n", grp->title);
+		if (!is_default_group) cargo_aappendf(&str, "\n%s:", grp->title);
 
 		if (_cargo_get_group_description(ctx, &str, grp, indent))
 		{

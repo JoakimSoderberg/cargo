@@ -209,7 +209,7 @@ Some examples:
 
 - Parse an ordinary flag and store `1` in `val` if set: `b, &val`. 
   `"--opt"` -> `val = 1`
-- Or parse the flag but store `5` in `val` if set: `"b", &val, 5`
+- Or parse the flag but store `5` in `val` if set: `"b=", &val, 5`
   `"--opt"` -> `val = 5`
 - Or count the number of occurrances of the flag: `"b!", &val`
   `"--opt --opt --opt"` -> `val = 3`
