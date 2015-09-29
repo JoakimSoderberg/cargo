@@ -1885,7 +1885,7 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 
 		for (i = 1; (int)i < opt->nargs; i++)
 		{
-			if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+			if (cargo_appendf(&str, " %s", metavarname) < 0) return -1;
 		}
 	}
 	else

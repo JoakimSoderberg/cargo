@@ -1285,7 +1285,7 @@ void cargo_set_error(cargo_t ctx,
 
 This is meant to be used inside of [`custom callback`](api.md#cargo_custom_cb_t) function to set errors when parsing custom values.
 
-### ###
+### cargo_set_errorv ###
 
 ```c
 void cargo_set_errorv(cargo_t ctx,
