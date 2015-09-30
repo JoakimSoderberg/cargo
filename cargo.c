@@ -781,6 +781,7 @@ typedef struct cargo_opt_s
 	cargo_type_t type;
 	int nargs;
 	int alloc;
+	int str_alloc_items;
 
 	int group_index;
 	int mutex_group_idxs[CARGO_MAX_OPT_MUTEX_GROUP];
@@ -1271,7 +1272,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	CARGODBG(2, "  nargs: %d\n", opt->nargs);
 
 	// If number of arguments is just 1 don't allocate an array
-	// (Except for custom callback, then we always use an array).
+	// (Except for custom callback, then we always use an array
+	//  since we store the arguments internally).
 	if (opt->custom || (opt->alloc && (opt->nargs != 1)))
 	{
 		// Allocate the memory needed.
@@ -1310,6 +1312,35 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		}
 
 		target = *(opt->target);
+	}
+	else if ((opt->type == CARGO_STRING)
+		 && (opt->nargs != 1)
+		 && ((int)opt->nargs != -1)
+		 && (opt->lenstr == 0)
+		 && !opt->alloc)
+	{
+		// A list of strings with a static size is a special case:
+		//   char *strs[5];
+		// Since we only want to allocate memory for the individual
+		// strings we parse, but not the entire list (as with):
+		//   char **strs;
+		// The format string for this would be ".[s]#"
+		//
+		// nargs != 1 && nargs != -1:
+		//   So we want nargs to be set, but not to infinite (-1),
+		//   this means # was used.
+		// lenstr == 0:
+		//   .[s#]# would mean we have something like char strs[5][15];
+		// !alloc:
+		//   The list is not to be allocated.
+
+		CARGODBG(3, "Static list size %d of allocated strings\n", opt->nargs);
+
+		// So in this case we are not allocating the list itself
+		// since that is of a fixed size. But we want to allocate
+		// each individual string, so we must turn on alloc.
+		opt->str_alloc_items = 1;
+		target = (void *)opt->target;
 	}
 	else
 	{
@@ -1481,14 +1512,14 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 				CARGODBG(2, "       ALLOCATED STRING\n");
 				if (opt->lenstr == 0)
 				{
-					char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
+					//char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
 					CARGODBG(2, "          COPY FULL STRING\n");
 
-					if (!(*t = _cargo_strdup(val)))
+					if (!(((char **)target)[opt->target_idx]
+							= _cargo_strdup(val)))
 					{
 						return -1;
 					}
-					CARGODBG(2, "          \"%s\"\n", *t);
 				}
 				else
 				{
@@ -1500,7 +1531,17 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					}
 				}
 			}
-			else
+			else if (opt->str_alloc_items)
+			{
+				// Special case for static lists of allocated strings:
+				//  char *strs[5];
+				CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST\n");
+				if (!(((char **)target)[opt->target_idx] = _cargo_strdup(val)))
+				{
+					return -1;
+				}
+			}
+			else // static string.
 			{
 				char *t = (char *)((char *)target + opt->target_idx * opt->lenstr);
 				CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
@@ -6467,7 +6508,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option2)
 
 	cargo_assert(a != NULL, "Array is null");
 	cargo_assert(count == 3, "Array count is not 3");
-	printf("Read %lu values from int array: %s, %s, %s\n",
+	printf("Read %lu values from string array: %s, %s, %s\n",
 			count, a[0], a[1], a[2]);
 	cargo_assert(count == 3, "Array count is not 3 as expected");
 	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
@@ -6475,6 +6516,35 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option2)
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
 	_TEST_CLEANUP();
 	_cargo_free_str_list(&a, &count);
+}
+_TEST_END()
+
+_TEST_START(TEST_add_alloc_fixed_string_array_option3)
+{
+	#define NUM_ELEMENTS 3
+	char *a[NUM_ELEMENTS];
+	size_t count;
+	size_t i;
+	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+	memset(a, 0, sizeof(a));
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE,
+						".[s]#", &a, &count, NUM_ELEMENTS);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from string array: %s, %s, %s\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == NUM_ELEMENTS, "Array count is not 3 as expected");
+	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
+	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
+	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+	_TEST_CLEANUP();
+	for (i = 0; i < NUM_ELEMENTS; i++)
+	{
+		if (a[i]) free(a[i]);
+	}
 }
 _TEST_END()
 
@@ -9554,6 +9624,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_double_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option2),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option3),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option_noargs),
 	CARGO_ADD_TEST(TEST_print_usage),

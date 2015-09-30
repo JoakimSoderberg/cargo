@@ -261,7 +261,7 @@ As you might have noticed in the examples above, you pass the address to the var
 
 However, as seen above a C type string consists of a pointer `char *`. How does cargo know if it should allocate memory for this string, or to simply copy the result into an already existing string?
 
-For this reason, strings are handled in a special way. By default if you parse a single argument of any given value type, such as `i`, `f`, `d` and so on, the parsed result will simply be stored as a value in them. But when it comes to strings, the default when specifiying `s` cargo will allocate memory for that string.
+For this reason, strings are handled in a special way. By default if you parse a single argument of any given value type, such as `i`, `f`, `d`, the parsed result will simply be stored "by value" in the target variable. However when it comes to strings, the default when specifiying the `s` format character is to allocate the memory for that string.
 
 To override this behavior you can prepend the formatting string with a `.`, this will then make cargo treat the target variable it is given as a fixed sized array and copy the result into that rather than to allocate new space.
 
@@ -283,10 +283,37 @@ cargo_add_option(cargo, 0, "--opt", "description", ".[i]#", &vals, &count, 4);
 And a list of 5 fixed size strings with max length 32:
 
 ```c
-char str[5][32]
+char strs[5][32];
 size_t count;
 cargo_add_option(cargo, 0, "--opt", "description",
-                 ".[s#]#", &str, 32, &count, 5);
+                 ".[s#]#", &strs, 32, &count, 5);
+```
+
+An allocated list of allocated strings:
+
+```c
+char **strs = NULL;
+size_t count;
+cargo_add_option(cargo, 0, "--opt", "description",
+                 "[s]+", &strs, &count);
+```
+
+You can also restrict the length of allocated strings:
+
+```c
+char **strs = NULL;
+size_t count;
+cargo_add_option(cargo, 0, "--opt", "description",
+                 "[s#]+", &strs, 32, &count);
+```
+
+A bit more tricky case to parse is a static list that contains allocated strings:
+
+```c
+char *strs[5];
+size_t count;
+cargo_add_option(cargo, 0, "--opt", "description",
+                 ".[s]#", &strs, &count, 5);
 ```
 
 ## Types ##
