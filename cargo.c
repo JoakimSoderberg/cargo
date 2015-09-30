@@ -5836,18 +5836,21 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 
 	if (!cmdline)
 	{
+		CARGODBG(1, "Got NULL input\n");
 		return NULL;
 	}
 
 	// Posix.
 	#ifndef _WIN32
 	{
+		int ret;
 		wordexp_t p;
+		memset(&p, 0, sizeof(p));
 
 		// Note! This expands shell variables.
-		if (wordexp(cmdline, &p, 0))
+		if ((ret = wordexp(cmdline, &p, 0)))
 		{
-			CARGODBG(1, "wordexp failed!\n");
+			CARGODBG(1, "wordexp error %d: '%s'\n", ret, cmdline);
 			return NULL;
 		}
 
@@ -5868,11 +5871,14 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 			}
 		}
 
+
 		wordfree(&p);
+		assert(p.we_wordv == NULL);
 
 		return argv;
 	fail:
 		wordfree(&p);
+		assert(p.we_wordv == NULL);
 	}
 	#else // WIN32
 	{
@@ -7916,9 +7922,14 @@ _TEST_START(TEST_cargo_split_commandline)
 	};
 	char **argv = NULL;
 	int argc = 0;
+	int i;
 	ret = 0;
 
 	argv = cargo_split_commandline(0, cmd, &argc);
+	for (i = 0; i < argc; i++)
+	{
+		printf("%s\n", argv[i]);
+	}
 	cargo_assert(argv != NULL, "Got NULL argv");
 	cargo_assert_str_array((size_t)argc, 3, argv, argv_expect);
 	cargo_free_commandline(&argv, argc);
