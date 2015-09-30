@@ -5847,6 +5847,7 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 		// Note! This expands shell variables.
 		if (wordexp(cmdline, &p, 0))
 		{
+			CARGODBG(1, "wordexp failed!\n");
 			return NULL;
 		}
 
