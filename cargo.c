@@ -5871,14 +5871,15 @@ char **cargo_split_commandline(cargo_splitcmd_flags_t flags, const char *cmdline
 			}
 		}
 
-
+		// wordfree seems to fail to free everything in the wordexp_t struct
+		// at least on OSX 10.9.5. This is supposed to help on 10.8.5 at least.
+		p.we_offs = 0;
 		wordfree(&p);
-		assert(p.we_wordv == NULL);
 
 		return argv;
 	fail:
+		p.we_offs = 0;
 		wordfree(&p);
-		assert(p.we_wordv == NULL);
 	}
 	#else // WIN32
 	{
