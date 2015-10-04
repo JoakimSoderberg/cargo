@@ -1883,19 +1883,13 @@ static int _cargo_compare_strlen(const void *a, const void *b)
 	return (alen - blen);
 }
 
-static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, size_t bufsize)
+static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, cargo_astr_t *str)
 {
 	int j = 0;
 	int i = 0;
 	char metavarname[20];
-	cargo_str_t str;
 	assert(ctx);
 	assert(opt);
-
-	memset(&str, 0, sizeof(str));
-	memset(buf, 0, bufsize);
-	str.s = buf;
-	str.l = bufsize;
 
 	if (opt->type == CARGO_BOOL)
 	{
@@ -1917,21 +1911,21 @@ static int _cargo_generate_metavar(cargo_t ctx, cargo_opt_t *opt, char *buf, siz
 	if (opt->nargs < 0)
 	{
 		// List the number of arguments.
-		if (cargo_appendf(&str, "%s [%s ...]", metavarname, metavarname) < 0)
+		if (cargo_aappendf(str, "%s [%s ...]", metavarname, metavarname) < 0)
 			return -1;
 	}
 	else if (opt->nargs > 0)
 	{
-		if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+		if (cargo_aappendf(str, "%s", metavarname) < 0) return -1;
 
 		for (i = 1; (int)i < opt->nargs; i++)
 		{
-			if (cargo_appendf(&str, " %s", metavarname) < 0) return -1;
+			if (cargo_aappendf(str, " %s", metavarname) < 0) return -1;
 		}
 	}
 	else
 	{
-		if (cargo_appendf(&str, "%s", metavarname) < 0) return -1;
+		if (cargo_aappendf(str, "%s", metavarname) < 0) return -1;
 	}
 
 	return 0;
@@ -1943,14 +1937,15 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	int ret = -1;
 	size_t i;
 	char **sorted_names = NULL;
-	cargo_str_t str;
+	cargo_astr_t str;
+	char *opt_name = NULL;
 	assert(ctx);
 	assert(opt);
 
-	memset(&str, 0, sizeof(str));
 	namebuf[0] = '\0';
-	str.s = namebuf;
-	str.l = buf_size;
+
+	memset(&str, 0, sizeof(str));
+	str.s = &opt_name;
 
 	CARGODBG(3, "%s: Sorting %lu option names:\n", opt->name[0], opt->name_count);
 
@@ -1980,7 +1975,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 		if (opt->positional)
 			continue;
 
-		if (cargo_appendf(&str, "%s%s",
+		if (cargo_aappendf(&str, "%s%s",
 			sorted_names[i],
 			(i + 1 != opt->name_count) ? ", " : "") < 0)
 		{
@@ -1991,41 +1986,37 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 	// If the option has an argument, add a "metavar".
 	if ((opt->nargs != 0) || opt->positional)
 	{
-		char metavarbuf[256] = {0};
-		const char *metavar = NULL;
+		char *metavar = NULL;
 
 		if (opt->metavar)
 		{
-			metavar = opt->metavar;
+			metavar = strdup(opt->metavar);
 		}
 		else
 		{
-			if (_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf)))
+			cargo_astr_t metavar_str;
+			memset(&metavar_str, 0, sizeof(metavar_str));
+			metavar_str.s = &metavar;
+
+			if (_cargo_generate_metavar(ctx, opt, &metavar_str))
 			{
 				CARGODBG(1, "Failed to generate metavar for %s\n", opt->name[0]);
-				metavar = opt->name[0];
-			}
-			else
-			{
-				metavar = metavarbuf;
+				_cargo_xfree(&metavar);
+				metavar = strdup(opt->name[0]);
 			}
 		}
 
-		cargo_appendf(&str, " %s", metavar);
+		cargo_aappendf(&str, " %s", metavar);
+		_cargo_xfree(&metavar);
 	}
 
+	strncpy(namebuf, opt_name, buf_size);
 	ret = strlen(namebuf);
 
 fail:
-	for (i = 0; i < opt->name_count; i++)
-	{
-		if (sorted_names[i])
-		{
-			_cargo_free(sorted_names[i]);
-		}
-	}
-
-	_cargo_free(sorted_names);
+	i = opt->name_count;
+	_cargo_free_str_list(&sorted_names, &i);
+	_cargo_xfree(&opt_name);
 	return ret;
 }
 
@@ -2518,8 +2509,7 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 										int show_is_optional)
 {
 	int is_req;
-	char metavarbuf[256];
-	const char *metavar = NULL;
+	char *metavar = NULL;
 	assert(ctx);
 	assert(opt);
 	assert(str);
@@ -2543,16 +2533,19 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 
 	if (opt->metavar)
 	{
-		metavar = opt->metavar;
+		metavar = strdup(opt->metavar);
 	}
 	else
 	{
-		if (_cargo_generate_metavar(ctx, opt, metavarbuf, sizeof(metavarbuf)))
+		cargo_astr_t metavar_str;
+		memset(&metavar_str, 0, sizeof(metavar_str)),
+		metavar_str.s = &metavar;
+
+		if (_cargo_generate_metavar(ctx, opt, &metavar_str))
 		{
 			CARGODBG(1, "Failed to generate metavar\n");
 			return -1;
 		}
-		metavar = metavarbuf;
 	}
 
 	is_req = (opt->flags & CARGO_OPT_REQUIRED);
@@ -2576,6 +2569,9 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	{
 		cargo_aappendf(str, "]");
 	}
+
+	if (metavar)
+		free(metavar);
 
 	return 0;
 }
@@ -9590,6 +9586,27 @@ _TEST_START(TEST_cargo_get_option_type)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_large_list_and_usage)
+{
+	#define LST_SIZE 256
+	char *lst[LST_SIZE];
+	size_t lst_count = 0;
+	const char *usage = NULL;
+
+	// This tests a specific bug where a large array created
+	// a buffer overflow when generating the metavar for the usage.
+	ret |= cargo_add_option(cargo, 0,
+			"--template --input",
+			"Path to one or more template files generated on specified events. "
+			"(Not to be confused with the template matcher)",
+			".[s]#", &lst, &lst_count, LST_SIZE);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -9732,7 +9749,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_test_hidden_option),
 	CARGO_ADD_TEST(TEST_override_short_usage),
 	CARGO_ADD_TEST(TEST_duplicate_alias),
-	CARGO_ADD_TEST(TEST_cargo_get_option_type)
+	CARGO_ADD_TEST(TEST_cargo_get_option_type),
+	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
