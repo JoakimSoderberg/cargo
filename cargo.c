@@ -39,6 +39,10 @@
 #include <wordexp.h>
 #endif // _WIN32
 
+#ifdef __APPLE__
+#include <AvailabilityMacros.h>
+#endif // __APPLE__
+
 static cargo_malloc_f 	replaced_cargo_malloc	= NULL;
 static cargo_free_f		replaced_cargo_free		= NULL;
 static cargo_realloc_f	replaced_cargo_realloc	= NULL;
@@ -6073,7 +6077,6 @@ cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt)
 // -----------------------------------------------------------------------------
 // LCOV_EXCL_START
 #ifdef CARGO_TEST
-
 
 #define LOREM_IPSUM															\
 	"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do"		\

@@ -185,7 +185,7 @@ if (CARGO_TEST)
 					# http://stackoverflow.com/questions/9467510/how-to-pass-ctest-configuration-type-using-add-test-in-cmake
 					add_test("${TEST_NAME}_memchk" ${DRMEMORY_PROGRAM} -batch -show_reachable -exit_code_if_errors 5 -- ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/cargo_tests.exe --shortlist ${TEST_NAME})
 				else()
-					add_test("${TEST_NAME}_memchk" ${VALGRIND_PROGRAM} --error-exitcode=5 --leak-check=full ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests --shortlist ${TEST_NAME})
+					add_test("${TEST_NAME}_memchk" ${VALGRIND_PROGRAM} --gen-suppressions=all --suppressions=${PROJECT_SOURCE_DIR}/valgrind-suppress.txt --error-exitcode=5 --leak-check=full ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests --shortlist ${TEST_NAME})
 				endif()
 			else()
 				add_test("${TEST_NAME}" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cargo_tests --shortlist ${TEST_NAME})

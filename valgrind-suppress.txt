@@ -1,0 +1,23 @@
+{
+   osx_10_wordexp_leak_bug
+   Memcheck:Leak
+   fun:malloc
+   fun:realloc
+   fun:reallocf
+   fun:wordexp
+   fun:cargo_split_commandline
+   fun:TEST_cargo_split_commandline
+   fun:main
+}
+
+{
+   osx_10_wordexp_leak_bug2
+   Memcheck:Leak
+   fun:malloc
+   fun:realloc
+   fun:reallocf
+   fun:wordexp
+   fun:cargo_split_commandline
+   fun:TEST_cargo_get_fprint_args_long
+   fun:main
+}
