@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     int e = 0;
     int f = 0;
 
-    if (cargo_init(&cargo, 0, argv[0]))
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
     {
         fprintf(stderr, "Failed to init command line parsing\n");
         return -1;

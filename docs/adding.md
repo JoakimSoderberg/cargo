@@ -27,7 +27,7 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
 The `progname` is the program name you want cargo to display in usage information and such. In most cases this will be `argv[0]`. Note that `printf` style formatting is supported for this.
 
 ```c
-cargo_init(&cargo, 0, argv[0]);
+cargo_init(&cargo, 0, "%s", argv[0]);
 ```
 
 Similarly when you are done using cargo you need to free up any resources used by cargo via the [`cargo_destroy`](api.md#cargo_destroy) api call.
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 {
     cargo_t cargo; // The cargo context instance.
 
-    if (cargo_init(&cargo, 0, argv[0]))
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
     {
         return -1;
     }

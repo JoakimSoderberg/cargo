@@ -349,7 +349,7 @@ Default behaviour:
 ```c
 char *str = NULL;
 cargo_t cargo;
-cargo_init(&cargo, 0, argv[0]);
+cargo_init(&cargo, 0, "%s", argv[0]);
 cargo_add_option(cargo, 0, "--opt", "Some string", "s", &str);
 cargo_destroy(&cargo);
 if (str) free(str); // We must free!
@@ -360,7 +360,7 @@ Autoclean:
 ```c
 char *str = NULL;
 cargo_t cargo;
-cargo_init(&cargo, 0, argv[0]);
+cargo_init(&cargo, 0, "%s", argv[0]);
 cargo_add_option(cargo, CARGO_AUTOCLEAN, "--opt", "Some string", "s", &str);
 cargo_destroy(&cargo); // str is freed here.
 ```
@@ -627,7 +627,7 @@ Here you find the core API for cargo.
 ### cargo_init ###
 
 ```c
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname_fmt, ...);
 ```
 
 Initializes a [`cargo_t`](api.md#cargo_t) context. See [Initializing cargo](api.md#initializing_cargo) for an example. You need to free this context using [`cargo_destroy`](api.md#cargo_destroy).

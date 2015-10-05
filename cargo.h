@@ -228,7 +228,7 @@ typedef void *(*cargo_realloc_f)(void *ptr, size_t bytes);
 // Functions.
 //
 
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...);
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname_fmt, ...);
 
 void cargo_destroy(cargo_t *ctx);
 

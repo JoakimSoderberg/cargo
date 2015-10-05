@@ -13,7 +13,7 @@ int main(int argc, char **argv)
     int *integers = NULL;
     size_t integers_count = 0;
 
-    if (cargo_init(&cargo, 0, argv[0]))
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
     {
         return -1;
     }
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     int *integers = NULL;
     size_t integers_count = 0;
 
-    if (cargo_init(&cargo, 0, argv[0]))
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
     {
         return -1;
     }

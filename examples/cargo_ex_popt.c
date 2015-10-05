@@ -164,7 +164,7 @@ int main(int argc, char **argv)
 	int stop_index = 0;
 	cmd_t cmd = INVALID_COMMAND;
 
-	if (cargo_init(&cargo, CARGO_AUTOCLEAN | CARGO_NO_AUTOHELP, argv[0]))
+	if (cargo_init(&cargo, CARGO_AUTOCLEAN | CARGO_NO_AUTOHELP, "%s", argv[0]))
 	{
 		fprintf(stderr, "Failed to init command line parsing\n");
 		return -1;

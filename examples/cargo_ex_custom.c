@@ -47,6 +47,7 @@ static int parse_rect_cb(cargo_t ctx, void *user, const char *optname,
     {
         if (sscanf(argv[0], "%dx%d", &u->width, &u->height) != 2)
         {
+            cargo_set_error(ctx, 0, "Error, expected format 2x2 for %s\n", optname);
             return -1;
         }
 
@@ -77,6 +78,7 @@ static int parse_rect_list_cb(cargo_t ctx, void *user,
     {
         if (sscanf(argv[i], "%dx%d", &rect[i].width, &rect[i].height) != 2)
         {
+            cargo_set_error(ctx, 0, "Error, expected format 2x2 for %s\n", optname);
             return -1;
         }
     }
@@ -98,6 +100,7 @@ static int parse_rect_static_list_cb(cargo_t ctx, void *user,
     {
         if (sscanf(argv[i], "%dx%d", &rects[i].width, &rects[i].height) != 2)
         {
+            cargo_set_error(ctx, 0, "Error, expected format 2x2 for %s\n", optname);
             return -1;
         }
     }
@@ -117,8 +120,9 @@ int main(int argc, char **argv)
     size_t rect_count = 0;
     rect_t squares[4];
     size_t squares_count = 0;
+    memset(&rect, 0, sizeof(rect));
 
-    if (cargo_init(&cargo, 0, argv[0]))
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
     {
         fprintf(stderr, "Failed to init command line parsing\n");
         return -1;
@@ -142,6 +146,8 @@ int main(int argc, char **argv)
     {
         return -1;
     }
+
+    args = cargo_get_args(cargo, &args_count);
 
     // Print remaining commandline arguments.
     for (i = 0; i < args_count; i++)

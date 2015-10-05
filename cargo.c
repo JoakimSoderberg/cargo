@@ -4150,7 +4150,7 @@ void cargo_set_max_width(cargo_t ctx, size_t max_width)
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
 
-int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...)
+int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname_fmt, ...)
 {
 	va_list ap;
 	cargo_s *c;
@@ -4167,8 +4167,8 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname, ...)
 	c->prefix = CARGO_DEFAULT_PREFIX;
 	cargo_set_max_width(c, CARGO_AUTO_MAX_WIDTH);
 
-	va_start(ap, progname);
-	cargo_vasprintf(&c->progname, progname, ap);
+	va_start(ap, progname_fmt);
+	cargo_vasprintf(&c->progname, progname_fmt, ap);
 	va_end(ap);
 
 	// By default we show only short usage on errors.
