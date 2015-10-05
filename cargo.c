@@ -785,7 +785,8 @@ typedef struct cargo_opt_s
 	cargo_type_t type;
 	int nargs;
 	int alloc;
-	int str_alloc_items;
+	int str_alloc_items;		// If we should allocate string items
+								// (but not the array).
 
 	int group_index;
 	int mutex_group_idxs[CARGO_MAX_OPT_MUTEX_GROUP];
@@ -1317,33 +1318,11 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 
 		target = *(opt->target);
 	}
-	else if ((opt->type == CARGO_STRING)
-		 && (opt->nargs != 1)
-		 && ((int)opt->nargs != -1)
-		 && (opt->lenstr == 0)
-		 && !opt->alloc)
+	else if (opt->str_alloc_items)
 	{
-		// A list of strings with a static size is a special case:
-		//   char *strs[5];
-		// Since we only want to allocate memory for the individual
-		// strings we parse, but not the entire list (as with):
-		//   char **strs;
-		// The format string for this would be ".[s]#"
-		//
-		// nargs != 1 && nargs != -1:
-		//   So we want nargs to be set, but not to infinite (-1),
-		//   this means # was used.
-		// lenstr == 0:
-		//   .[s#]# would mean we have something like char strs[5][15];
-		// !alloc:
-		//   The list is not to be allocated.
+		CARGODBG(3, "Static list size %lu of allocated strings\n",
+					opt->max_target_count);
 
-		CARGODBG(3, "Static list size %d of allocated strings\n", opt->nargs);
-
-		// So in this case we are not allocating the list itself
-		// since that is of a fixed size. But we want to allocate
-		// each individual string, so we must turn on alloc.
-		opt->str_alloc_items = 1;
 		target = (void *)opt->target;
 	}
 	else
@@ -5761,6 +5740,33 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		*(o->target_count) = 0;
 	}
 
+	// .[s]#  .[s]+  .[s]*
+	if ((o->type == CARGO_STRING)
+		 && (o->nargs != 1)
+		 && (o->lenstr == 0)
+		 && !o->alloc)
+	{
+		// A list of strings with a static size is a special case:
+		//   char *strs[5];
+		// Since we only want to allocate memory for the individual
+		// strings we parse, but not the entire list (as with):
+		//   char **strs;
+		// The format string for this would be ".[s]#"
+		//
+		// nargs != 1 && nargs != -1:
+		//   So we want nargs to be set, but not to infinite (-1),
+		//   this means # was used.
+		// lenstr == 0:
+		//   .[s#]# would mean we have something like char strs[5][15];
+		// !alloc:
+		//   The list is not to be allocated.
+
+		// So in this case we are not allocating the list itself
+		// since that is of a fixed size. But we want to allocate
+		// each individual item string.
+		o->str_alloc_items = 1;
+	}
+
 	for (i = 1; i < optcount; i++)
 	{
 		if (cargo_add_alias(ctx, optname_list[0], optname_list[i]))
@@ -6547,6 +6553,35 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option3)
 	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
 	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
 	cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
+	_TEST_CLEANUP();
+	for (i = 0; i < NUM_ELEMENTS; i++)
+	{
+		if (a[i]) free(a[i]);
+	}
+}
+_TEST_END()
+
+_TEST_START(TEST_add_alloc_fixed_string_array_option4)
+{
+	#define NUM_ELEMENTS 3
+	char *a[NUM_ELEMENTS];
+	size_t count;
+	size_t i;
+	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
+	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+	memset(a, 0, sizeof(a));
+
+	_TEST_ARRAY_OPTION(a, 3, args, ARG_SIZE,
+						".[s]+", &a, &count, NUM_ELEMENTS);
+
+	cargo_assert(a != NULL, "Array is null");
+	cargo_assert(count == 3, "Array count is not 3");
+	printf("Read %lu values from string array: %s, %s, %s\n",
+			count, a[0], a[1], a[2]);
+	cargo_assert(count == NUM_ELEMENTS, "Array count is not 3 as expected");
+	cargo_assert(!strcmp(a[0], "abc"), "Array value at index 0 is not \"abc\" as expected");
+	cargo_assert(!strcmp(a[1], "def"), "Array value at index 1 is not \"def\" as expected");
+	//cargo_assert(!strcmp(a[2], "ghi"), "Array value at index 2 is not \"ghi\" as expected");
 	_TEST_CLEANUP();
 	for (i = 0; i < NUM_ELEMENTS; i++)
 	{
@@ -9611,6 +9646,27 @@ _TEST_START(TEST_cargo_large_list_and_usage)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_large_list_and_usage2)
+{
+	#define LST_SIZE 256
+	char *lst[LST_SIZE];
+	size_t lst_count = 0;
+	const char *usage = NULL;
+
+	ret |= cargo_add_option(cargo, 0,
+			"--template --input",
+			"Path to one or more template files generated on specified events. "
+			"(Not to be confused with the template matcher)",
+			".[s]+", &lst, &lst_count, LST_SIZE);
+	cargo_assert(ret == 0, "Failed to add option");
+
+	usage = cargo_get_usage(cargo, 0);
+	printf("%s\n", usage);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9658,6 +9714,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option2),
 	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option3),
+	CARGO_ADD_TEST(TEST_add_alloc_fixed_string_array_option4),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option),
 	CARGO_ADD_TEST(TEST_add_alloc_dynamic_int_array_option_noargs),
 	CARGO_ADD_TEST(TEST_print_usage),
@@ -9753,7 +9810,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_override_short_usage),
 	CARGO_ADD_TEST(TEST_duplicate_alias),
 	CARGO_ADD_TEST(TEST_cargo_get_option_type),
-	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage)
+	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage),
+	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage2)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
