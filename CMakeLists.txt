@@ -35,9 +35,14 @@ option(CARGO_WITH_MEMCHECK "Run unit tests in valgrind or dr.memory" ON)
 option(CARGO_BUILD_SHARED_LIB "Build a shared library" ON)
 option(CARGO_BUILD_STATIC_LIB "Build a static library" ON)
 option(CARGO_SHUTUP "Don't output adding of tests and stuff" OFF)
+option(CARGO_EXAMPLES_LINK_SHARED "Link the example programs with the shared library instead of static" OFF)
 
 # Add project cmake modules to path.
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
+
+if (NOT CARGO_BUILD_SHARED_LIB AND NOT CARGO_BUILD_STATIC_LIB)
+	message(FATAL_ERROR "You must build either shared or static lib, or both")
+endif()
 
 if (CARGO_TEST AND CARGO_COVERALLS)
     include(Coveralls)
@@ -57,7 +62,9 @@ foreach(VER MAJOR MINOR PATCH)
 endforeach()
 
 set(CARGO_VERSION ${CARGO_MAJOR_VERSION}.${CARGO_MINOR_VERSION}.${CARGO_PATCH_VERSION})
-message("Cargo version: ${CARGO__VERSION}")
+message("Cargo version: ${CARGO_VERSION}")
+
+# TODO: Add so version!
 
 source_group("Headers" FILES cargo.h)
 source_group("Sources" FILES cargo.c)
@@ -101,10 +108,13 @@ if (CARGO_BUILD_SHARED_LIB)
 	endif()
 endif()
 
+set(CARGO_EXE_LIST )
+
 # The internal example in cargo.c
 if (CARGO_EXAMPLE)
 	add_executable(cargo_example cargo.c cargo.h)
-	set_target_properties(cargo_example PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1")
+	set_target_properties(cargo_example PROPERTIES COMPILE_DEFINITIONS "CARGO_EXAMPLE=1 CARGO_NOLIB=1")
+	list(APPEND CARGO_EXE_LIST cargo_example)
 endif()
 
 if (CARGO_EXTRA_EXAMPLES)
@@ -113,12 +123,14 @@ if (CARGO_EXTRA_EXAMPLES)
 	foreach(EXAMPLE_FILE ${EXTRA_EXAMPLE_FILES})
 		get_filename_component(EXAMPLE_NAME "${EXAMPLE_FILE}" NAME_WE)
 		add_executable(${EXAMPLE_NAME} "${EXAMPLE_FILE}" cargo.c)
+		list(APPEND CARGO_EXE_LIST ${EXAMPLE_NAME})
 	endforeach()
 endif()
 
 if (CARGO_HELPER)
 	add_executable(cargo_helper cargo.c cargo.h)
-	set_target_properties(cargo_helper PROPERTIES COMPILE_DEFINITIONS "CARGO_HELPER=1")
+	set_target_properties(cargo_helper PROPERTIES COMPILE_DEFINITIONS "CARGO_HELPER=1 CARGO_NOLIB=1")
+	list(APPEND CARGO_EXE_LIST cargo_helper)
 endif()
 
 if (CARGO_TEST)
@@ -158,7 +170,7 @@ if (CARGO_TEST)
 	endif()
 
 	add_executable(cargo_tests cargo.c cargo.h)
-	set_target_properties(cargo_tests PROPERTIES COMPILE_DEFINITIONS "CARGO_TEST=ON")
+	set_target_properties(cargo_tests PROPERTIES COMPILE_DEFINITIONS "CARGO_TEST=1 CARGO_NOLIB=1")
 
 	# Look for all TEST_ functions in cargo.c, and add a test for each!
 	# (We need to do this in two steps because CMake regexp sucks)
@@ -193,6 +205,14 @@ if (CARGO_TEST)
 		endif()
 	endforeach()
 endif()
+
+foreach (CARGO_EXE ${CARGO_EXE_LIST})
+	if (CARGO_EXAMPLES_LINK_SHARED)
+		target_link_libraries(${CARGO_EXE} cargo_shared)
+	else()
+		target_link_libraries(${CARGO_EXE} cargo)
+	endif()
+endforeach()
 
 if (UNIX AND NOT CARGO_SHUTUP)
 	execute_process(COMMAND grep -o -E "cargo_.*?\\(" ${PROJECT_SOURCE_DIR}/cargo.h

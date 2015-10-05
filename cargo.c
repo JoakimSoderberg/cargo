@@ -186,6 +186,8 @@ do 																			\
 #define CARGO_MIN(a, b) ((a) < (b) ? a : b)
 #define CARGO_MAX(a, b) ((a) > (b) ? a : b)
 
+#ifndef CARGO_NOLIB
+
 int cargo_get_console_width()
 {
 	#ifdef _WIN32
@@ -6077,6 +6079,8 @@ cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt)
 
 	return o->type;
 }
+
+#endif // !CARGO_NOLIB
 
 // -----------------------------------------------------------------------------
 // Tests.
