@@ -5145,7 +5145,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 
 	for (i = 0; i < ctx->group_count; i++)
 	{
-		int indent = 0;
+		int indent = 2;
 		grp = &ctx->groups[i];
 
 		if ((grp->flags & CARGO_GROUP_HIDE) || (grp->opt_count == 0))
@@ -5163,6 +5163,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 		}
 
 		if (!is_default_group) cargo_aappendf(&str, "\n%s:", grp->title);
+		if (grp->description) cargo_aappendf(&str, "\n");
 
 		if (_cargo_get_group_description(ctx, &str, grp, indent))
 		{
