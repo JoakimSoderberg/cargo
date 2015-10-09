@@ -214,6 +214,12 @@ typedef enum cargo_err_flags_e
 	CARGO_ERR_DEFAULT					= 0
 } cargo_err_flags_t;
 
+typedef enum cargo_width_flags_s
+{
+	CARGO_WIDTH_USED					= 0,
+	CARGO_WIDTH_RAW						= 1,
+} cargo_width_flags_t;
+
 //
 // Callback types.
 //
@@ -298,6 +304,8 @@ cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
 void cargo_set_prefix(cargo_t ctx, const char *prefix_chars);
 
 void cargo_set_max_width(cargo_t ctx, size_t max_width);
+
+int cargo_get_width(cargo_t ctx, cargo_width_flags_t flags);
 
 void cargo_set_prognamev(cargo_t ctx, const char *fmt, va_list ap);
 

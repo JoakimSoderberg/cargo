@@ -188,7 +188,7 @@ do 																			\
 
 #ifndef CARGO_NOLIB
 
-int cargo_get_console_width()
+static int _cargo_get_console_width()
 {
 	#ifdef _WIN32
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -3832,7 +3832,7 @@ static size_t _cargo_process_max_width(size_t max_width)
 	{
 		CARGODBG(2, "User specified CARGO_AUTO_MAX_WIDTH\n");
 
-		if ((console_width = cargo_get_console_width()) > 0)
+		if ((console_width = _cargo_get_console_width()) > 0)
 		{
 			CARGODBG(2, "Max width based on console width: %d\n", console_width);
 			maxw = console_width;
@@ -4153,8 +4153,24 @@ void cargo_set_internal_usage_flags(cargo_t ctx, cargo_usage_t flags)
 	ctx->usage_flags = flags;
 }
 
+int cargo_get_width(cargo_t ctx, cargo_width_flags_t flags)
+{
+	int ret = 0;
+	assert(ctx);
+
+	ret = (int)ctx->max_width;
+
+	if (flags & CARGO_WIDTH_RAW)
+	{
+		ret = _cargo_get_console_width();
+	}
+
+	return ret;
+}
+
 void cargo_set_max_width(cargo_t ctx, size_t max_width)
 {
+	assert(ctx);
 	ctx->max_width = _cargo_process_max_width(max_width);
 	CARGODBG(2, "Usage max width: %lu\n", ctx->max_width);
 }
@@ -8071,6 +8087,7 @@ _TEST_START(TEST_cargo_set_max_width)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	cargo_set_max_width(cargo, 40);
+	cargo_assert(cargo_get_width(cargo, 0) == 40, "Unexpected witdth returned");
 	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage on width 40");
 	err = _cargo_test_verify_usage_length(usage, 40);
@@ -8078,10 +8095,17 @@ _TEST_START(TEST_cargo_set_max_width)
 
 	// Set a size bigger than CARGO_MAX_MAX_WIDTH.
 	cargo_set_max_width(cargo, CARGO_MAX_MAX_WIDTH * 2);
+	cargo_assert(cargo_get_width(cargo, 0) == CARGO_MAX_MAX_WIDTH,
+		"Got greater width than CARGO_MAX_MAX_WIDTH");
 	usage = cargo_get_usage(cargo, 0);
 	cargo_assert(usage != NULL, "Got NULL usage on width CARGO_MAX_MAX_WIDTH * 2");
 	err = _cargo_test_verify_usage_length(usage, CARGO_MAX_MAX_WIDTH);
 	cargo_assert(err == NULL, err);
+
+	// Just make sure this doesn't crash.
+	// This could return -1, and we cannot assert on any return value
+	// since it's specific to the system the test is run on.
+	cargo_get_width(cargo, CARGO_WIDTH_RAW);
 
 	_TEST_CLEANUP();
 }

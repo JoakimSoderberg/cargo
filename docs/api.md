@@ -629,6 +629,17 @@ These are flags for the [`cargo_set_error`](api.md#cargo_set_error) function.
 
 Currently this is not used, but exists so that different behavior can be added in the future without changing the ABI.
 
+### cargo_width_flags_t ###
+These flags are used with [`cargo_get_width`](api.md#cargo_get_width) that fetches the width of the usage/console.
+
+#### `CARGO_WIDTH_USED` ####
+Return the width that is used internally by cargo.
+
+#### `CARGO_WIDTH_RAW` ####
+Return the raw console width as reported by the operating system.
+
+Note that this may fail and `-1` will be returned instead.
+
 ## Functions ##
 
 Here you find the core API for cargo.
@@ -1156,6 +1167,25 @@ Sets the max width that the usage output must fit inside. By default this is set
 If it fails to get the console width from the operating system it will fall back to using [`CARGO_DEFAULT_MAX_WIDTH`](api.md#cargo_default_max_width) which is `80` characters unless it has been overridden.
 
 The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#cargo_max_max_width).
+
+### cargo_get_width ###
+
+```c
+int cargo_get_width(cargo_t ctx, cargo_width_flags_t flags);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: [`cargo_width_flags_t`](api.md#cargo_width_flags_t) flags.
+
+---
+
+This will return the max width for the usage that is used by cargo. This always returns a positive value. See [`cargo_set_max_width`](api.md#cargo_set_max_width) for details.
+
+If you instead want the raw console width that the OS reports you can use the flag [`CARGO_WIDTH_RAW`](api.md#cargo_width_raw). Note that this may fail and will in that case return -1.
+
 
 ### cargo_set_progname ###
 
