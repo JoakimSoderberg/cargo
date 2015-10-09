@@ -859,6 +859,7 @@ typedef struct cargo_s
 	char **argv;
 	int start;
 	int stopped;
+	int stopped_hard;
 
 	int help;
 
@@ -1852,6 +1853,12 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 	{
 		ctx->stopped = ctx->j;
 		CARGODBG(2, "%s: Stopping parse (index %d)\n", opt->name[0], ctx->stopped);
+
+		if (opt->flags & CARGO_OPT_STOP_HARD)
+		{
+			ctx->stopped_hard = 1;
+			CARGODBG(2, "%s: Stopping HARD (Mutex groups won't be checked)\n", opt->name[0]);
+		}
 	}
 
 	return (opt->positional) ? opt->num_eaten : (opt->num_eaten + 1);
@@ -4599,6 +4606,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 	ctx->argv = argv;
 	ctx->start = start_index;
 	ctx->stopped = 0;
+	ctx->stopped_hard = 0;
 
 	_cargo_set_error(ctx, NULL);
 
@@ -4724,6 +4732,16 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 		return CARGO_PARSE_SHOW_HELP;
 	}
 
+	// An option can cause a "hard stop", meaning that there
+	// won't be any errors for mutex groups and so on. This is
+	// useful for cases where you have --advanced_help or similar
+	// where you just want to show some extended help without also
+	// having to specify required arguments.
+	if (ctx->stopped_hard)
+	{
+		goto skip_checks;
+	}
+
 	if (_cargo_check_required_options(ctx))
 	{
 		ret = CARGO_PARSE_MISS_REQUIRED; goto fail;
@@ -4745,6 +4763,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 		_cargo_parse_show_error(ctx);
 	}
 
+skip_checks:
 	ctx->flags = global_flags;
 	return CARGO_PARSE_OK;
 
@@ -9272,6 +9291,80 @@ _TEST_START(TEST_parse_stop)
 }
 _TEST_END()
 
+_TEST_START(TEST_parse_stop_hard)
+{
+	// The difference in this test is that
+	// --delta is required, but should be skipped.
+
+	// TODO: This is a copy paste of the test above, split up into a common function.
+	size_t extra_args_count = 0;
+	char **extra_args = NULL;
+	int a = 0;
+	int b = 0;
+	int c = 0;
+	int d = 0;
+	char *args[] = { "--beta", "123", "--alpha", "--centauri", "beep", "--delta" };
+	// We stop parsing here ---------------------^
+	char *extra_expect[] = { "123", "beep", "--delta" };
+
+	cargo_set_flags(cargo, 0);
+
+	ret |= cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	ret |= cargo_add_option(cargo, 0, "--beta", "an option", "b", &b);
+
+	// This should make it so that --delta isn't required.
+	ret |= cargo_add_option(cargo, CARGO_OPT_STOP | CARGO_OPT_STOP_HARD,
+							"--centauri", "an option", "b", &c);
+	ret |= cargo_add_option(cargo, CARGO_OPT_REQUIRED,
+							"--delta", "an option", "b", &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+
+	extra_args = cargo_get_args_copy(cargo, &extra_args_count);
+
+	cargo_assert_str_array(extra_args_count,
+		sizeof(extra_expect) / sizeof(extra_expect[0]),
+		extra_args, extra_expect);
+
+	_TEST_CLEANUP();
+	_cargo_free_str_list(&extra_args, &extra_args_count);
+}
+_TEST_END()
+
+_TEST_START(TEST_parse_stop_hard_fail)
+{
+	// The difference in this test is that
+	// --delta is required, and we should fail.
+
+	// TODO: This is a copy paste of the test above, split up into a common function.
+	int a = 0;
+	int b = 0;
+	int c = 0;
+	int d = 0;
+	char *args[] = { "--beta", "123", "--alpha", "--centauri", "beep", "--delta" };
+	// We stop parsing here ---------------------^
+
+	cargo_set_flags(cargo, 0);
+
+	ret |= cargo_add_option(cargo, 0, "--alpha", "an option", "b", &a);
+	ret |= cargo_add_option(cargo, 0, "--beta", "an option", "b", &b);
+
+	// This should make it so that --delta isn't required.
+	ret |= cargo_add_option(cargo, CARGO_OPT_STOP,
+							"--centauri", "an option", "b", &c);
+	ret |= cargo_add_option(cargo, CARGO_OPT_REQUIRED,
+							"--delta", "an option", "b", &d);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret < 0, "Succeeded to parse when expected to fail");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 _TEST_START(TEST_cargo_zero_or_one_with_arg)
 {
 	char *args[] = { "program", "--alpha", "6" };
@@ -9802,6 +9895,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_get_args_copy),
 	CARGO_ADD_TEST(TEST_cargo_set_option_description),
 	CARGO_ADD_TEST(TEST_parse_stop),
+	CARGO_ADD_TEST(TEST_parse_stop_hard),
+	CARGO_ADD_TEST(TEST_parse_stop_hard_fail),
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_with_arg),
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg),
 	CARGO_ADD_TEST(TEST_cargo_zero_or_one_without_arg2),

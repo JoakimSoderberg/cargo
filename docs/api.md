@@ -487,6 +487,15 @@ Any options after the stop point won't show up in the unknown options list eithe
 
 This can be useful if you're only parsing part of the arguments using one parser, and then want to pass the remaining arguments on to another parser to proccess the rest of the arguments. Simply pass the same `argv` and then use the `stop` index as the `start` index for the second parser.
 
+#### `CARGO_OPT_STOP_HARD` ####
+Must be combined with [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) to work.
+
+This will skip any checks for required variables after the parsing has been stopped.
+
+This could be useful if you have something like `--advanced_help` where you simply want to show extended help, without having to specify any required variables.
+
+For instance you could have a option group hidden by default using [`CARGO_GROUP_HIDE`](api.md#cargo_group_hide), and then on `--advanced_help` show it by removing that flag before showing usage.
+
 #### `CARGO_OPT_HIDE` ####
 Hides the option in the usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
 
