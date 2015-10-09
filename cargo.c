@@ -9703,20 +9703,25 @@ _TEST_START(TEST_cargo_get_option_type)
 	float c;
 	char *s;
 	const char *usage = NULL;
-	ret = cargo_add_option(cargo, 0, "--alpha -a", "an option", "b");
+	ret = cargo_add_option(cargo, 0, "--alpha -a", "an option", "b", &a);
 	cargo_assert(ret == 0, "Failed to add option");
 	cargo_assert(cargo_get_option_type(cargo, "--alpha") == CARGO_BOOL,
 				"Expected alpha to be a bool");
 
-	ret = cargo_add_option(cargo, 0, "--beta -b", "another option", "i");
+	ret = cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
 	cargo_assert(ret == 0, "Failed to add option");
 	cargo_assert(cargo_get_option_type(cargo, "--beta") == CARGO_INT,
 				"Expected beta to be a int");
 
-	ret = cargo_add_option(cargo, 0, "--centauri -c", "another option", "f");
+	ret = cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
 	cargo_assert(ret == 0, "Failed to add option");
 	cargo_assert(cargo_get_option_type(cargo, "--centauri") == CARGO_FLOAT,
 				"Expected centauri to be a float");
+
+	ret = cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+	cargo_assert(ret == 0, "Failed to add option");
+	cargo_assert(cargo_get_option_type(cargo, "--delta") == CARGO_STRING,
+				"Expected delta to be a string");
 
 	_TEST_CLEANUP();
 }
