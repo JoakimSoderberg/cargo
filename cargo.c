@@ -1200,8 +1200,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 	{
 		_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
 	}
-
-	if (opt->alloc)
+	else if (opt->alloc)
 	{
 		CARGODBG(4, "    Allocated value\n");
 
@@ -7747,6 +7746,60 @@ _TEST_START(TEST_custom_callback_fixed_array)
 }
 _TEST_END()
 
+typedef struct _test_rect_s
+{
+	int x;
+	int y;
+	int w;
+	int h;
+} _test_rect_t;
+
+static int _test_cb_fixed_array_no_count(cargo_t ctx, void *user,
+										const char *optname,
+										int argc, char **argv)
+{
+	_test_rect_t *rect = (_test_rect_t *)user;
+
+	if (argc != 4)
+	{
+		cargo_set_error(ctx, 0, "Not enough!");
+		return -1;
+	}
+
+	rect->x = atoi(argv[0]);
+	rect->y = atoi(argv[1]);
+	rect->w = atoi(argv[2]);
+	rect->h = atoi(argv[3]);
+
+	return argc;
+}
+
+_TEST_START(TEST_custom_callback_fixed_array_no_count)
+{
+	size_t i;
+	_test_rect_t rect;
+	char *args[] = { "program", "--alpha", "1", "2", "3", "4" };
+
+	cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+	// We set the count var to NULL. This should work fine!
+	ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "[c]#",
+							_test_cb_fixed_array_no_count,
+							&rect, NULL, 4);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Failed to parse");
+
+	cargo_assert(rect.x == 1, "Expected x = 1");
+	cargo_assert(rect.y == 2, "Expected y = 2");
+	cargo_assert(rect.w == 3, "Expected w = 3");
+	cargo_assert(rect.h == 4, "Expected h = 4");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 static int _test_cb_array(cargo_t ctx, void *user, const char *optname,
 								int argc, char **argv)
 {
@@ -9878,6 +9931,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_required_option),
 	CARGO_ADD_TEST(TEST_custom_callback),
 	CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
+	CARGO_ADD_TEST(TEST_custom_callback_fixed_array_no_count),
 	CARGO_ADD_TEST(TEST_custom_callback_array),
 	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
 	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
