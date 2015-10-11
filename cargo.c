@@ -1199,6 +1199,7 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 	if (opt->custom)
 	{
 		_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
+		return;
 	}
 	else if (opt->alloc)
 	{
