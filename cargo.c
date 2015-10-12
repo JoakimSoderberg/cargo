@@ -7775,6 +7775,42 @@ static int _test_cb_fixed_array_no_count(cargo_t ctx, void *user,
 	return argc;
 }
 
+_TEST_START(TEST_many_options_custom)
+{
+	size_t j = 0;
+	_test_rect_t rect;
+	#define OPT_COUNT 100
+	int vals[OPT_COUNT];
+	char optname[256];
+	char *args[] = { "program", "--help" };
+
+	// This reproduces a bug seen on the raspberry pi where
+	// you get a SIGSEV because the internal list for a custom
+	// variable would be freed and then target count was dereferenced 
+	// (which now was freed).
+	for (j = 0; j < OPT_COUNT + 1; j++)
+	{
+		if (j == (OPT_COUNT / 2))
+		{
+			ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "[c]#",
+							_test_cb_fixed_array_no_count,
+							&rect, NULL, 4);
+			cargo_assert(ret == 0, "Failed to add options");
+			continue;
+		}
+		cargo_snprintf(optname, sizeof(optname), "--opto%02d",  j+1);
+		ret |= cargo_add_option(cargo, 0, optname, LOREM_IPSUM, "i", &vals[j]);
+		cargo_assert(ret == 0, "Failed to add option");
+	}
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+
+	cargo_print_usage(cargo, 0);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 _TEST_START(TEST_custom_callback_fixed_array_no_count)
 {
 	size_t i;
@@ -9848,6 +9884,8 @@ _TEST_START(TEST_cargo_large_list_and_usage2)
 }
 _TEST_END()
 
+
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -9933,6 +9971,7 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_custom_callback),
 	CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
 	CARGO_ADD_TEST(TEST_custom_callback_fixed_array_no_count),
+	CARGO_ADD_TEST(TEST_many_options_custom),
 	CARGO_ADD_TEST(TEST_custom_callback_array),
 	CARGO_ADD_TEST(TEST_zero_or_more_with_arg),
 	CARGO_ADD_TEST(TEST_zero_or_more_without_arg),
