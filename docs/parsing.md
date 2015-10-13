@@ -32,9 +32,9 @@ int main(int argc, char **argv)
 
 Normal case
 -----------
-In the normal case you simply want cargo to parse the commandline you give it and present any errors or invalid input it is given in a nice and helpful way.
+In the normal case you simply want cargo to parse the command line you give it and present any errors or invalid input it is given in a nice and helpful way.
 
-To do this we can start to look at how [`cargo_parse`](api.md#cargo_parse) looks like:
+To do this we can start to look at what [`cargo_parse`](api.md#cargo_parse) looks like:
 
 ```c
 cargo_parse_result_t cargo_parse(cargo_t ctx, cargo_flags_t flags,
@@ -88,11 +88,11 @@ Freeing what cargo allocates
 ----------------------------
 As you might have noticed in the example above, by default it is up to you to free any memory that cargo has allocated. This is so that you are free to write a function that creates a cargo instance, parses the command line, destroys the cargo instance and finally returns the parsed arguments.
 
-One exception what is mentioend above is if you call [`cargo_parse`](api.md#cargo_parse) more than once on the same cargo instance in which case everything allocated by the previous parse is cleaned up before parsing again.
+One exception to what is mentioned above is if you call [`cargo_parse`](api.md#cargo_parse) more than once on the same cargo instance in which case everything allocated by the previous parse is cleaned up before parsing again.
 
 Usually however, parsing more than once with the same cargo instance does not make much sense.
 
-If you want to override this behaviour, and make cargo to free these variables automatically in [`cargo_destroy`](api.md#cargo_destroy), you can do this by passing the [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean) flag to [`cargo_init`](api.md#cargo_init).
+If you want to override this behaviour, and make cargo free these variables automatically in [`cargo_destroy`](api.md#cargo_destroy), you can do this by passing the [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean) flag to [`cargo_init`](api.md#cargo_init).
 
 Get left over arguments
 -----------------------
@@ -140,7 +140,7 @@ If you instead want a complete copy of this list you can use [`cargo_parse_copy`
 
 Unknown options
 ---------------
-When cargo parses a command line it will by default fail on finding options prepended with the [`prefix`](api.md#cargo_set_prefix) character that has not been added with [`cargo_add_option`](api.md#cargo_add_option). [`cargo_parse`](api.md#cargo_parse) will in this case return [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts).
+When cargo parses a command line it will by default fail when finding options prepended with the [`prefix`](api.md#cargo_set_prefix) character that has not been added with [`cargo_add_option`](api.md#cargo_add_option). [`cargo_parse`](api.md#cargo_parse) will in this case return [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts).
 
 To get a read only list containing the list of these unknown options you can call [`cargo_get_unknown`](api.md#cargo_get_unknown). Or if you want a changeable copy instead you can use [`cargo_get_unknown_copy`](api.md#cargo_get_unknown_copy). This can then be freed using the utility function [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
@@ -148,7 +148,7 @@ You can change this behaviour by setting the flag [`CARGO_NO_FAIL_UNKNOWN`](api.
 
 Customizing parse output messages
 ---------------------------------
-As mentioned above by default the short version of the usage is shown by default, as well as any error message that occurs while parsing.
+As mentioned above the short version of the usage is shown by default, as well as any error message that occurs while parsing.
 
 If you instead want to output your own error message, or for whatever reason do things in another order. You can change this behaviour by passing a set of [`cargo_flags_t`](api.md#cargo_flags_t) to [`cargo_init`](api.md#cargo_init).
 
@@ -211,7 +211,7 @@ Missing required argument "integers"
 
 Or with an incorrectly named option:
 
-```c
+```bash
 $ cargo_ex_ints 1 2 3 --sam
 Usage: bin/cargo_ex_ints [--sum ] [--help ] INTEGERS [INTEGERS ...]
 
