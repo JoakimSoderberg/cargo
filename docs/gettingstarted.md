@@ -96,7 +96,7 @@ You can also run the test executable manually with full output, which is nice wh
 
 ```bash
 $ bin/cargo_tests    # Show help and list of tests.
-$ bin/cargo_tests -1 # Run all tests. 
+$ bin/cargo_tests -1 # Run all tests.
 ```
 
 ### Windows

@@ -15,7 +15,7 @@ The main design principles:
  - **No dependencies**:
    cargo requires no external dependencies except the standard C library.
 
- - **Drop in**: 
+ - **Drop in**:
    cargo consists of *cargo.c* and *cargo.h* which contains everything needed, including an example program, unit tests and the lib itself. This is to make it as easy as possible to include in any project.
 
  - **Simple API**:
