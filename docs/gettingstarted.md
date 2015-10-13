@@ -16,7 +16,7 @@ cargo comes with a [CMake][cmake] project that you can use to build everything.
 
 It is setup to build `cargo_tests`, `cargo_helper` as well as a static and dynamic library on all platforms.
 
-To see all available cmake options you can use `cmake -LH ..` for turning of memory checks and such things.
+To see all available cmake options you can use `cmake -LH ..` for turning off memory checks and such things.
 
 ### Unix
 
@@ -53,7 +53,7 @@ $ gcc -DCARGO_HELPER=1 -o cargo_helper cargo.c
 
 ### Windows
 
-Or for Windows using the Visual Studio commandline:
+Using the Visual Studio commandline:
 
 ```bash
 > cl.exe /DCARGO_TEST /Fecargo_tests cargo.c
@@ -62,7 +62,7 @@ Or for Windows using the Visual Studio commandline:
 
 Unit tests
 ==========
-The benefit with using the [CMake][cmake] project to build everything is that it also sets up the unit tests to automatically run each separate test in its own process, as well as running them through [Valgrind][valgrind] (Linux) or [Dr. Memory][drmemory] (Windows) to check for any memory leaks or corruption.
+The benefit of using the [CMake][cmake] project to build everything is that it also sets up the unit tests to automatically run each separate test in its own process, as well as running them through [Valgrind][valgrind] (Linux) or [Dr. Memory][drmemory] (Windows) to check for any memory leaks or corruption.
 
 However if you want you can compile these manually as well (see below).
 

@@ -101,7 +101,7 @@ Here is where you specify what this cargo option should look for when parsing th
 
 To make learning how this formatting language works as easy as possible, cargo comes with a small helper program `cargo_helper` that can help you with this. See [getting started](gettingstarted.md) on how to compile this.
 
-For a full description of the formatting language, please see the [API reference](api.md#formatting-language). In short, you specify a type specifier such as `i` for and `int`, `s` for a string (`char *`), `d` for `double` and so on. As well as specifiers that tells us if you're parsing a list, a single value, one or more values etc.
+For a full description of the formatting language, please see the [API reference](api.md#formatting-language). In short, you specify a type specifier such as `i` for an `int`, `s` for a string (`char *`), `d` for `double` and so on. As well as specifiers that tells us if you're parsing a list, a single value, one or more values etc.
 
 Here's an example of using [`cargo_add_option`](api.md#cargo_add_option) to parse an integer:
 
@@ -165,7 +165,7 @@ int cargo_add_alias(cargo_t ctx, const char *optname, const char *alias);
 
 Automatic --help option
 =======================
-People in need wants `--help`, so by default cargo will create this option for you. If you for some reason hate helping people you can turn this behaviour off by passing [`CARGO_NO_AUTOHELP`](api.md#cargo_no_autohelp) to [`cargo_init`](api.md#cargo_init)
+People in need want `--help`, so by default cargo will create this option for you. If you for some reason hate helping people you can turn this behaviour off by passing [`CARGO_NO_AUTOHELP`](api.md#cargo_no_autohelp) to [`cargo_init`](api.md#cargo_init)
 
 Groups
 ======
@@ -300,7 +300,7 @@ ret |= cargo_add_option(cargo, 0, "--centauri", "The centauri", "i?", &k);
 assert(ret == 0);
 ```
 
-And the resulting output if we don't at least specify one of `--alpha` or `--beta`:
+And the resulting output if we don't specify at least one of `--alpha` or `--beta`:
 
 ```bash
 $ program --centauri 123 456
@@ -319,7 +319,7 @@ Custom parsing
 ==============
 As you have seen in the previous examples, parsing native types such as `int`, `float`, `double` or a string is possible. But what if you want to parse something more advanced, a timestamp for example?
 
-Here's where custom callbacks come in to play. When adding an option, you both specify the target variable as well as a custom callback that cargo should call when it parses that option.
+Here's where custom callbacks come in to play. When adding an option, you specify both the target variable as well as a custom callback that cargo should call when it parses that option.
 
 The callback function of type [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) looks like this:
 
@@ -347,7 +347,7 @@ There are also functions available to get the group and mutex groups for an opti
 
 Example
 -------
-So let's say we want to parse a rectangle value wher the dimensions are specified by the width and height in this format: `WxH`. And we want to put it                                                                                                                                                                                                                                                                                                                                  in our struct `rect_t`:
+So let's say we want to parse a rectangle value where the dimensions are specified by the width and height in this format: `WxH`. And we want to put it                                                                                                                                                                                                                                                                                                                                  in our struct `rect_t`:
 
 ```c
 typedef struct rect_s
