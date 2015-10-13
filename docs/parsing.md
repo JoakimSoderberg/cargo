@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     }
 
     ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]+",
-                           &integers, &integers_count); 
+                           &integers, &integers_count);
     assert(ret == 0);
 
     // Do the parsing here!
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     }
 
     ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]+",
-                           &integers, &integers_count); 
+                           &integers, &integers_count);
     assert(ret == 0);
 
     if ((ret = cargo_parse(cargo, 0, 1, argc, argv)))
@@ -108,7 +108,7 @@ size_t args_count = 0;
 ...
 
 ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]#",
-                           &integers, &integers_count, 3); 
+                           &integers, &integers_count, 3);
 assert(ret == 0);
 
 if ((ret = cargo_parse(cargo, 0, 1, argc, argv)))

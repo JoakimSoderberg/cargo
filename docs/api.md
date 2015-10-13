@@ -96,7 +96,7 @@ The cargo version as a string. Example: `"0.2.0"`.
 ```c
 const char *cargo_get_version()
 ```
- 
+
 Function that gets the cargo version as a string. Example: `"0.2.0"`.
 
 ## Function pointers ##
@@ -207,7 +207,7 @@ This behaviour can be changed by appending a set of specifiers after `b`:
 
 Some examples:
 
-- Parse an ordinary flag and store `1` in `val` if set: `b, &val`. 
+- Parse an ordinary flag and store `1` in `val` if set: `b, &val`.
   `"--opt"` -> `val = 1`
 - Or parse the flag but store `5` in `val` if set: `"b=", &val, 5`
   `"--opt"` -> `val = 5`
@@ -719,7 +719,7 @@ Gets the flags of the [`cargo_t`](api.md#cargo_t) context.
 
 ```c
 int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
-					  const char *optnames, 
+					  const char *optnames,
 					  const char *description,
 					  const char *fmt, va_list ap)
 ```
@@ -939,7 +939,7 @@ int cargo_mutex_group_set_metavar(cargo_t ctx,
 
 ---
 
-This sets the meta variable name for a given mutex group. 
+This sets the meta variable name for a given mutex group.
 
 By default the individual variables are shown in the short usage printed by [`cargo_get_usage`](api.md#cargo_get_usage) and friends.
 
@@ -1031,7 +1031,7 @@ Change the default "metavar" that is shown in the usage output to identify the v
 The default is to simply use the option name in uppercase:
 
 ```c
---option OPTION 
+--option OPTION
 ```
 
 So you can change this to whatever you want:
@@ -1118,12 +1118,12 @@ If you want to override this behaviour, you can change this behaviour by setting
 
 You can turn it off completely and instead use [`cargo_get_usage`](api.md#cargo_get_usage), [`cargo_get_error`](api.md#cargo_get_error) and [`cargo_get_unknown`](api.md#cargo_get_unknown) to customize the output however you want.
 
-The return value for this is more specific and contains different reasons found in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum. If the parse was successful, [`CARGO_PARSE_OK`](api.md#0-cargo_parse_ok) defined as `0` is returned. 
+The return value for this is more specific and contains different reasons found in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum. If the parse was successful, [`CARGO_PARSE_OK`](api.md#0-cargo_parse_ok) defined as `0` is returned.
 
 **Return value**
 The return values for this function is defined in the [`cargo_parse_result_t`](api.md#cargo_parse_result_t) enum.
 
-For errors a negative value is always returned, however instead of simply using `-1` for all errors like the rest of the API, there are different values for each error type. 
+For errors a negative value is always returned, however instead of simply using `-1` for all errors like the rest of the API, there are different values for each error type.
 
 For example if the reason for the failed parse is that unknown options where found, [`CARGO_PARSE_UNKNOWN_OPTS`](api.md#-1-cargo_parse_unknown_opts) will be returned, and you can use that knowledge to get the list of unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
 
@@ -1325,7 +1325,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags);
 
 ---
 
-This returns a string containing the usage for the given cargo context. 
+This returns a string containing the usage for the given cargo context.
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
 

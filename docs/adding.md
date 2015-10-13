@@ -195,7 +195,7 @@ The other way to add an option to a group is to do it directly in the [`cargo_ad
 Here's an example of both methods:
 
 ```c
-ret = cargo_add_option(cargo, 0, "<group1> --integers -i", 
+ret = cargo_add_option(cargo, 0, "<group1> --integers -i",
                        "Integers", "[i]+",
                        &integers, &integer_count);
 ```
@@ -203,7 +203,7 @@ ret = cargo_add_option(cargo, 0, "<group1> --integers -i",
 or with a separate function call:
 
 ```c
-ret = cargo_add_option(cargo, 0, "--integers -i", 
+ret = cargo_add_option(cargo, 0, "--integers -i",
                        "Integers", "[i]+",
                        &integers, &integer_count);
 
@@ -237,7 +237,7 @@ int cargo_mutex_group_add_option(cargo_t ctx,
 Or just as with normal groups, options can be added to mutex groups using `cargo_add_option` as well. However to differentiate mutex groups from normal groups they need to be prepended with a `!`, so `"<!mutexgrp> --opt"`:
 
 ```c
-ret = cargo_add_option(cargo, 0, "<!mutex_group> --integers -i", 
+ret = cargo_add_option(cargo, 0, "<!mutex_group> --integers -i",
                        "Integers", "[i]+",
                        &integers, &integer_count);
 ```
