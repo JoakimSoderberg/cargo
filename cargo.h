@@ -126,14 +126,14 @@ typedef struct cargo_s *cargo_t;
 
 typedef enum cargo_type_e
 {
-	CARGO_BOOL 							= 0,
-	CARGO_INT 							= 1,
-	CARGO_UINT 							= 2,
-	CARGO_FLOAT 						= 3,
-	CARGO_DOUBLE 						= 4,
-	CARGO_STRING 						= 5,
-	CARGO_LONGLONG 						= 6,
-	CARGO_ULONGLONG 					= 7
+	CARGO_BOOL 							= (1 << 0),
+	CARGO_INT 							= (1 << 1),
+	CARGO_UINT 							= (1 << 2),
+	CARGO_FLOAT 						= (1 << 3),
+	CARGO_DOUBLE 						= (1 << 4),
+	CARGO_STRING 						= (1 << 5),
+	CARGO_LONGLONG 						= (1 << 6),
+	CARGO_ULONGLONG 					= (1 << 7)
 } cargo_type_t;
 
 //
@@ -224,7 +224,7 @@ typedef enum cargo_width_flags_s
 // Callback types.
 //
 
-typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+typedef int (*cargo_custom_f)(cargo_t ctx, void *user, const char *optname,
 								int argc, char **argv);
 
 typedef void *(*cargo_malloc_f)(size_t bytes);

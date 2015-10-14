@@ -101,10 +101,10 @@ Function that gets the cargo version as a string. Example: `"0.2.0"`.
 
 ## Function pointers ##
 
-### cargo_custom_cb_t ###
+### cargo_custom_f ###
 
 ```c
-typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+typedef int (*cargo_custom_f)(cargo_t ctx, void *user, const char *optname,
                                  int argc, char **argv);
 ```
 
@@ -1349,7 +1349,7 @@ void cargo_set_error(cargo_t ctx,
 
 ---
 
-This is meant to be used inside of [`custom callback`](api.md#cargo_custom_cb_t) function to set errors when parsing custom values.
+This is meant to be used inside of [`custom callback`](api.md#cargo_custom_f) function to set errors when parsing custom values.
 
 ### cargo_set_errorv ###
 
@@ -1524,7 +1524,7 @@ You can use this function to save a context for an option group. You can later g
 
 Passing `NULL` as the `group` name adds the context to the default group. This is the group all options are added to by default unless another group is specified.
 
-This can be used to pass your own group context to a [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) when parsing a custom argument.
+This can be used to pass your own group context to a [`cargo_custom_f`](api.md#cargo_custom_f) when parsing a custom argument.
 
 ### cargo_get_group_context ###
 
@@ -1540,11 +1540,11 @@ void *cargo_get_group_context(cargo_t ctx, const char *group);
 
 ---
 
-This can be used to fetch the context or a given option group when parsing custom arguments in a [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) callback function.
+This can be used to fetch the context or a given option group when parsing custom arguments in a [`cargo_custom_f`](api.md#cargo_custom_f) callback function.
 
 To set this context for a group see [`cargo_set_group_context`](api.md#cargo_set_group_context).
 
-Since you are not passed an options group name in the [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) callback, you can use [`cargo_get_option_group`](api.md#cargo_get_option_group) to get it given the option name.
+Since you are not passed an options group name in the [`cargo_custom_f`](api.md#cargo_custom_f) callback, you can use [`cargo_get_option_group`](api.md#cargo_get_option_group) to get it given the option name.
 
 ```c
 

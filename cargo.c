@@ -754,17 +754,22 @@ void cargo_print_ansicolor(FILE *fd, const char *buf)
 #define CARGO_NARGS_ZERO_OR_MORE	-2
 #define CARGO_NARGS_ZERO_OR_ONE		-3
 
-static const char *_cargo_type_map[] =
+const char *_cargo_type_to_str(cargo_type_t type)
 {
-	"bool",
-	"int",
-	"unsigned int",
-	"float",
-	"double",
-	"string",
-	"long long",
-	"unsigned long long"
-};
+	switch (type)
+	{
+		case CARGO_BOOL: return "bool";
+		case CARGO_INT: return "int";
+		case CARGO_UINT: return "unsigned int";
+		case CARGO_FLOAT: return "float";
+		case CARGO_DOUBLE: return "double";
+		case CARGO_STRING: return "string";
+		case CARGO_LONGLONG: return "long long";
+		case CARGO_ULONGLONG: return "unsigned long long";
+	}
+
+	return NULL;
+}
 
 typedef enum cargo_bool_acc_op_e
 {
@@ -794,7 +799,7 @@ typedef struct cargo_opt_s
 	size_t mutex_group_count;
 	char **mutex_group_names;
 
-	cargo_custom_cb_t custom;	// Custom callback function.
+	cargo_custom_f custom;		// Custom callback function.
 	void *custom_user;			// Custom user data passed to user callback.
 	size_t *custom_user_count;	// Used to return array count when parsing
 								// custom callbacks.
@@ -1191,7 +1196,8 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 	opt->parsed = -1;		// This is the index into argv that we parsed this option at.
 	opt->num_eaten = 0;
 
-	CARGODBG(3, "Cleanup option (%s) target: %s\n", _cargo_type_map[opt->type], opt->name[0]);
+	CARGODBG(3, "Cleanup option (%s) target: %s\n",
+			_cargo_type_to_str(opt->type), opt->name[0]);
 
 	if (opt->custom)
 	{
@@ -1311,7 +1317,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			}
 
 			CARGODBG(3, "Allocated %dx %s!\n",
-					alloc_count, _cargo_type_map[opt->type]);
+					alloc_count, _cargo_type_to_str(opt->type));
 
 			*(opt->target) = new_target;
 		}
@@ -1329,7 +1335,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	{
 		// Just a normal pointer.
 		CARGODBG(3, "Not allocating array or single %s\n",
-				_cargo_type_map[opt->type]);
+				_cargo_type_to_str(opt->type));
 
 		target = (void *)opt->target;
 	}
@@ -1545,7 +1551,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		str.s = &error;
 
 		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
-				val, _cargo_type_map[opt->type]);
+				val, _cargo_type_to_str(opt->type));
 
 		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 						_cargo_get_cflag(ctx), ctx->max_width,
@@ -1554,7 +1560,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 						ctx->j, "~"CARGO_COLOR_RED);
 
 		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
-				s, val, _cargo_type_map[opt->type], opt->name[0]);
+				s, val, _cargo_type_to_str(opt->type), opt->name[0]);
 
 		_cargo_xfree(&s);
 		_cargo_set_error(ctx, error);
@@ -4686,7 +4692,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 													argc, argv)) < 0)
 			{
 				CARGODBG(1, "Failed to parse %s option: %s\n",
-						_cargo_type_map[opt->type], name);
+						_cargo_type_to_str(opt->type), name);
 				ret = opt_arg_count; goto fail;
 			}
 		}
@@ -4704,7 +4710,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 													argc, argv)) < 0)
 				{
 					CARGODBG(1, "    Failed to parse %s option: %s\n",
-							_cargo_type_map[opt->type], name);
+							_cargo_type_to_str(opt->type), name);
 					ret = opt_arg_count; goto fail;
 				}
 			}
@@ -5487,7 +5493,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 			}
 
 			o->type = CARGO_STRING;
-			o->custom = va_arg(ap, cargo_custom_cb_t);
+			o->custom = va_arg(ap, cargo_custom_f);
 			o->custom_user = va_arg(ap, void *);
 
 			// Internal target.
@@ -10454,7 +10460,7 @@ int main(int argc, char **argv)
 
 			if (array) printf("[");
 
-			printf("%c", _cargo_type_map[types[i]][0]);
+			printf("%c", _cargo_type_to_str(types[i])[0]);
 
 			if (array && static_str) printf("#");
 			if (array) printf("]");

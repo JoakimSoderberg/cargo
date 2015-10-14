@@ -321,10 +321,10 @@ As you have seen in the previous examples, parsing native types such as `int`, `
 
 Here's where custom callbacks come in to play. When adding an option, you specify both the target variable as well as a custom callback that cargo should call when it parses that option.
 
-The callback function of type [`cargo_custom_cb_t`](api.md#cargo_custom_cb_t) looks like this:
+The callback function of type [`cargo_custom_f`](api.md#cargo_custom_f) looks like this:
 
 ```c
-typedef int (*cargo_custom_cb_t)(cargo_t ctx, void *user, const char *optname,
+typedef int (*cargo_custom_f)(cargo_t ctx, void *user, const char *optname,
                                  int argc, char **argv);
 ```
 
