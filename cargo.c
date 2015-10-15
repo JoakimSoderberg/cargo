@@ -828,6 +828,9 @@ typedef struct cargo_opt_s
 	size_t bool_acc_max_count;			// Number of accumulation values.
 
 	char *zero_or_one_default;	// Default value used for target value when
+
+	cargo_validation_t *validation; // Validation for target values.
+	cargo_validation_flags_t validation_flags;
 } cargo_opt_t;
 
 #define CARGO_DEFAULT_MAX_GROUPS 4
@@ -1262,6 +1265,86 @@ static void _cargo_cleanup_option_values(cargo_t ctx)
 	}
 }
 
+void _cargo_destroy_validation(cargo_opt_t *o)
+{
+	assert(o);
+
+	if (o->validation)
+	{
+		CARGODBG(3, "Destroying validation \"%s\" for \"%s\"\n",
+				o->validation->name, o->name[0]);
+
+		if (o->validation->destroy)
+		{
+			CARGODBG(3, "Calling validation destroy function\n");
+			o->validation->destroy(o->validation);
+		}
+
+		_cargo_xfree(&o->validation);
+	}
+}
+
+int _cargo_validate_option_value(cargo_t ctx, cargo_opt_t *o, void *value)
+{
+	assert(ctx);
+	assert(o);
+	assert(o->validation);
+	assert(o->validation->validator);
+	
+	if (o->validation->validator(ctx, o->validation_flags, o->name[0],
+								o->validation, value))
+	{
+		return -1;
+	}
+
+	return 0;
+}
+
+int _cargo_validate_option_values(cargo_t ctx, cargo_opt_t *o)
+{
+	size_t i;
+	assert(ctx);
+	assert(o);
+
+	if (!o->validation)
+		return 0;
+
+	for (i = 0; i < o->target_idx; i++)
+	{
+		if (_cargo_validate_option_value(ctx, o, o->target[i]))
+		{
+			return i;
+		}
+	}
+
+	return 0;
+}
+
+int _cargo_validate_options(cargo_t ctx)
+{
+	size_t i;
+	assert(ctx);
+
+	for (i = 0; i < ctx->opt_count; i++)
+	{
+		if (_cargo_validate_option_values(ctx, &ctx->options[i]))
+		{
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static char *_cargo_highlight_current_target_value(cargo_t ctx)
+{
+	return cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
+						_cargo_get_cflag(ctx), ctx->max_width,
+						2,
+						ctx->i - 1, "^"CARGO_COLOR_YELLOW,
+						ctx->j, "~"CARGO_COLOR_RED);
+}
+
 static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 									const char *name, char *val)
 {
@@ -1540,31 +1623,54 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 			break;
 	}
 
-	// This indicates error for the strtox functions.
-	// (Don't include bool here, since val will be NULL in that case).
-	if ((opt->type != CARGO_BOOL) && (end == val))
+	// Error checks.
 	{
 		cargo_astr_t str;
 		char *error = NULL;
-		char *s = NULL;
+		char *highlight = NULL;
 		memset(&str, 0, sizeof(cargo_astr_t));
 		str.s = &error;
 
-		CARGODBG(1, "Cannot parse \"%s\" as %s\n",
-				val, _cargo_type_to_str(opt->type));
+		// This indicates error for the strtox functions.
+		// (Don't include bool here, since val will be NULL in that case).
+		if ((opt->type != CARGO_BOOL) && (end == val))
+		{
+			CARGODBG(1, "Cannot parse \"%s\" as %s\n",
+					val, _cargo_type_to_str(opt->type));
+	
+			highlight = _cargo_highlight_current_target_value(ctx);
+	
+			cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
+					highlight, val, _cargo_type_to_str(opt->type), opt->name[0]);
+	
+			_cargo_xfree(&highlight);
+			_cargo_set_error(ctx, error);
+			return -1;
+		}
 
-		s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
-						_cargo_get_cflag(ctx), ctx->max_width,
-						2,
-						ctx->i - 1, "^"CARGO_COLOR_YELLOW,
-						ctx->j, "~"CARGO_COLOR_RED);
+		// Use validation function to verify target value.
+		if (opt->validation
+			&& _cargo_validate_option_value(ctx, opt,
+				&opt->target[opt->target_idx]))
+		{
+			CARGODBG(1, "Failed to validate \"%s\" for \"%s\"\n", val, opt->name[0]);
+			highlight = _cargo_highlight_current_target_value(ctx);
+			
+			// The validation can set an error. So use that.
+			if (ctx->error)
+			{
+				cargo_aappendf(&str, "%s\n%s\n", highlight, ctx->error);
+			}
+			else
+			{
+				cargo_aappendf(&str, "%s\nFailed to validate value for \"%s\"\n",
+								highlight, opt->name[0]);
+			}
 
-		cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
-				s, val, _cargo_type_to_str(opt->type), opt->name[0]);
-
-		_cargo_xfree(&s);
-		_cargo_set_error(ctx, error);
-		return -1;
+			_cargo_xfree(&highlight);
+			_cargo_set_error(ctx, error);
+			return -1;
+		}
 	}
 
 	opt->target_idx++;
@@ -2778,6 +2884,8 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	// internally so we should always auto clean it.
 	_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
 	_cargo_free_str_list(&o->mutex_group_names, &o->mutex_group_count);
+
+	_cargo_destroy_validation(o);
 }
 
 typedef struct cargo_fmt_token_s
@@ -5853,6 +5961,149 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 	va_end(ap);
 
 	return ret;
+}
+
+typedef union cargo_vals_s
+{
+	int i;
+	unsigned int u;
+	float f;
+	double d;
+	long long int ll;
+	unsigned long long ull;
+} cargo_vals_t;
+
+typedef struct cargo_range_validation_s
+{
+	cargo_validation_t super;
+	cargo_vals_t min;
+	cargo_vals_t max;
+} cargo_range_validation_t;
+
+static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
+						const char *opt, cargo_validation_t *vd, void *value)
+{
+	#define _CARGO_COMPARE_RANGE(_type, valfmt, _member)					\
+	{ 																		\
+		_type i = *((_type *)value);										\
+		if ((i < vr->min._member) || (i > vr->max._member))					\
+		{																	\
+			cargo_set_error(ctx, 0,											\
+				"Value must be in the range between "						\
+				 valfmt" and "valfmt" for %s\n",							\
+				vr->min._member, vr->max._member, opt);						\
+			return -1;														\
+		}																	\
+	}
+
+	assert(ctx);
+	assert(vd);
+	assert(opt);
+	cargo_type_t type = cargo_get_option_type(ctx, opt);
+	cargo_range_validation_t *vr = (cargo_range_validation_t *)vd;
+
+	switch (type)
+	{
+		case CARGO_INT:
+			_CARGO_COMPARE_RANGE(int, "%d", i) break;
+		case CARGO_UINT:
+			_CARGO_COMPARE_RANGE(unsigned int, "%u", u) break;
+		case CARGO_FLOAT:
+			_CARGO_COMPARE_RANGE(float, "%f", f) break;
+		case CARGO_DOUBLE:
+			_CARGO_COMPARE_RANGE(double, "%f", u) break;
+		case CARGO_LONGLONG: 
+			_CARGO_COMPARE_RANGE(long long int, "%lld", ll) break;
+		case CARGO_ULONGLONG:
+			_CARGO_COMPARE_RANGE(unsigned long long int, "%llu", ull) break;
+		case CARGO_BOOL:
+		case CARGO_STRING: return -1;
+	}
+
+	return 0;
+}
+
+static cargo_range_validation_t *_cargo_create_range(const char *name, 
+													cargo_type_t type)
+{
+	cargo_range_validation_t *vr = NULL;
+	cargo_validation_t *v = NULL;
+	va_list ap;
+
+	if (!(vr = calloc(1, sizeof(cargo_range_validation_t))))
+	{
+		return NULL;
+	}
+
+	v = (cargo_validation_t *)vr;
+
+	v->name = name;
+	v->validator = cargo_validate_range_cb;
+	v->destroy = NULL;
+	v->types |= type;
+
+	return vr;
+}
+
+#define _CARGO_CREATE_VALIDATE_RANGE_FUNC(name, type, _cargo_type, _member) \
+	cargo_validation_t *cargo_validate_##name(type min, type max)			\
+	{																		\
+		cargo_range_validation_t *vr = NULL;								\
+		if (!(vr = _cargo_create_range(#type" range", _cargo_type)))		\
+			return NULL;													\
+		vr->min._member = min;												\
+		vr->max._member = max;												\
+		return (cargo_validation_t *)vr;									\
+	}
+
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(int_range, int, CARGO_INT, i)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(uint_range, unsigned int, CARGO_DOUBLE, u)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(float_range, float, CARGO_FLOAT, f)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(double_range, double, CARGO_DOUBLE, d)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(longlong_range, long long int, CARGO_LONGLONG, ll)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(ulonglong_range, unsigned long long int, CARGO_LONGLONG, ull)
+
+int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
+						const char *opt, cargo_validation_t *vd)
+{
+	size_t opt_i;
+	size_t name_i;
+	cargo_opt_t *o;
+	assert(ctx);
+	assert(opt);
+
+	if (!vd)
+	{
+		CARGODBG(1, "Got NULL validation for options \"%s\"\n", opt);
+		return -1;
+	}
+
+	if (!(vd->validator))
+	{
+		CARGODBG(1, "Validation missing validator function for \"%s\"\n", opt);
+		return -1;
+	}
+
+	if (_cargo_find_option_name(ctx, opt, &opt_i, &name_i))
+	{
+		CARGODBG(1, "Failed to find option \"%s\"\n", opt);
+		return -1;
+	}
+
+	o = &ctx->options[opt_i];
+
+	if (!(o->type & vd->types))
+	{
+		CARGODBG(1, "\"%s\" of type \"%s\" is not supported by the validation %s\n",
+				opt, _cargo_type_to_str(o->type), vd->name);
+		return -1;
+	}
+
+	_cargo_destroy_validation(o);
+	o->validation = vd;
+	o->validation_flags = flags;
+
+	return 0;
 }
 
 void cargo_free_commandline(char ***argv, int argc)
@@ -9880,7 +10131,36 @@ _TEST_START(TEST_cargo_large_list_and_usage2)
 }
 _TEST_END()
 
+_TEST_START(TEST_range_validation)
+{
+	int a = 0;
+	float b;
+	const char *usage = NULL;
+	char *args[] = { "program", "--alpha", "123", "--beta", "3.4" };
+	char *args2[] = { "program", "--beta", "3.4" };
 
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "i", &a);
+	cargo_assert(ret == 0, "Failed to add option");
+	ret = cargo_add_validation(cargo, 0, "--alpha", cargo_validate_int_range(3, 4));
+	cargo_assert(ret == 0, "Failed to add validation");
+
+	ret = cargo_add_option(cargo, 0, "--beta -b", NULL, "f", &b);
+	cargo_assert(ret == 0, "Failed to add option");
+	ret = cargo_add_validation(cargo, 0, "--beta", cargo_validate_float_range(-13.0f, 4.2f));
+	cargo_assert(ret == 0, "Failed to add validation");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret < 0, "Parse failure");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == 0, "Parse failure");
+	
+	usage = cargo_get_usage(cargo, 0);
+	printf("%s\n", usage);
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -10030,7 +10310,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_duplicate_alias),
 	CARGO_ADD_TEST(TEST_cargo_get_option_type),
 	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage),
-	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage2)
+	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage2),
+	CARGO_ADD_TEST(TEST_range_validation)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

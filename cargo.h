@@ -214,16 +214,22 @@ typedef enum cargo_err_flags_e
 	CARGO_ERR_DEFAULT					= 0
 } cargo_err_flags_t;
 
-typedef enum cargo_width_flags_s
+typedef enum cargo_width_flags_e
 {
 	CARGO_WIDTH_USED					= 0,
-	CARGO_WIDTH_RAW						= 1,
+	CARGO_WIDTH_RAW						= 1
 } cargo_width_flags_t;
+
+typedef enum cargo_validation_flags_e
+{
+	CARGO_VALIDATION_NONE				= 0
+} cargo_validation_flags_t;
 
 //
 // Callback types.
 //
 
+// Custom option parser callback function.
 typedef int (*cargo_custom_f)(cargo_t ctx, void *user, const char *optname,
 								int argc, char **argv);
 
@@ -368,6 +374,45 @@ void cargo_set_memfunctions(cargo_malloc_f malloc_replacement,
 							cargo_free_f free_replacement);
 
 cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt);
+
+
+//
+// Validation.
+//
+
+typedef struct cargo_validation_s cargo_validation_t;
+
+typedef int (*cargo_validation_f)(cargo_t ctx,
+								cargo_validation_flags_t flags,
+								const char *opt, cargo_validation_t *vd,
+								void *value);
+typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
+
+struct cargo_validation_s
+{
+	const char *name;
+	cargo_validation_f validator;
+	cargo_validation_destroy_f destroy;
+	cargo_type_t types;
+};
+
+int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
+						const char *opt, cargo_validation_t *vd);
+
+//
+// Validators.
+//
+
+cargo_validation_t *cargo_validate_int_range(int min, int max);
+cargo_validation_t *cargo_validate_uint_range(unsigned int min,
+											  unsigned int max);
+cargo_validation_t *cargo_validate_float_range(float min, float max);
+cargo_validation_t *cargo_validate_double_range(double min, double max);
+cargo_validation_t *cargo_validate_longlong_range(long long int min,
+												  long long int max);
+cargo_validation_t *cargo_validate_ulonglong_range(unsigned long long int min,
+												   unsigned long long int max);
+
 
 //
 // Utility types.
