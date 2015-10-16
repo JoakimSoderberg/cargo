@@ -43,6 +43,30 @@
 #include <AvailabilityMacros.h>
 #endif // __APPLE__
 
+#if defined(__STDC__)
+# define C89
+# if defined(__STDC_VERSION__)
+#  define C90
+#  if (__STDC_VERSION__ >= 199409L)
+#   define C94
+#  endif
+#  if (__STDC_VERSION__ >= 199901L)
+#   define C99
+#  endif
+# endif
+#endif
+
+#ifdef C90
+#include <math.h>
+#define cargo_fabs fabs
+#else
+double cargo_fabs(double x)
+{
+	return (x < 0) ? -x : x;
+}
+#endif // C90
+
+
 static cargo_malloc_f 	replaced_cargo_malloc	= NULL;
 static cargo_free_f		replaced_cargo_free		= NULL;
 static cargo_realloc_f	replaced_cargo_realloc	= NULL;
@@ -1637,39 +1661,49 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		{
 			CARGODBG(1, "Cannot parse \"%s\" as %s\n",
 					val, _cargo_type_to_str(opt->type));
-	
+
 			highlight = _cargo_highlight_current_target_value(ctx);
 	
 			cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
 					highlight, val, _cargo_type_to_str(opt->type), opt->name[0]);
-	
+
 			_cargo_xfree(&highlight);
 			_cargo_set_error(ctx, error);
 			return -1;
 		}
 
 		// Use validation function to verify target value.
-		if (opt->validation
-			&& _cargo_validate_option_value(ctx, opt,
-				&opt->target[opt->target_idx]))
+		if (opt->validation)
 		{
-			CARGODBG(1, "Failed to validate \"%s\" for \"%s\"\n", val, opt->name[0]);
-			highlight = _cargo_highlight_current_target_value(ctx);
-			
-			// The validation can set an error. So use that.
-			if (ctx->error)
-			{
-				cargo_aappendf(&str, "%s\n%s\n", highlight, ctx->error);
-			}
-			else
-			{
-				cargo_aappendf(&str, "%s\nFailed to validate value for \"%s\"\n",
-								highlight, opt->name[0]);
-			}
+			// This is so that we can convert the void pointer more logically:
+			// char *str = ((char *)ptr);
+			// int i = *((int *)ptr);
+			// Compared to:
+			// char *str = *((char **)ptr);
+			void *trg = (opt->type == CARGO_STRING)
+				? (void *)opt->target[opt->target_idx]
+				: (void *)&opt->target[opt->target_idx];
 
-			_cargo_xfree(&highlight);
-			_cargo_set_error(ctx, error);
-			return -1;
+			if (_cargo_validate_option_value(ctx, opt, trg))
+			{
+				CARGODBG(1, "Failed to validate \"%s\" for \"%s\"\n", val, opt->name[0]);
+				highlight = _cargo_highlight_current_target_value(ctx);
+
+				// The validation can set an error. So use that.
+				if (ctx->error)
+				{
+					cargo_aappendf(&str, "%s\n%s\n", highlight, ctx->error);
+				}
+				else
+				{
+					cargo_aappendf(&str, "%s\nFailed to validate value for \"%s\"\n",
+									highlight, opt->name[0]);
+				}
+
+				_cargo_xfree(&highlight);
+				_cargo_set_error(ctx, error);
+				return -1;
+			}
 		}
 	}
 
@@ -5978,23 +6012,56 @@ typedef struct cargo_range_validation_s
 	cargo_validation_t super;
 	cargo_vals_t min;
 	cargo_vals_t max;
+	cargo_vals_t epsilon;
 } cargo_range_validation_t;
+
+static int _cargo_nearly_equal(double a, double b, double epsilon)
+{
+	float largest;
+	float diff = cargo_fabs(a - b);
+	a = cargo_fabs(a);
+	b = cargo_fabs(b);
+	largest = (b > a) ? b : a;
+
+	if (diff <= (largest * epsilon))
+		return 1;
+	return 0;
+}
 
 static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd, void *value)
 {
 	#define _CARGO_COMPARE_RANGE(_type, valfmt, _member)					\
+	do 																		\
 	{ 																		\
 		_type i = *((_type *)value);										\
 		if ((i < vr->min._member) || (i > vr->max._member))					\
 		{																	\
 			cargo_set_error(ctx, 0,											\
 				"Value must be in the range between "						\
-				 valfmt" and "valfmt" for %s\n",							\
-				vr->min._member, vr->max._member, opt);						\
+				 valfmt" and "valfmt" for %s but got "valfmt"\n",			\
+				vr->min._member, vr->max._member, opt, i);					\
 			return -1;														\
 		}																	\
-	}
+	} while (0)
+
+	#define _CARGO_COMPARE_FLOAT_RANGE(_type, valfmt, _member)				\
+	do 																		\
+	{ 																		\
+		_type f = *((_type *)value);										\
+		_type min = vr->min._member;										\
+		_type max = vr->max._member;										\
+		_type epsilon = vr->epsilon._member;								\
+		if (((f < min) && !_cargo_nearly_equal(f, min, epsilon))			\
+		 || ((f > max) && !_cargo_nearly_equal(f, max, epsilon)))			\
+		{																	\
+			cargo_set_error(ctx, 0,											\
+				"Value must be in the range between "						\
+				 valfmt" and "valfmt" for %s but got "valfmt"\n",			\
+				vr->min._member, vr->max._member, opt, f);					\
+			return -1;														\
+		}																	\
+	} while (0)
 
 	assert(ctx);
 	assert(vd);
@@ -6005,22 +6072,24 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 	switch (type)
 	{
 		case CARGO_INT:
-			_CARGO_COMPARE_RANGE(int, "%d", i) break;
+			_CARGO_COMPARE_RANGE(int, "%d", i); break;
 		case CARGO_UINT:
-			_CARGO_COMPARE_RANGE(unsigned int, "%u", u) break;
+			_CARGO_COMPARE_RANGE(unsigned int, "%u", u); break;
 		case CARGO_FLOAT:
-			_CARGO_COMPARE_RANGE(float, "%f", f) break;
+			_CARGO_COMPARE_FLOAT_RANGE(float, "%0.2f", f); break;
 		case CARGO_DOUBLE:
-			_CARGO_COMPARE_RANGE(double, "%f", u) break;
+			_CARGO_COMPARE_FLOAT_RANGE(double, "%0.2f", d); break;
 		case CARGO_LONGLONG: 
-			_CARGO_COMPARE_RANGE(long long int, "%lld", ll) break;
+			_CARGO_COMPARE_RANGE(long long int, "%lld", ll); break;
 		case CARGO_ULONGLONG:
-			_CARGO_COMPARE_RANGE(unsigned long long int, "%llu", ull) break;
+			_CARGO_COMPARE_RANGE(unsigned long long int, "%llu", ull); break;
 		case CARGO_BOOL:
 		case CARGO_STRING: return -1;
 	}
 
 	return 0;
+	#undef _CARGO_COMPARE_RANGE
+	#undef _CARGO_COMPARE_FLOAT_RANGE
 }
 
 static cargo_range_validation_t *_cargo_create_range(const char *name, 
@@ -6045,23 +6114,255 @@ static cargo_range_validation_t *_cargo_create_range(const char *name,
 	return vr;
 }
 
-#define _CARGO_CREATE_VALIDATE_RANGE_FUNC(name, type, _cargo_type, _member) \
-	cargo_validation_t *cargo_validate_##name(type min, type max)			\
-	{																		\
-		cargo_range_validation_t *vr = NULL;								\
-		if (!(vr = _cargo_create_range(#type" range", _cargo_type)))		\
-			return NULL;													\
-		vr->min._member = min;												\
-		vr->max._member = max;												\
-		return (cargo_validation_t *)vr;									\
+#define _CARGO_CREATE_VALIDATE_RANGE_FUNC_BODY(type, _cargo_type, _member)			\
+	cargo_range_validation_t *vr = NULL;											\
+	if (!(vr = _cargo_create_range(#type" range", _cargo_type)))					\
+		return NULL;																\
+	vr->min._member = min;															\
+	vr->max._member = max;															\
+	vr->epsilon._member = epsilon;													\
+	return (cargo_validation_t *)vr;												\
+
+#define _CARGO_CREATE_VALIDATE_RANGE_FUNC(name, type, _cargo_type, _member) 		\
+	cargo_validation_t *cargo_validate_##name(type min, type max)					\
+	{																				\
+		type epsilon = 0;															\
+		_CARGO_CREATE_VALIDATE_RANGE_FUNC_BODY(type, _cargo_type, _member);			\
+	}
+
+#define _CARGO_CREATE_VALIDATE_FLOAT_RANGE_FUNC(name, type, _cargo_type, _member) 	\
+	cargo_validation_t *cargo_validate_##name(type min, type max, type epsilon)		\
+	{																				\
+		_CARGO_CREATE_VALIDATE_RANGE_FUNC_BODY(type, _cargo_type, _member);			\
 	}
 
 _CARGO_CREATE_VALIDATE_RANGE_FUNC(int_range, int, CARGO_INT, i)
-_CARGO_CREATE_VALIDATE_RANGE_FUNC(uint_range, unsigned int, CARGO_DOUBLE, u)
-_CARGO_CREATE_VALIDATE_RANGE_FUNC(float_range, float, CARGO_FLOAT, f)
-_CARGO_CREATE_VALIDATE_RANGE_FUNC(double_range, double, CARGO_DOUBLE, d)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(uint_range, unsigned int, CARGO_UINT, u)
 _CARGO_CREATE_VALIDATE_RANGE_FUNC(longlong_range, long long int, CARGO_LONGLONG, ll)
-_CARGO_CREATE_VALIDATE_RANGE_FUNC(ulonglong_range, unsigned long long int, CARGO_LONGLONG, ull)
+_CARGO_CREATE_VALIDATE_RANGE_FUNC(ulonglong_range, unsigned long long int, CARGO_ULONGLONG, ull)
+_CARGO_CREATE_VALIDATE_FLOAT_RANGE_FUNC(float_range, float, CARGO_FLOAT, f)
+_CARGO_CREATE_VALIDATE_FLOAT_RANGE_FUNC(double_range, double, CARGO_DOUBLE, d)
+
+typedef struct cargo_choices_validation_s
+{
+	cargo_validation_t super;
+	cargo_type_t type;
+	size_t count;
+	char **strs;
+	cargo_vals_t *nums;
+	double epsilon;
+	cargo_validate_choices_flags_t flags;
+	char *err;
+} cargo_choices_validation_t;
+
+static void cargo_validate_choices_destroy_cb(cargo_validation_t *v)
+{
+	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)v;
+
+	_cargo_xfree(&vc->nums);
+	_cargo_xfree(&vc->err);
+	_cargo_free_str_list(&vc->strs, &vc->count);
+}
+
+int cargo_validate_choices_cb(cargo_t ctx,
+							cargo_validation_flags_t flags,
+							const char *opt, cargo_validation_t *vd,
+							void *value)
+{
+	size_t i;
+	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)vd;
+	int case_sensitive = vc->flags & CARGO_VALIDATE_CHOICES_CASE_SENSITIVE;
+	assert(ctx);
+	assert(vd);
+
+	for (i = 0; i < vc->count; i++)
+	{
+		switch (vc->type)
+		{
+			case CARGO_STRING:
+			{
+				char *str = ((char *)value);
+				if (case_sensitive)
+				{
+					if (!strcmp(vc->strs[i], str))
+					{
+						return 0;
+					}
+				}
+				else
+				{
+					if (!strcasecmp(vc->strs[i], str))
+					{
+						return 0;
+					}
+				}
+				break;
+			}
+			case CARGO_INT:
+				if (vc->nums[i].i == *((int *)value))
+					return 0;
+				break;
+			case CARGO_UINT:
+				if (vc->nums[i].u == *((unsigned int *)value))
+					return 0;
+				break;
+			case CARGO_FLOAT:
+				if (_cargo_nearly_equal(vc->nums[i].f, *((float *)value),
+										vc->epsilon))
+					return 0;
+				break;
+			case CARGO_DOUBLE:
+				if (_cargo_nearly_equal(vc->nums[i].f, *((double *)value),
+										vc->epsilon))
+					return 0;
+				break;
+			case CARGO_LONGLONG:
+				if (vc->nums[i].ll == *((long long int *)value))
+					return 0;
+				break;
+			case CARGO_ULONGLONG:
+				if (vc->nums[i].ull == *((unsigned long long int *)value))
+					return 0;
+				break;
+			default:
+				break;
+		}
+	}
+
+	cargo_set_error(ctx, 0, "The value for %s, must be one of these %s: %s",
+					opt, case_sensitive ? "(case sensitive)" : "", vc->err);
+
+	return -1;
+}
+
+cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
+											cargo_type_t type,
+											size_t count, ...)
+{
+	va_list ap;
+	size_t i;
+	cargo_astr_t str;
+	cargo_choices_validation_t *vc = NULL;
+	memset(&str, 0, sizeof(str));
+
+	if (!(vc = calloc(1, sizeof(cargo_choices_validation_t))))
+	{
+		return NULL;
+	}
+
+	vc->super.name = "choices";
+	vc->super.validator = cargo_validate_choices_cb;
+	vc->super.destroy = cargo_validate_choices_destroy_cb;
+	vc->super.types =  (CARGO_STRING | CARGO_INT | CARGO_UINT | CARGO_FLOAT |
+						CARGO_DOUBLE | CARGO_LONGLONG | CARGO_ULONGLONG);
+
+	vc->flags = flags;
+	vc->type = type;
+	vc->count = count;
+
+	if (vc->type == CARGO_STRING)
+	{
+		if (!(vc->strs = calloc(vc->count, sizeof(char *))))
+		{
+			CARGODBG(1, "Out of memory\n");
+			goto fail;
+		}
+	}
+	else
+	{
+		if (!(vc->nums = calloc(vc->count, sizeof(cargo_vals_t))))
+		{
+			CARGODBG(1, "Out of memory\n");
+			goto fail;
+		}
+	}
+
+	// Start out with room strings of 20 chars
+	// to keep reallocation to a minimum.
+	str.s = &vc->err;
+	str.l = count * 20;
+
+	va_start(ap, count);
+
+	if (vc->flags & CARGO_VALIDATE_CHOICES_SET_EPSILON)
+	{
+		vc->epsilon = va_arg(ap, double);
+	}
+	else
+	{
+		vc->epsilon = CARGO_DEFAULT_EPSILON;
+	}
+
+	for (i = 0; i < vc->count; i++)
+	{
+		switch (vc->type)
+		{
+			case CARGO_STRING:
+			{
+				if (!(vc->strs[i] = strdup(va_arg(ap, char *))))
+				{
+					goto fail;
+				}
+
+				cargo_aappendf(&str, "%s", vc->strs[i]);
+				break;
+			}
+			case CARGO_INT:
+			{
+				vc->nums[i].i = va_arg(ap, int);
+				cargo_aappendf(&str, "%d", vc->nums[i].i);
+				break;
+			}
+			case CARGO_UINT:
+			{
+				vc->nums[i].u = va_arg(ap, unsigned int);
+				cargo_aappendf(&str, "%u", vc->nums[i].u);
+				break;
+			}
+			case CARGO_FLOAT:
+			{
+				vc->nums[i].f = (float)va_arg(ap, double);
+				cargo_aappendf(&str, "%f", vc->nums[i].f);
+				break;
+			}
+			case CARGO_DOUBLE:
+			{
+				vc->nums[i].d = va_arg(ap, double);
+				cargo_aappendf(&str, "%f", vc->nums[i].d);
+				break;
+			}
+			case CARGO_LONGLONG:
+			{
+				vc->nums[i].ll = va_arg(ap, long long int);
+				cargo_aappendf(&str, "%lld", vc->nums[i].ll);
+				break;
+			}
+			case CARGO_ULONGLONG:
+			{
+				vc->nums[i].ull = va_arg(ap, unsigned long long int);
+				cargo_aappendf(&str, "%llu", vc->nums[i].ull);
+				break;
+			}
+			default:
+				break;
+		}
+
+		if (i + 1 < vc->count)
+		{
+			cargo_aappendf(&str, ", ", vc->strs[i]);
+		}
+	}
+
+	va_end(ap);
+
+	return (cargo_validation_t *)vc;
+fail:
+	_cargo_xfree(&vc->strs);
+	_cargo_xfree(&vc->nums);
+	_cargo_xfree(&vc->err);
+	free(vc);
+	return NULL;
+}
 
 int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd)
@@ -10131,33 +10432,130 @@ _TEST_START(TEST_cargo_large_list_and_usage2)
 }
 _TEST_END()
 
-_TEST_START(TEST_range_validation)
+#define _CARGO_ADD_TEST_VALIDATE(fmt, opt, funcname, ...)					\
+	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, fmt, opt);			\
+	cargo_assert(ret == 0, "Failed to add option");							\
+	ret = cargo_add_validation(cargo, 0, "--alpha", funcname(__VA_ARGS__));	\
+	cargo_assert(ret == 0, "Failed to add validation")						
+
+#define _CARGO_TEST_VALIDATE_VALUE(val, dofail) 							\
+	do 																		\
+	{																		\
+		char *args[] = { "program", "--alpha", #val };						\
+		ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);\
+		if (dofail) cargo_assert(ret < 0, "Expected parse failure for " #val);\
+		else  cargo_assert(ret == 0, "Failed to parse");					\
+	} while (0)
+
+_TEST_START(TEST_int_range_validation)
 {
 	int a = 0;
-	float b;
-	const char *usage = NULL;
-	char *args[] = { "program", "--alpha", "123", "--beta", "3.4" };
-	char *args2[] = { "program", "--beta", "3.4" };
+	_CARGO_ADD_TEST_VALIDATE("i", &a, cargo_validate_int_range, 3, 6);
+	_CARGO_TEST_VALIDATE_VALUE(-200, 1);
+	_CARGO_TEST_VALIDATE_VALUE(2, 1);
+	_CARGO_TEST_VALIDATE_VALUE(3, 0);
+	_CARGO_TEST_VALIDATE_VALUE(5, 0);
+	_CARGO_TEST_VALIDATE_VALUE(6, 0);
+	_CARGO_TEST_VALIDATE_VALUE(123, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
-	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "i", &a);
-	cargo_assert(ret == 0, "Failed to add option");
-	ret = cargo_add_validation(cargo, 0, "--alpha", cargo_validate_int_range(3, 4));
-	cargo_assert(ret == 0, "Failed to add validation");
+_TEST_START(TEST_float_range_validation)
+{
+	float a = 0;
+	_CARGO_ADD_TEST_VALIDATE("f", &a, cargo_validate_float_range, 3.0f, 6.0f, 0.00001f);
+	_CARGO_TEST_VALIDATE_VALUE(-312.4, 1);
+	_CARGO_TEST_VALIDATE_VALUE(2.4, 1);
+	_CARGO_TEST_VALIDATE_VALUE(3.0, 0);
+	_CARGO_TEST_VALIDATE_VALUE(5.5, 0);
+	_CARGO_TEST_VALIDATE_VALUE(6.0, 0);
+	_CARGO_TEST_VALIDATE_VALUE(6.2, 1);
+	_CARGO_TEST_VALIDATE_VALUE(123.424, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
-	ret = cargo_add_option(cargo, 0, "--beta -b", NULL, "f", &b);
-	cargo_assert(ret == 0, "Failed to add option");
-	ret = cargo_add_validation(cargo, 0, "--beta", cargo_validate_float_range(-13.0f, 4.2f));
-	cargo_assert(ret == 0, "Failed to add validation");
+_TEST_START(TEST_double_range_validation)
+{
+	double a = 0;
+	_CARGO_ADD_TEST_VALIDATE("d", &a, cargo_validate_double_range, 3.0, 6.0, 0.00001);
+	_CARGO_TEST_VALIDATE_VALUE(2.3, 1);
+	_CARGO_TEST_VALIDATE_VALUE(3.0, 0);
+	_CARGO_TEST_VALIDATE_VALUE(5.2, 0);
+	_CARGO_TEST_VALIDATE_VALUE(6.0, 0);
+	_CARGO_TEST_VALIDATE_VALUE(123.0, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
-	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
-	cargo_assert(ret < 0, "Parse failure");
+_TEST_START(TEST_uint_range_validation)
+{
+	unsigned int a = 0;
+	_CARGO_ADD_TEST_VALIDATE("u", &a, cargo_validate_uint_range, 10, 20);
+	_CARGO_TEST_VALIDATE_VALUE(2, 1);
+	_CARGO_TEST_VALIDATE_VALUE(10, 0);
+	_CARGO_TEST_VALIDATE_VALUE(15, 0);
+	_CARGO_TEST_VALIDATE_VALUE(20, 0);
+	_CARGO_TEST_VALIDATE_VALUE(123, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
-	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
-	cargo_assert(ret == 0, "Parse failure");
-	
-	usage = cargo_get_usage(cargo, 0);
-	printf("%s\n", usage);
+_TEST_START(TEST_longlong_range_validation)
+{
+	long long int a = 0;
+	_CARGO_ADD_TEST_VALIDATE("L", &a, cargo_validate_longlong_range, 10, 20);
+	_CARGO_TEST_VALIDATE_VALUE(-2, 1);
+	_CARGO_TEST_VALIDATE_VALUE(10, 0);
+	_CARGO_TEST_VALIDATE_VALUE(15, 0);
+	_CARGO_TEST_VALIDATE_VALUE(20, 0);
+	_CARGO_TEST_VALIDATE_VALUE(123, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
 
+_TEST_START(TEST_ulonglong_range_validation)
+{
+	unsigned long long int a = 0;
+	_CARGO_ADD_TEST_VALIDATE("U", &a, cargo_validate_ulonglong_range, 10, 20);
+	_CARGO_TEST_VALIDATE_VALUE(2, 1);
+	_CARGO_TEST_VALIDATE_VALUE(10, 0);
+	_CARGO_TEST_VALIDATE_VALUE(15, 0);
+	_CARGO_TEST_VALIDATE_VALUE(20, 0);
+	_CARGO_TEST_VALIDATE_VALUE(123, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation)
+{
+	char *str;
+	_CARGO_ADD_TEST_VALIDATE("s", &str,
+			cargo_validate_choices, 0, CARGO_STRING,
+			2, "abc", "def");
+	_CARGO_TEST_VALIDATE_VALUE(abc, 0);
+	_CARGO_TEST_VALIDATE_VALUE(def, 0);
+	_CARGO_TEST_VALIDATE_VALUE(klmn, 1);
+	_CARGO_TEST_VALIDATE_VALUE(ABC, 0);
+	_CARGO_TEST_VALIDATE_VALUE(DEF, 0);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_case_sensitive)
+{
+	char *str;
+	_CARGO_ADD_TEST_VALIDATE("s", &str,
+			cargo_validate_choices,
+			CARGO_VALIDATE_CHOICES_CASE_SENSITIVE,
+			CARGO_STRING,
+			2, "abc", "def");
+	_CARGO_TEST_VALIDATE_VALUE(abc, 0);
+	_CARGO_TEST_VALIDATE_VALUE(def, 0);
+	_CARGO_TEST_VALIDATE_VALUE(klmn, 1);
+	_CARGO_TEST_VALIDATE_VALUE(ABC, 1);
+	_CARGO_TEST_VALIDATE_VALUE(DEF, 1);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -10311,7 +10709,14 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_cargo_get_option_type),
 	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage),
 	CARGO_ADD_TEST(TEST_cargo_large_list_and_usage2),
-	CARGO_ADD_TEST(TEST_range_validation)
+	CARGO_ADD_TEST(TEST_int_range_validation),
+	CARGO_ADD_TEST(TEST_float_range_validation),
+	CARGO_ADD_TEST(TEST_double_range_validation),
+	CARGO_ADD_TEST(TEST_uint_range_validation),
+	CARGO_ADD_TEST(TEST_longlong_range_validation),
+	CARGO_ADD_TEST(TEST_ulonglong_range_validation),
+	CARGO_ADD_TEST(TEST_choices_validation),
+	CARGO_ADD_TEST(TEST_choices_validation_case_sensitive)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

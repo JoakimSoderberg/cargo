@@ -216,14 +216,21 @@ typedef enum cargo_err_flags_e
 
 typedef enum cargo_width_flags_e
 {
-	CARGO_WIDTH_USED					= 0,
-	CARGO_WIDTH_RAW						= 1
+	CARGO_WIDTH_USED					= (0 << 0),
+	CARGO_WIDTH_RAW						= (1 << 0)
 } cargo_width_flags_t;
 
 typedef enum cargo_validation_flags_e
 {
-	CARGO_VALIDATION_NONE				= 0
+	CARGO_VALIDATION_NONE				= (0 << 0),
 } cargo_validation_flags_t;
+
+typedef enum cargo_validate_choices_flags_e
+{
+	CARGO_VALIDATE_CHOICES_NONE				= (0 << 0),
+	CARGO_VALIDATE_CHOICES_CASE_SENSITIVE	= (1 << 0),
+	CARGO_VALIDATE_CHOICES_SET_EPSILON		= (1 << 1)
+} cargo_validate_choices_flags_t;
 
 //
 // Callback types.
@@ -396,22 +403,30 @@ struct cargo_validation_s
 	cargo_type_t types;
 };
 
+#define CARGO_DEFAULT_EPSILON 0.000001
+
 int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd);
 
 //
 // Validators.
 //
-
 cargo_validation_t *cargo_validate_int_range(int min, int max);
 cargo_validation_t *cargo_validate_uint_range(unsigned int min,
 											  unsigned int max);
-cargo_validation_t *cargo_validate_float_range(float min, float max);
-cargo_validation_t *cargo_validate_double_range(double min, double max);
 cargo_validation_t *cargo_validate_longlong_range(long long int min,
 												  long long int max);
 cargo_validation_t *cargo_validate_ulonglong_range(unsigned long long int min,
 												   unsigned long long int max);
+cargo_validation_t *cargo_validate_float_range(float min, float max,
+												float epsilon);
+cargo_validation_t *cargo_validate_double_range(double min, double max,
+												double epsilon);
+cargo_validation_t *cargo_validate_choices(
+										cargo_validate_choices_flags_t flags,
+										cargo_type_t type,
+										size_t count, ...);
+
 
 
 //
