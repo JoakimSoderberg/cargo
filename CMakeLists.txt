@@ -215,7 +215,7 @@ foreach (CARGO_EXE ${CARGO_EXE_LIST})
 endforeach()
 
 if (UNIX AND NOT CARGO_SHUTUP)
-	execute_process(COMMAND grep -o -E "cargo_.*?\\(" ${PROJECT_SOURCE_DIR}/cargo.h
+	execute_process(COMMAND grep -o -E "cargo_[_a-zA-Z0-9]*?\\(" ${PROJECT_SOURCE_DIR}/cargo.h
 					OUTPUT_VARIABLE FUNCTION_NAMES
 					OUTPUT_STRIP_TRAILING_WHITESPACE)
 
