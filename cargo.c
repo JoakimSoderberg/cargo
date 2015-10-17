@@ -10530,7 +10530,7 @@ _TEST_END()
 
 _TEST_START(TEST_choices_validation)
 {
-	char *str;
+	char *str = NULL;
 	_CARGO_ADD_TEST_VALIDATE("s", &str,
 			cargo_validate_choices, 0, CARGO_STRING,
 			2, "abc", "def");
@@ -10540,12 +10540,13 @@ _TEST_START(TEST_choices_validation)
 	_CARGO_TEST_VALIDATE_VALUE(ABC, 0);
 	_CARGO_TEST_VALIDATE_VALUE(DEF, 0);
 	_TEST_CLEANUP();
+	_cargo_xfree(&str);
 }
 _TEST_END()
 
 _TEST_START(TEST_choices_validation_case_sensitive)
 {
-	char *str;
+	char *str = NULL;
 	_CARGO_ADD_TEST_VALIDATE("s", &str,
 			cargo_validate_choices,
 			CARGO_VALIDATE_CHOICES_CASE_SENSITIVE,
@@ -10557,6 +10558,7 @@ _TEST_START(TEST_choices_validation_case_sensitive)
 	_CARGO_TEST_VALIDATE_VALUE(ABC, 1);
 	_CARGO_TEST_VALIDATE_VALUE(DEF, 1);
 	_TEST_CLEANUP();
+	_cargo_xfree(&str);
 }
 _TEST_END()
 
