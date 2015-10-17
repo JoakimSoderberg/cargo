@@ -112,6 +112,29 @@ This is the callback function for doing custom parsing as specified when using [
 
 You can read more about adding custom parser callbacks in the [add options guide](adding.md#custom-parsing).
 
+### cargo_validation_f ###
+
+```c
+typedef int (*cargo_validation_f)(cargo_t ctx,
+                cargo_validation_flags_t flags,
+                const char *opt, cargo_validation_t *vd,
+                void *value);
+```
+
+This is a callback function that is called for each argument value of an option with a validation added to it.
+
+The function is passed the [`cargo_validation_t`](api.md#cargo_validation_t) instance that contains the context needed to perform the validation.
+
+The value is given as a `void *`, so you will have to cast it to the appropriate type: `char *str = ((char *)value);` or `int a = *((int *)value);`
+
+### cargo_validation_destroy_f ###
+
+```c
+typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
+```
+
+If you create your own `cargo_validation_t` type, and add data to it, you might need to specify one of these to clean up after you.
+
 ## Formatting language ##
 
 This is the language used by the [`cargo_add_option`](api.md#cargo_add_option) function. To help in learning this language cargo comes with a small helper program [`cargo_helper`](adding.md#help-with-format-strings) that lets you input a variable declaration such as `int *vals` and will give you examples of API calls you can use to parse it.
@@ -325,11 +348,32 @@ This is the type of the cargo context. This type is opaque and should never be m
 To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
 
-## cargo_type_t ##
+### cargo_type_t ###
 
 This is an enum of the different types an option can be. This is only used
 internally by the API. The reason this is a part of the public API is so that
 it is possible to do some introspection.
+
+### cargo_validation_t ###
+
+This is a `struct` that defines a validation for an option. cargo comes with a set of existing validators, such as a range validator, and choices validator.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation) for details on how to add validation to an option.
+
+To create your own validator you can create a function that returns an allocated version of this `struct` with a [`cargo_validation_f`](api.md#cargo_validation_f)) callback function as well as a [`cargo_validation_destroy_f`](api.md#cargo_validation_destroy_f) callback for cleaning up.
+
+The validator instance you create will get passed to the validator when an argument value is being validated.
+
+To add extra context to this `struct` you can simply put it at the top of your own struct:
+
+```
+typdef struct cargo_some_validation_s
+{
+  cargo_validation_t super;
+  int something;
+  char *other;
+} cargo_some_validation_t;
+```
 
 ## Flags ##
 
@@ -639,6 +683,26 @@ Return the width that is used internally by cargo.
 Return the raw console width as reported by the operating system.
 
 Note that this may fail and `-1` will be returned instead.
+
+
+### cargo_validation_flags_t ###
+
+Flags for [`cargo_add_validation`](api.md#cargo_add_validation). Currently not used.
+
+#### CARGO_VALIDATION_NONE ####
+
+### cargo_validate_choices_flags_t ###
+
+Flags for the validation function 
+
+#### `CARGO_VALIDATE_CHOICES_NONE` ####
+Same as 0, no flags.
+
+#### `CARGO_VALIDATE_CHOICES_CASE_SENSITIVE` ####
+When validating a list of string choices, this makes the comparison case sensitive.
+
+#### `CARGO_VALIDATE_CHOICES_SET_EPSILON` ####
+When alidating `float` or `double` a function to compare values *near* to the list of choices with a given epsilon. Det default value is `CARGO_DEFAULT_EPSILON`. But if this flag is set, the first value in the argument list is instead a new epsilon value that overrides the default.
 
 ## Functions ##
 
@@ -1657,6 +1721,197 @@ cargo_type_t cargo_get_option_type(cargo_t ctx, const char *opt);
 This returns the [`cargo_type_t`](api.md#cargo_type_t) type of a given option.
 
 If the option name is invalid -1 is returned.
+
+### cargo_add_validation ###
+
+```c
+int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
+                         const char *opt, cargo_validation_t *vd);
+```
+
+---
+
+**ctx**: A [`cargo_t`](api.md#cargo_t) context.
+
+**flags**: The [`cargo_validation_flags_t`](api.md#cargo_validation_flags_t)s to use.
+
+**opt**: The option name.
+
+**vd**: Pointer to an allocated [`cargo_validation_t`](api.md#cargo_validation_t) instance. This will be freed by cargo.
+
+---
+
+This can be used to add validation to an option. Of course this is optional, and you can simply do the validation manually yourself. However this exists so that you can get a more integrated error handling, which lets cargo highlight the problematic argument and other nice things.
+
+To create the [`cargo_validation_t`](api.md#cargo_validation_t), cargo comes with a set of built-in validations.
+
+For validating a range of numbers:
+
+- [`cargo_validate_int_range`](api.md#cargo_validate_int_range)
+- [`cargo_validate_uint_range`](api.md#cargo_validate_uint_range)
+- [`cargo_validate_longlong_range`](api.md#cargo_validate_uint_range)
+- [`cargo_validate_ulonglong_range`](api.md#cargo_validate_uint_range)
+- [`cargo_validate_float_range`](api.md#cargo_validate_uint_range)
+- [`cargo_validate_double_range`](api.md#cargo_validate_uint_range)
+
+For validating that a variable is one of a set of choices:
+
+- [`cargo_validate_choices`](api.md#cargo_validate_choices)
+
+### cargo_validate_int_range ###
+
+```c
+cargo_validation_t *cargo_validate_int_range(int min, int max);
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_uint_range ###
+
+```c
+cargo_validation_t *cargo_validate_uint_range(int min, int max);
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_longlong_range ###
+
+```c
+cargo_validation_t *cargo_validate_longlong_range(long long int min,
+                                                  long long int max);
+
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_ulonglong_range ###
+
+```c
+cargo_validation_t *cargo_validate_ulonglong_range(unsigned long long int min,
+                                                   unsigned long long int max);
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_float_range ###
+
+```c
+cargo_validation_t *cargo_validate_float_range(float min, float max,
+                                               float epsilon);
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+**epsilon**: Epsilon (max difference) to use when comparing. Default uses [`CARGO_DEFAULT_EPSILON`](api.md#cargo_default_epsilon)
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_double_range ###
+
+```c
+cargo_validation_t *cargo_validate_double_range(double min, double max,
+                                                double epsilon);
+```
+
+---
+
+**min**: Minimum value (inclusive) allowed in the range.
+
+**max**: Maximum value (inclusive) allowed in the range.
+
+**epsilon**: Epsilon (max difference) to use when comparing. Default uses [`CARGO_DEFAULT_EPSILON`](api.md#cargo_default_epsilon)
+
+---
+
+Validates a range for an option.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
+
+### cargo_validate_choices ###
+
+```c
+cargo_validation_t *cargo_validate_choices(
+                      cargo_validate_choices_flags_t flags,
+                      cargo_type_t type,
+                      size_t count, ...);
+```
+
+---
+
+**flags**: [`cargo_validate_choices_flags_t`](api.md#cargo_validate_choices_flags_t)
+
+**type**: [`cargo_type_t`](api.md#cargo_type_t)
+
+**count**: Number of choices that will follow in the `...` argument list.
+
+**...**: The list of choices. As many as defined in `count`.
+
+---
+
+Validates that the option values specified are one of the values given in this list.
+
+Note that since comparing floating point values can give a mismatch if an exact comparison is made, so an **epsilon** is used (max difference allowed between the values being compared).
+
+By default [`CARGO_DEFAULT_EPSILON`](api.md#cargo_default_epsilon) is used. You can override this by setting the flag [`CARGO_VALIDATE_CHOICES_SET_EPSILON`](api.md#cargo_validate_choices_set_epsilon) and specifying the new **epsilon** as the first argument in the list of arguments.
+
+For string lists use the [`CARGO_VALIDATE_CHOICES_CASE_SENSITIVE`](api.md#cargo_validate_choices_case_sensitive) for case sensitive comparison.
+
+See [`cargo_add_validation`](api.md#cargo_add_validation).
+
 
 ### cargo_set_memfunctions ###
 
