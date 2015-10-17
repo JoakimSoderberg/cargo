@@ -214,24 +214,42 @@ foreach (CARGO_EXE ${CARGO_EXE_LIST})
 	endif()
 endforeach()
 
+# Warn if stuff is not in the documentation.
 if (UNIX AND NOT CARGO_SHUTUP)
-	execute_process(COMMAND grep -o -E "cargo_[_a-zA-Z0-9]*?\\(" ${PROJECT_SOURCE_DIR}/cargo.h
-					OUTPUT_VARIABLE FUNCTION_NAMES
-					OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-	string(REPLACE "(" ";" FUNCTION_NAMES "${FUNCTION_NAMES}")
+	function(search_undocumented regexp name)
+		execute_process(COMMAND grep -o -E ${regexp} ${PROJECT_SOURCE_DIR}/cargo.h
+						OUTPUT_VARIABLE FUNCTION_NAMES
+						OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-	foreach (FUNC ${FUNCTION_NAMES})
-		string(REPLACE ")" "" FUNC "${FUNC}")
-		string(STRIP "${FUNC}" FUNC)
+		string(REPLACE "(" ";" FUNCTION_NAMES "${FUNCTION_NAMES}")
+		string(REPLACE "\n" ";" FUNCTION_NAMES "${FUNCTION_NAMES}")
 
-		execute_process(COMMAND grep -o -E "${FUNC}" ${PROJECT_SOURCE_DIR}/docs/api.md
-					OUTPUT_VARIABLE API
-					RESULT_VARIABLE GREPRES)
-		if (GREPRES)
-			message(WARNING "Missing from API documentation '${FUNC}'")
-		endif()
-	endforeach()
+		set(errmsg "")
+		foreach (FUNC ${FUNCTION_NAMES})
+			string(REPLACE ")" "" FUNC "${FUNC}")
+			string(REGEX REPLACE "(CARGO_[_A-Z0-9]+)[ \t]+[0-9]+[ \t]*" "\\1" FUNC "${FUNC}")
+			string(STRIP "${FUNC}" FUNC)
+
+			execute_process(COMMAND grep -o -E "${FUNC}" ${PROJECT_SOURCE_DIR}/docs/api.md
+						OUTPUT_VARIABLE API
+						RESULT_VARIABLE GREPRES)
+			if (GREPRES)
+				set(errmsg "${errmsg}${FUNC}\n")
+			endif()
+		endforeach()
+		message(WARNING "Missing ${name}(s) from API documentation:\n ${errmsg}")
+	endfunction()
+
+	# Functions.
+	search_undocumented("cargo_[_a-zA-Z0-9]*?\\(" "function")
+
+	# Enums and constants.
+	# TODO: Fix more for enum values
+	search_undocumented("[ \t]*CARGO_[_A-Z0-9]+[ \t]+[a-zA-Z0-9]+" "enums")
+
+	# Types.
+	# TODO: Add for structs and other typedefs...
 endif()
 
 # For pkg-config file
