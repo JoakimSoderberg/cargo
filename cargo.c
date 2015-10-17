@@ -33,6 +33,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
+#define strcasecmp _stricmp
 #else
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -6017,10 +6018,10 @@ typedef struct cargo_range_validation_s
 
 static int _cargo_nearly_equal(double a, double b, double epsilon)
 {
-	float largest;
-	float diff = cargo_fabs(a - b);
-	a = cargo_fabs(a);
-	b = cargo_fabs(b);
+	double largest;
+	double diff = cargo_fabs(a - b);
+	a = (double)cargo_fabs(a);
+	b = (double)cargo_fabs(b);
 	largest = (b > a) ? b : a;
 
 	if (diff <= (largest * epsilon))
@@ -6097,7 +6098,6 @@ static cargo_range_validation_t *_cargo_create_range(const char *name,
 {
 	cargo_range_validation_t *vr = NULL;
 	cargo_validation_t *v = NULL;
-	va_list ap;
 
 	if (!(vr = calloc(1, sizeof(cargo_range_validation_t))))
 	{
