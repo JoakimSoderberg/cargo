@@ -403,7 +403,7 @@ struct cargo_validation_s
 	cargo_type_t types;
 };
 
-#define CARGO_DEFAULT_EPSILON 0.000001
+#define CARGO_DEFAULT_EPSILON 0.000000000000000001
 
 int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd);
@@ -426,7 +426,6 @@ cargo_validation_t *cargo_validate_choices(
 										cargo_validate_choices_flags_t flags,
 										cargo_type_t type,
 										size_t count, ...);
-
 
 
 //

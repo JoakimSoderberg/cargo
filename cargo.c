@@ -3320,6 +3320,14 @@ static int _cargo_group_add_option_ex(cargo_t ctx,
 	// (since we might realloc the array of groups we must use the index)
 	if (is_mutex)
 	{
+		if (o->mutex_group_count == CARGO_MAX_OPT_MUTEX_GROUP)
+		{
+			CARGODBG(1, "Option %s cannot belong to more mutex groups. "
+					   "Count is CARGO_MAX_OPT_MUTEX_GROUP (%d).\n",
+					   opt, CARGO_MAX_OPT_MUTEX_GROUP);
+			return -1;
+		}
+
 		o->mutex_group_idxs[o->mutex_group_count++] = grp_i;
 	}
 	else
@@ -5775,6 +5783,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 			break;
 		}
+		// TODO: Maybe replace target here with a union?
 		case 'i': o->type = CARGO_INT;    o->target = va_arg(ap, void *); break;
 		case 'd': o->type = CARGO_DOUBLE; o->target = va_arg(ap, void *); break;
 		case 'u': o->type = CARGO_UINT;   o->target = va_arg(ap, void *); break;
@@ -6158,7 +6167,7 @@ typedef struct cargo_choices_validation_s
 static void cargo_validate_choices_destroy_cb(cargo_validation_t *v)
 {
 	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)v;
-
+  
 	_cargo_xfree(&vc->nums);
 	_cargo_xfree(&vc->err);
 	_cargo_free_str_list(&vc->strs, &vc->count);
@@ -6212,7 +6221,7 @@ int cargo_validate_choices_cb(cargo_t ctx,
 					return 0;
 				break;
 			case CARGO_DOUBLE:
-				if (_cargo_nearly_equal(vc->nums[i].f, *((double *)value),
+				if (_cargo_nearly_equal(vc->nums[i].d, *((double *)value),
 										vc->epsilon))
 					return 0;
 				break;
@@ -6322,13 +6331,13 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 			case CARGO_FLOAT:
 			{
 				vc->nums[i].f = (float)va_arg(ap, double);
-				cargo_aappendf(&str, "%f", vc->nums[i].f);
+				cargo_aappendf(&str, "%.2f", vc->nums[i].f);
 				break;
 			}
 			case CARGO_DOUBLE:
 			{
 				vc->nums[i].d = va_arg(ap, double);
-				cargo_aappendf(&str, "%f", vc->nums[i].d);
+				cargo_aappendf(&str, "%.2f", vc->nums[i].d);
 				break;
 			}
 			case CARGO_LONGLONG:
@@ -6349,7 +6358,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 
 		if (i + 1 < vc->count)
 		{
-			cargo_aappendf(&str, ", ", vc->strs[i]);
+			cargo_aappendf(&str, ", ");
 		}
 	}
 
@@ -10562,6 +10571,106 @@ _TEST_START(TEST_choices_validation_case_sensitive)
 }
 _TEST_END()
 
+_TEST_START(TEST_choices_validation_int)
+{
+	int a;
+	_CARGO_ADD_TEST_VALIDATE("i", &a,
+			cargo_validate_choices, 0, CARGO_INT,
+			3, -40, 30, 10);
+	_CARGO_TEST_VALIDATE_VALUE(-40, 0);
+	_CARGO_TEST_VALIDATE_VALUE(30, 0);
+	_CARGO_TEST_VALIDATE_VALUE(40, 1);
+	_CARGO_TEST_VALIDATE_VALUE(20, 1);
+	_CARGO_TEST_VALIDATE_VALUE(10, 0);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_uint)
+{
+	int a;
+	_CARGO_ADD_TEST_VALIDATE("u", &a,
+			cargo_validate_choices, 0, CARGO_UINT,
+			3, 40, 30, 10);
+	_CARGO_TEST_VALIDATE_VALUE(-45, 1);
+	_CARGO_TEST_VALIDATE_VALUE(30, 0);
+	_CARGO_TEST_VALIDATE_VALUE(40, 0);
+	_CARGO_TEST_VALIDATE_VALUE(20, 1);
+	_CARGO_TEST_VALIDATE_VALUE(10, 0);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_float)
+{
+	float a;
+	_CARGO_ADD_TEST_VALIDATE("f", &a,
+			cargo_validate_choices, 0, CARGO_FLOAT,
+			3, 3.2, 44.35, 500402.4);
+	_CARGO_TEST_VALIDATE_VALUE(3131.0, 1);
+	_CARGO_TEST_VALIDATE_VALUE(3.2, 0);
+	_CARGO_TEST_VALIDATE_VALUE(44.35, 0);
+	_CARGO_TEST_VALIDATE_VALUE(500402.4, 0);
+	_CARGO_TEST_VALIDATE_VALUE(10, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_double)
+{
+	double a;
+	_CARGO_ADD_TEST_VALIDATE("d", &a,
+			cargo_validate_choices, 0, CARGO_DOUBLE,
+			3, 3.2, 44.35, 500402.4);
+	_CARGO_TEST_VALIDATE_VALUE(3131.0, 1);
+	_CARGO_TEST_VALIDATE_VALUE(3.2, 0);
+	_CARGO_TEST_VALIDATE_VALUE(44.35, 0);
+	_CARGO_TEST_VALIDATE_VALUE(500402.4, 0);
+	_CARGO_TEST_VALIDATE_VALUE(10, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_longlong)
+{
+	long long int a;
+	_CARGO_ADD_TEST_VALIDATE("L", &a,
+			cargo_validate_choices, 0, CARGO_LONGLONG,
+			3, -1111111L, 32323232L, 1010101L);
+	_CARGO_TEST_VALIDATE_VALUE(5, 1);
+	_CARGO_TEST_VALIDATE_VALUE(-1111111, 0);
+	_CARGO_TEST_VALIDATE_VALUE(32323232, 0);
+	_CARGO_TEST_VALIDATE_VALUE(1010101, 0);
+	_CARGO_TEST_VALIDATE_VALUE(4224422, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_ulonglong)
+{
+	long long int a;
+	_CARGO_ADD_TEST_VALIDATE("U", &a,
+			cargo_validate_choices, 0, CARGO_ULONGLONG,
+			3, 11111111, 32323232, 1010101);
+	_CARGO_TEST_VALIDATE_VALUE(5, 1);
+	_CARGO_TEST_VALIDATE_VALUE(11111111, 0);
+	_CARGO_TEST_VALIDATE_VALUE(32323232, 0);
+	_CARGO_TEST_VALIDATE_VALUE(1010101, 0);
+	_CARGO_TEST_VALIDATE_VALUE(4224422, 1);
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_nearly_equal)
+{
+	ret = _cargo_nearly_equal(3.2000001, 3.2, 0.00000001);
+	ret = _cargo_nearly_equal(3.2001, 3.2, 0.00000001);
+	cargo_assert(ret == 0, "Should be equal");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS
@@ -10718,7 +10827,14 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_longlong_range_validation),
 	CARGO_ADD_TEST(TEST_ulonglong_range_validation),
 	CARGO_ADD_TEST(TEST_choices_validation),
-	CARGO_ADD_TEST(TEST_choices_validation_case_sensitive)
+	CARGO_ADD_TEST(TEST_choices_validation_case_sensitive),
+	CARGO_ADD_TEST(TEST_choices_validation_int),
+	CARGO_ADD_TEST(TEST_choices_validation_uint),
+	CARGO_ADD_TEST(TEST_choices_validation_float),
+	CARGO_ADD_TEST(TEST_choices_validation_double),
+	CARGO_ADD_TEST(TEST_choices_validation_longlong),
+	CARGO_ADD_TEST(TEST_choices_validation_ulonglong),
+	CARGO_ADD_TEST(TEST_nearly_equal)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))

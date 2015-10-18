@@ -35,9 +35,13 @@ This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width).
 
 Sets the max width for the usage output to the console width.
 
-### `CARGO_MAX_MAX_WIDTH`
+### `CARGO_MAX_MAX_WIDTH` ###
 
 The absolute max console width allowed, any value set via [`cargo_set_max_width`](api.md#cargo_set_max_width), will be capped to this.
+
+### `CARGO_MAX_OPT_MUTEX_GROUP` ###
+
+The max number of mutex groups an option is allowed to be a member of.
 
 cargo version
 -------------
