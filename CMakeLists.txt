@@ -238,7 +238,10 @@ if (UNIX AND NOT CARGO_SHUTUP)
 				set(errmsg "${errmsg}${FUNC}\n")
 			endif()
 		endforeach()
-		message(WARNING "Missing ${name}(s) from API documentation:\n ${errmsg}")
+		string(LENGTH "${errmsg}" ERRLEN)
+		if (ERRLEN)
+			message(WARNING "Missing ${name}(s) from API documentation:\n ${errmsg}")
+		endif()
 	endfunction()
 
 	# Functions.
