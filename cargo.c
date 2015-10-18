@@ -34,7 +34,7 @@
 #include <windows.h>
 #include <io.h>
 #define strcasecmp _stricmp
-#else
+#else // _WIN32 (Unix below)
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <wordexp.h>
@@ -55,6 +55,14 @@
 #   define C99
 #  endif
 # endif
+#endif
+
+#ifdef _WIN32
+#define CARGO_LONGLONG_FMT "I64d"
+#define CARGO_ULONGLONG_FMT "I64u"
+#else
+#define CARGO_LONGLONG_FMT "lld"
+#define CARGO_ULONGLONG_FMT "llu"
 #endif
 
 #ifdef C90
@@ -6067,7 +6075,7 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 		{																	\
 			cargo_set_error(ctx, 0,											\
 				"Value must be in the range between "						\
-				 valfmt" and "valfmt" for %s but got "valfmt"\n",			\
+				 valfmt" and "valfmt" for %s but got "valfmt"\n",		\
 				vr->min._member, vr->max._member, opt, f);					\
 			return -1;														\
 		}																	\
@@ -6090,9 +6098,9 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 		case CARGO_DOUBLE:
 			_CARGO_COMPARE_FLOAT_RANGE(double, "%0.2f", d); break;
 		case CARGO_LONGLONG: 
-			_CARGO_COMPARE_RANGE(long long int, "%lld", ll); break;
+			_CARGO_COMPARE_RANGE(long long int, "%"CARGO_LONGLONG_FMT, ll); break;
 		case CARGO_ULONGLONG:
-			_CARGO_COMPARE_RANGE(unsigned long long int, "%llu", ull); break;
+			_CARGO_COMPARE_RANGE(unsigned long long int, "%"CARGO_ULONGLONG_FMT, ull); break;
 		case CARGO_BOOL:
 		case CARGO_STRING: return -1;
 	}
@@ -6343,13 +6351,13 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 			case CARGO_LONGLONG:
 			{
 				vc->nums[i].ll = va_arg(ap, long long int);
-				cargo_aappendf(&str, "%lld", vc->nums[i].ll);
+				cargo_aappendf(&str, "%"CARGO_LONGLONG_FMT, vc->nums[i].ll);
 				break;
 			}
 			case CARGO_ULONGLONG:
 			{
 				vc->nums[i].ull = va_arg(ap, unsigned long long int);
-				cargo_aappendf(&str, "%llu", vc->nums[i].ull);
+				cargo_aappendf(&str, "%"CARGO_ULONGLONG_FMT, vc->nums[i].ull);
 				break;
 			}
 			default:
@@ -6949,7 +6957,7 @@ do 																		\
 	cargo_assert(a != NULL, "Array is null");							\
 	cargo_assert(count == ARRAY_SIZE, "Array count is invalid");		\
 	printf("Read %lu values from int array:\n", count);					\
-	for (i = 0; i < ARRAY_SIZE; i++) printf("  "#printfmt"\n", a[i]);	\
+	for (i = 0; i < ARRAY_SIZE; i++) printf("  "printfmt"\n", a[i]);	\
 	cargo_assert_array(count, ARRAY_SIZE, a, a_expect);					\
 } while (0)
 
@@ -6981,7 +6989,7 @@ _TEST_START(TEST_add_static_long_long_int_array_option)
 	long long int a[3];
 	long long int a_expect[3] = { 9223372036854775807, -9223372036854775807, 3 };
 	char *args[] = { "program", "--beta", "9223372036854775807", "-9223372036854775807", "3" };
-	_ADD_TEST_FIXED_ARRAY(".[L]#", "%lld");
+	_ADD_TEST_FIXED_ARRAY(".[L]#", "%"CARGO_LONGLONG_FMT);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -6991,7 +6999,7 @@ _TEST_START(TEST_add_static_unsigned_long_long_int_array_option)
 	long long int a[3];
 	long long int a_expect[3] = { 1844674407370955161, 9223372036854775807, 3 };
 	char *args[] = { "program", "--beta", "1844674407370955161", "9223372036854775807", "3" };
-	_ADD_TEST_FIXED_ARRAY(".[U]#", "%llu");
+	_ADD_TEST_FIXED_ARRAY(".[U]#", "%"CARGO_ULONGLONG_FMT);
 	_TEST_CLEANUP();
 }
 _TEST_END()
@@ -10648,7 +10656,7 @@ _TEST_END()
 
 _TEST_START(TEST_choices_validation_ulonglong)
 {
-	long long int a;
+	unsigned long long int a;
 	_CARGO_ADD_TEST_VALIDATE("U", &a,
 			cargo_validate_choices, 0, CARGO_ULONGLONG,
 			3, 11111111, 32323232, 1010101);
