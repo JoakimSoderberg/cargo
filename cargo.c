@@ -6081,11 +6081,11 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 		}																	\
 	} while (0)
 
+	cargo_type_t type = cargo_get_option_type(ctx, opt);
+	cargo_range_validation_t *vr = (cargo_range_validation_t *)vd;
 	assert(ctx);
 	assert(vd);
 	assert(opt);
-	cargo_type_t type = cargo_get_option_type(ctx, opt);
-	cargo_range_validation_t *vr = (cargo_range_validation_t *)vd;
 
 	switch (type)
 	{
@@ -10642,9 +10642,13 @@ _TEST_END()
 _TEST_START(TEST_choices_validation_longlong)
 {
 	long long int a;
+
 	_CARGO_ADD_TEST_VALIDATE("L", &a,
 			cargo_validate_choices, 0, CARGO_LONGLONG,
-			3, -1111111L, 32323232L, 1010101L);
+			3,
+			(long long int)-1111111,
+			(long long int)32323232,
+			(long long int)1010101);
 	_CARGO_TEST_VALIDATE_VALUE(5, 1);
 	_CARGO_TEST_VALIDATE_VALUE(-1111111, 0);
 	_CARGO_TEST_VALIDATE_VALUE(32323232, 0);
@@ -10659,7 +10663,10 @@ _TEST_START(TEST_choices_validation_ulonglong)
 	unsigned long long int a;
 	_CARGO_ADD_TEST_VALIDATE("U", &a,
 			cargo_validate_choices, 0, CARGO_ULONGLONG,
-			3, 11111111, 32323232, 1010101);
+			3,
+			(unsigned long long int)11111111,
+			(unsigned long long int)32323232,
+			(unsigned long long int)1010101);
 	_CARGO_TEST_VALIDATE_VALUE(5, 1);
 	_CARGO_TEST_VALIDATE_VALUE(11111111, 0);
 	_CARGO_TEST_VALIDATE_VALUE(32323232, 0);
