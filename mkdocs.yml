@@ -4,6 +4,7 @@ pages:
 - ['index.md', 'Introduction']
 - ['gettingstarted.md', 'User guide', 'Getting Started']
 - ['adding.md', 'User guide', 'Add options']
+- ['validation.md', 'User guide', 'Validation']
 - ['parsing.md', 'User guide', 'Parsing']
 - ['tutorial.md', 'Examples', 'Tutorial']
 - ['api.md', 'Reference', 'API reference']
