@@ -401,6 +401,7 @@ struct cargo_validation_s
 	cargo_validation_f validator;
 	cargo_validation_destroy_f destroy;
 	cargo_type_t types;
+	size_t ref_count;
 };
 
 #define CARGO_DEFAULT_EPSILON 0.000000000000000001

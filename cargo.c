@@ -1298,7 +1298,30 @@ static void _cargo_cleanup_option_values(cargo_t ctx)
 	}
 }
 
-void _cargo_destroy_validation(cargo_opt_t *o)
+static void _cargo_free_validation(cargo_validation_t **vd)
+{
+	cargo_validation_t *v;
+
+	if (!vd || !(*vd))
+		return;
+
+	v = *vd;
+
+	v->ref_count--;
+
+	if (v->ref_count <= 0)
+	{
+		if (v->destroy)
+		{
+			CARGODBG(3, "Calling validation destroy function\n");
+			v->destroy(v);
+		}
+
+		_cargo_xfree(vd);
+	}
+}
+
+void _cargo_option_destroy_validation(cargo_opt_t *o)
 {
 	assert(o);
 
@@ -1307,13 +1330,7 @@ void _cargo_destroy_validation(cargo_opt_t *o)
 		CARGODBG(3, "Destroying validation \"%s\" for \"%s\"\n",
 				o->validation->name, o->name[0]);
 
-		if (o->validation->destroy)
-		{
-			CARGODBG(3, "Calling validation destroy function\n");
-			o->validation->destroy(o->validation);
-		}
-
-		_cargo_xfree(&o->validation);
+		_cargo_free_validation(&o->validation);
 	}
 }
 
@@ -2928,7 +2945,7 @@ static void _cargo_option_destroy(cargo_opt_t *o)
 	_cargo_free_str_list(&o->custom_target, &o->custom_target_count);
 	_cargo_free_str_list(&o->mutex_group_names, &o->mutex_group_count);
 
-	_cargo_destroy_validation(o);
+	_cargo_option_destroy_validation(o);
 }
 
 typedef struct cargo_fmt_token_s
@@ -6399,13 +6416,13 @@ int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 	if (!(vd->validator))
 	{
 		CARGODBG(1, "Validation missing validator function for \"%s\"\n", opt);
-		return -1;
+		goto fail;
 	}
 
 	if (_cargo_find_option_name(ctx, opt, &opt_i, &name_i))
 	{
 		CARGODBG(1, "Failed to find option \"%s\"\n", opt);
-		return -1;
+		goto fail;
 	}
 
 	o = &ctx->options[opt_i];
@@ -6414,14 +6431,22 @@ int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 	{
 		CARGODBG(1, "\"%s\" of type \"%s\" is not supported by the validation %s\n",
 				opt, _cargo_type_to_str(o->type), vd->name);
-		return -1;
+		goto fail;
 	}
 
-	_cargo_destroy_validation(o);
+	// Remove current validation.
+	_cargo_option_destroy_validation(o);
+
+	// We have a reference count so that
+	// multiple options can use the same validation.
+	vd->ref_count++;
 	o->validation = vd;
 	o->validation_flags = flags;
 
 	return 0;
+fail:
+	_cargo_free_validation(&vd);
+	return -1;
 }
 
 void cargo_free_commandline(char ***argv, int argc)
