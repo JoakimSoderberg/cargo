@@ -31,7 +31,7 @@ typedef struct rect_s
 {
     int width;
     int height;
-} rect_t; 
+} rect_t;
 
 static int parse_rect_cb(cargo_t ctx, void *user, const char *optname,
                          int argc, char **argv)

@@ -1340,7 +1340,7 @@ int _cargo_validate_option_value(cargo_t ctx, cargo_opt_t *o, void *value)
 	assert(o);
 	assert(o->validation);
 	assert(o->validation->validator);
-	
+
 	if (o->validation->validator(ctx, o->validation_flags, o->name[0],
 								o->validation, value))
 	{
@@ -1689,7 +1689,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 					val, _cargo_type_to_str(opt->type));
 
 			highlight = _cargo_highlight_current_target_value(ctx);
-	
+
 			cargo_aappendf(&str, "%s\nCannot parse \"%s\" as %s for option \"%s\"\n",
 					highlight, val, _cargo_type_to_str(opt->type), opt->name[0]);
 
@@ -6134,7 +6134,7 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 			_CARGO_COMPARE_FLOAT_RANGE(float, "%0.2f", f); break;
 		case CARGO_DOUBLE:
 			_CARGO_COMPARE_FLOAT_RANGE(double, "%0.2f", d); break;
-		case CARGO_LONGLONG: 
+		case CARGO_LONGLONG:
 			_CARGO_COMPARE_RANGE(long long int, "%"CARGO_LONGLONG_FMT, ll); break;
 		case CARGO_ULONGLONG:
 			_CARGO_COMPARE_RANGE(unsigned long long int, "%"CARGO_ULONGLONG_FMT, ull); break;
@@ -6147,7 +6147,7 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 	#undef _CARGO_COMPARE_FLOAT_RANGE
 }
 
-static cargo_range_validation_t *_cargo_create_range(const char *name, 
+static cargo_range_validation_t *_cargo_create_range(const char *name,
 													cargo_type_t type)
 {
 	cargo_range_validation_t *vr = NULL;
@@ -6212,7 +6212,7 @@ typedef struct cargo_choices_validation_s
 static void cargo_validate_choices_destroy_cb(cargo_validation_t *v)
 {
 	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)v;
-  
+
 	_cargo_xfree(&vc->nums);
 	_cargo_xfree(&vc->err);
 	_cargo_free_str_list(&vc->strs, &vc->count);
@@ -6827,7 +6827,7 @@ void _cargo_test_set_realloc_fail_count(int count)
 }
 
 void *_cargo_test_realloc(void *ptr, size_t sz)
-{	
+{
 	realloc_current++;
 
 	if ((realloc_fail_count > 0)
@@ -8399,7 +8399,7 @@ _TEST_START(TEST_many_options_custom)
 
 	// This reproduces a bug seen on the raspberry pi where
 	// you get a SIGSEV because the internal list for a custom
-	// variable would be freed and then target count was dereferenced 
+	// variable would be freed and then target count was dereferenced
 	// (which now was freed).
 	for (j = 0; j < OPT_COUNT + 1; j++)
 	{
@@ -10498,7 +10498,7 @@ _TEST_END()
 	ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, fmt, opt);			\
 	cargo_assert(ret == 0, "Failed to add option");							\
 	ret = cargo_add_validation(cargo, 0, "--alpha", funcname(__VA_ARGS__));	\
-	cargo_assert(ret == 0, "Failed to add validation")						
+	cargo_assert(ret == 0, "Failed to add validation")
 
 #define _CARGO_TEST_VALIDATE_VALUE(val, dofail) 							\
 	do 																		\
