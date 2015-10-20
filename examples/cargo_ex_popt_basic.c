@@ -66,11 +66,11 @@ int main(int argc, char **argv)
 		printf("Extra argument: %s\n", args[i]);
 	}
 
-	printf("Final value of optiona: %d\n", optiona);  
-	printf("Final value of optionb: %d\n", optionb);  
-	printf("Final value of optionc: %d\n", optionc);  
-	printf("Final value of flag1: %d\n", flag1);  
-	printf("Final value of flag2: %d\n", flag2);  
+	printf("Final value of optiona: %d\n", optiona);
+	printf("Final value of optionb: %d\n", optionb);
+	printf("Final value of optionc: %d\n", optionc);
+	printf("Final value of flag1: %d\n", flag1);
+	printf("Final value of flag2: %d\n", flag2);
 
 	cargo_destroy(&cargo);
 

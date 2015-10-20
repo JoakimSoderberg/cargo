@@ -56,7 +56,7 @@ int main(int argc, char **argv)
                     "Extra flags", "Here are some extra flags.");
     ret |= cargo_add_option(cargo, 0, "<flags> --flag1 -f", "Flag 1", "b", &flag1);
     ret |= cargo_add_option(cargo, 0, "<flags> --flag2 -g", "Flag 2", "b", &flag2);
-    
+
     ret |= cargo_add_option(cargo, 0, "args", "Remaining args", "[s]*", &args, &args_count);
     assert(ret == 0);
 
@@ -79,11 +79,11 @@ int main(int argc, char **argv)
         printf("Extra argument: %s\n", args[i]);
     }
 
-    printf("Final value of optiona: %d\n", optiona);  
-    printf("Final value of optionb: %d\n", optionb);  
-    printf("Final value of optionc: %d\n", optionc);  
-    printf("Final value of flag1: %d\n", flag1);  
-    printf("Final value of flag2: %d\n", flag2);  
+    printf("Final value of optiona: %d\n", optiona);
+    printf("Final value of optionb: %d\n", optionb);
+    printf("Final value of optionc: %d\n", optionc);
+    printf("Final value of flag1: %d\n", flag1);
+    printf("Final value of flag2: %d\n", flag2);
 
     cargo_destroy(&cargo);
 
