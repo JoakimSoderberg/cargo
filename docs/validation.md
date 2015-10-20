@@ -88,7 +88,6 @@ The range validator however comes with one function for each number type cargo s
 * [`cargo_validate_ulonglong_range(unsigned long long int min, unsigned long long int max)`](api.md#cargo_validate_ulonglong_range)
 * [`cargo_validate_float_range(float min, float max, float epsilon)`](api.md#cargo_validate_float_range)
 * [`cargo_validate_double_range(double min, double max, double epsilon)`](api.md#cargo_validate_double_range)
-```
 
 The float validators takes an extra argument `epsilon` that decides how close a value is allowed to be, to be considered equal (since floating point comparisons are not an exact science). You can use the [`CARGO_DEFAULT_EPSILON`](api.md#cargo_default_epsilon) here.
 
