@@ -2151,7 +2151,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 
 		if (opt->metavar)
 		{
-			metavar = strdup(opt->metavar);
+			metavar = _cargo_strdup(opt->metavar);
 		}
 		else
 		{
@@ -2163,7 +2163,7 @@ static int _cargo_get_option_name_str(cargo_t ctx, cargo_opt_t *opt,
 			{
 				CARGODBG(1, "Failed to generate metavar for %s\n", opt->name[0]);
 				_cargo_xfree(&metavar);
-				metavar = strdup(opt->name[0]);
+				metavar = _cargo_strdup(opt->name[0]);
 			}
 		}
 
@@ -2692,7 +2692,7 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 
 	if (opt->metavar)
 	{
-		metavar = strdup(opt->metavar);
+		metavar = _cargo_strdup(opt->metavar);
 	}
 	else
 	{
@@ -6133,7 +6133,7 @@ static cargo_range_validation_t *_cargo_create_range(const char *name,
 	cargo_range_validation_t *vr = NULL;
 	cargo_validation_t *v = NULL;
 
-	if (!(vr = calloc(1, sizeof(cargo_range_validation_t))))
+	if (!(vr = _cargo_calloc(1, sizeof(cargo_range_validation_t))))
 	{
 		return NULL;
 	}
@@ -6279,7 +6279,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 	cargo_choices_validation_t *vc = NULL;
 	memset(&str, 0, sizeof(str));
 
-	if (!(vc = calloc(1, sizeof(cargo_choices_validation_t))))
+	if (!(vc = _cargo_calloc(1, sizeof(cargo_choices_validation_t))))
 	{
 		return NULL;
 	}
@@ -6296,7 +6296,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 
 	if (vc->type == CARGO_STRING)
 	{
-		if (!(vc->strs = calloc(vc->count, sizeof(char *))))
+		if (!(vc->strs = _cargo_calloc(vc->count, sizeof(char *))))
 		{
 			CARGODBG(1, "Out of memory\n");
 			goto fail;
@@ -6304,7 +6304,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 	}
 	else
 	{
-		if (!(vc->nums = calloc(vc->count, sizeof(cargo_vals_t))))
+		if (!(vc->nums = _cargo_calloc(vc->count, sizeof(cargo_vals_t))))
 		{
 			CARGODBG(1, "Out of memory\n");
 			goto fail;
@@ -6333,7 +6333,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 		{
 			case CARGO_STRING:
 			{
-				if (!(vc->strs[i] = strdup(va_arg(ap, char *))))
+				if (!(vc->strs[i] = _cargo_strdup(va_arg(ap, char *))))
 				{
 					goto fail;
 				}
