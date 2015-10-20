@@ -166,14 +166,14 @@ int even_validation_validate_cb(cargo_t ctx,
 
     if (v > ev->max)
     {
-        cargo_seterror(ctx, 0, "Value of %s cannot be above %d",
+        cargo_set_error(ctx, 0, "Value of %s cannot be above %d",
                        opt, ev->max);
         return -1;
     }
 
     if ((v % 2) != 0)
     {
-        cargo_seterror(ctx, 0, "Value of %s must be even", opt);
+        cargo_set_error(ctx, 0, "Value of %s must be even", opt);
         return -1;
     }
 
@@ -182,7 +182,6 @@ int even_validation_validate_cb(cargo_t ctx,
 ```
 
 Our `even_validation_t` struct doesn't contain any allocated memory, but for the sake of things we will still add a `cargo_validation_destroy_f` callback that cargo will call when `free`ing the validator. It has this signature:
-
 
 ```c
 typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
@@ -242,4 +241,24 @@ ret |= cargo_add_option(cargo, 0, "--integers",
 
 ret |= cargo_add_validation(cargo, 0, "--integers", 
                             even_validate_int(20));
+```
+
+Running this we would get the following errors on invalid input:
+
+```bash
+$ theprogram --integers 3 2 50
+
+
+Usage: theprogram [--help] [--integers INTEGERS [INTEGERS ...]]
+--integers 3 2 50
+           ~
+Value of --integers must be even
+
+
+$ theprogram --integers 4 2 50
+
+Usage: theprogram [--help] [--integers INTEGERS [INTEGERS ...]]
+--integers 4 2 50
+               ~~
+Value 50 of --integers cannot be above 20
 ```

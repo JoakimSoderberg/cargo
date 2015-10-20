@@ -1701,14 +1701,34 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 		// Use validation function to verify target value.
 		if (opt->validation)
 		{
-			// This is so that we can convert the void pointer more logically:
-			// char *str = ((char *)ptr);
-			// int i = *((int *)ptr);
-			// Compared to:
-			// char *str = *((char **)ptr);
-			void *trg = (opt->type == CARGO_STRING)
-				? (void *)opt->target[opt->target_idx]
-				: (void *)&opt->target[opt->target_idx];
+			// Cast the current target index properly.
+			void *trg = NULL;
+
+			switch (opt->type)
+			{
+				case CARGO_BOOL:
+				case CARGO_INT:
+					trg = (void *)&((int *)target)[opt->target_idx];
+					break;
+				case CARGO_UINT:
+					trg = (void *)&((unsigned int *)target)[opt->target_idx];
+					break;
+				case CARGO_FLOAT:
+					trg = (void *)&((float *)target)[opt->target_idx];
+					break;
+				case CARGO_DOUBLE:
+					trg = (void *)&((double *)target)[opt->target_idx];
+					break;
+				case CARGO_LONGLONG:
+					trg = (void *)&((long long int *)target)[opt->target_idx];
+					break;
+				case CARGO_ULONGLONG:
+					trg = (void *)&((unsigned long long int *)target)[opt->target_idx];
+					break;
+				case CARGO_STRING:
+					trg = (void *)((char **)target)[opt->target_idx];
+					break;
+			}
 
 			if (_cargo_validate_option_value(ctx, opt, trg))
 			{
