@@ -11049,14 +11049,14 @@ int main(int argc, char **argv)
 		t = &tests[test_index];
 		t->ran = 1;
 
-		fprintf(stderr, "\n%sStart Test %2d:%s - %s\n",
+		fprintf(stderr, "\n%sStart Test %3d:%s - %s\n",
 			CARGO_COLOR_CYAN, test_index + 1, CARGO_COLOR_RESET, t->name);
 
 		//fprintf(stderr, "%s", CARGO_COLOR_DARK_GRAY);
 		t->error = t->f();
 		fprintf(stderr, "%s", CARGO_COLOR_RESET);
 
-		fprintf(stderr, "%sEnd Test %2d:%s ",
+		fprintf(stderr, "%sEnd Test %3d:%s ",
 			CARGO_COLOR_CYAN, test_index + 1, CARGO_COLOR_RESET);
 
 		if (t->error)
@@ -11086,7 +11086,7 @@ int main(int argc, char **argv)
 		{
 			if (!shortlist)
 			{
-				printf(" [%sNOT RUN%s] %2lu: %s\n",
+				printf(" [%sNOT RUN%s] %3lu: %s\n",
 					CARGO_COLOR_DARK_GRAY, CARGO_COLOR_RESET, (i + 1), tests[i].name);
 			}
 
@@ -11095,12 +11095,12 @@ int main(int argc, char **argv)
 
 		if (tests[i].success)
 		{
-			printf(" [%sSUCCESS%s] %2lu: %s\n",
+			printf(" [%sSUCCESS%s] %3lu: %s\n",
 				CARGO_COLOR_GREEN, CARGO_COLOR_RESET, (i + 1), tests[i].name);
 		}
 		else
 		{
-			fprintf(stderr, " [%sFAILED%s]  %2lu: %s - %s\n",
+			fprintf(stderr, " [%sFAILED%s]  %3lu: %s - %s\n",
 				CARGO_COLOR_RED, CARGO_COLOR_RESET,
 				(i + 1), tests[i].name, tests[i].error);
 		}
