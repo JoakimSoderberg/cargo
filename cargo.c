@@ -1224,7 +1224,7 @@ done:
 		*count = 0;
 }
 
-static void _cargo_cleanup_option_value(cargo_opt_t *opt)
+static void _cargo_cleanup_option_value(cargo_opt_t *opt, int free_target)
 {
 	assert(opt);
 
@@ -1232,9 +1232,15 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 	opt->parsed = -1;		// This is the index into argv that we parsed this option at.
 	opt->num_eaten = 0;
 
-	CARGODBG(3, "Cleanup option (%s) target: %s\n",
+	CARGODBG(3, "Cleanup option (%s) value: %s\n",
 			_cargo_type_to_str(opt->type), opt->name[0]);
 
+	if (!free_target)
+		return;
+
+	CARGODBG(3, "  Freeing target:\n");
+
+	// TODO: Only free if we know we have allocated the memory, so keep track of that in the opt instead!
 	if (opt->custom)
 	{
 		_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
@@ -1287,14 +1293,14 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt)
 		*opt->target_count = 0;
 }
 
-static void _cargo_cleanup_option_values(cargo_t ctx)
+static void _cargo_cleanup_option_values(cargo_t ctx, int free_targets)
 {
 	size_t i;
 	assert(ctx);
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		_cargo_cleanup_option_value(&ctx->options[i]);
+		_cargo_cleanup_option_value(&ctx->options[i], free_targets);
 	}
 }
 
@@ -1864,7 +1870,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			// TODO: Should we always do this? Say --abc takes a list of integers.
 			// --abc 1 2 3 ... or why not --abc 1 --def 5 --abc 2 3
 			// (probably a bad idea :D)
-			_cargo_cleanup_option_value(opt);
+			_cargo_cleanup_option_value(opt, 1);
 			_cargo_xfree(&s);
 			_cargo_set_error(ctx, error);
 		}
@@ -3996,7 +4002,7 @@ static int _cargo_check_required_options(cargo_t ctx)
 				CARGODBG(1, "Not enough arguments. Expected %s, got %d\n",
 						_cargo_nargs_str(opt->nargs), opt->num_eaten);
 
-				// TODO: Highlight option (Problem is that we don't know at what index the option was found at)
+				// TODO: Highlight option (ctx->parsed is the index into argv)
 
 				if (opt->num_eaten == 0)
 				{
@@ -4419,7 +4425,7 @@ void cargo_destroy(cargo_t *ctx)
 		if (c->flags & CARGO_AUTOCLEAN)
 		{
 			CARGODBG(2, "Auto clean target values\n");
-			_cargo_cleanup_option_values(c);
+			_cargo_cleanup_option_values(c, 1);
 		}
 
 		if (c->options)
@@ -4836,7 +4842,9 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 
 	// Make sure we start over, if this function is
 	// called more than once.
-	_cargo_cleanup_option_values(ctx);
+	// (But we don't free the values since we don't want to
+	//  overwrite default or already parsed values)
+	_cargo_cleanup_option_values(ctx, 0);
 
 	if (!(ctx->args = (char **)_cargo_calloc(argc, sizeof(char *))))
 	{
@@ -4995,7 +5003,7 @@ fail:
 	}
 
 	_cargo_parse_show_error(ctx);
-	_cargo_cleanup_option_values(ctx);
+	_cargo_cleanup_option_values(ctx, 1);
 	ctx->flags = global_flags;
 	return ret;
 }
@@ -5493,7 +5501,7 @@ int cargo_fprint_usage(cargo_t ctx, FILE *f, cargo_usage_t flags)
 
 int cargo_print_usage(cargo_t ctx, cargo_usage_t flags)
 {
-	return cargo_fprint_usage(ctx, stderr, flags);
+	return cargo_fprint_usage(ctx, stdout, flags);
 }
 
 int cargo_add_group(cargo_t ctx, cargo_group_flags_t flags, const char *name,
@@ -5964,14 +5972,19 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		goto fail;
 	}
 
-	if (o->alloc)
+	// Clear all variables as they're added.
+	if (ctx->flags & CARGO_ADD_CLEARS_TARGETS)
 	{
-		*(o->target) = NULL;
-	}
+		if (o->alloc)
+		{
+			// TODO: How about "default" targets that where allocated? We must free those
+			*(o->target) = NULL;
+		}
 
-	if (o->target_count)
-	{
-		*(o->target_count) = 0;
+		if (o->target_count)
+		{
+			*(o->target_count) = 0;
+		}
 	}
 
 	// .[s]#  .[s]+  .[s]*
@@ -8164,9 +8177,9 @@ _TEST_END()
 
 _TEST_START(TEST_parse_zero_or_more_without_args)
 {
-	int *i;
-	size_t i_count;
-	int j;
+	int *i = NULL;
+	size_t i_count = 0;
+	int j = 0;
 	char *args[] = { "program", "--beta", "2", "--alpha" };
 
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "The alpha", "[i]*", &i, &i_count);
@@ -8184,15 +8197,15 @@ _TEST_END()
 
 _TEST_START(TEST_parse_zero_or_more_with_positional)
 {
-	int *pos;
+	int *pos = NULL;
 	int pos_expect[] = { 1, 2 };
-	size_t pos_count;
-	int *i;
+	size_t pos_count = 0;
+	int *i = NULL;
 	int i_expect[] = { 3, 4 };
-	size_t i_count;
-	int *j;
+	size_t i_count = 0;
+	int *j = NULL;
 	int j_expect[] = { 5, 6 };
-	size_t j_count;
+	size_t j_count = 0;
 	char *args[] = { "program", "1", "2", "--alpha", "3", "4", "--beta", "5", "6" };
 
 	cargo_get_flags(cargo);
@@ -10721,6 +10734,82 @@ _TEST_START(TEST_choices_validation_ulonglong)
 }
 _TEST_END()
 
+_TEST_START(TEST_double_parse)
+{
+	// Set default values and make sure they are not cleared if we parse
+	// multiple times.
+	char *args[] = { "program", "--beta", "3" };
+	char *args2[] = { "program", "--alpha", "2" };
+	int a = 5;
+	int b = 6;
+	float c = 7.0f;
+	char *s = strdup("abc");
+	cargo_assert(s, "Failed to allocate s");
+
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
+	ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+	ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("First parse:\n");
+	printf("a == %d\n", a);
+	printf("b == %d\n", b);
+	printf("c == %f\n", c);
+	printf("s == %s\n", s);
+	cargo_assert(a == 5, "Expected a == 5");
+	cargo_assert(b == 3, "Expected b == 3 after parse");
+	cargo_assert(c == 7.0f, "Expected b == 7.0f");
+	cargo_assert(s && !strcmp(s, "abc"), "Expected s == 'abc'");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == 0, "Parse failed");
+
+	printf("\nSecond parse\n");
+	printf("a == %d\n", a);
+	printf("b == %d\n", b);
+	printf("c == %f\n", c);
+	printf("s == %s\n", s);
+	cargo_assert(a == 2, "Expected a == 2");
+	cargo_assert(b == 3, "Expected b == 3 after parse");
+	cargo_assert(c == 7.0f, "Expected b == 7.0f");
+	cargo_assert(s && !strcmp(s, "abc"), "Expected s == 'abc'");
+
+	_TEST_CLEANUP();
+	_cargo_xfree(&s);
+}
+_TEST_END()
+
+_TEST_START_EX(TEST_double_parse_clear, CARGO_ADD_CLEARS_TARGETS)
+{
+	char *args[] = { "program", "--beta", "3" };
+	char *args2[] = { "program", "--delta", "def" };
+	int a = 5;
+	int b = 6;
+	float c = 7.0f;
+	char *s = strdup("abc");
+
+	ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
+	ret |= cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
+	ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+	ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s == NULL, "Expected s to be cleared");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s && !strcmp(s, "def"), "Expected s to be 'def'");
+
+	_TEST_CLEANUP();
+	_cargo_xfree(&s);
+}
+_TEST_END()
+
 _TEST_START(TEST_nearly_equal)
 {
 	ret = _cargo_nearly_equal(3.2000001, 3.2, 0.00000001);
@@ -10894,6 +10983,8 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_choices_validation_double),
 	CARGO_ADD_TEST(TEST_choices_validation_longlong),
 	CARGO_ADD_TEST(TEST_choices_validation_ulonglong),
+	CARGO_ADD_TEST(TEST_double_parse),
+	CARGO_ADD_TEST(TEST_double_parse_clear),
 	CARGO_ADD_TEST(TEST_nearly_equal)
 };
 
