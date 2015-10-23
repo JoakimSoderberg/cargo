@@ -5972,21 +5972,6 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 		goto fail;
 	}
 
-	// Clear all variables as they're added.
-	if (ctx->flags & CARGO_ADD_CLEARS_TARGETS)
-	{
-		if (o->alloc)
-		{
-			// TODO: How about "default" targets that where allocated? We must free those
-			*(o->target) = NULL;
-		}
-
-		if (o->target_count)
-		{
-			*(o->target_count) = 0;
-		}
-	}
-
 	// .[s]#  .[s]+  .[s]*
 	if ((o->type == CARGO_STRING)
 		 && (o->nargs != 1)
@@ -10783,7 +10768,7 @@ _TEST_START(TEST_double_parse)
 }
 _TEST_END()
 
-_TEST_START_EX(TEST_double_parse_clear, CARGO_ADD_CLEARS_TARGETS)
+_TEST_START(TEST_double_parse_clear)
 {
 	char *args[] = { "program", "--beta", "3" };
 	char *args2[] = { "program", "--delta", "def" };
@@ -10791,6 +10776,7 @@ _TEST_START_EX(TEST_double_parse_clear, CARGO_ADD_CLEARS_TARGETS)
 	int b = 6;
 	float c = 7.0f;
 	char *s = strdup("abc");
+	cargo_assert(s, "Failed to allocate");
 
 	ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
 	ret |= cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
@@ -10799,7 +10785,7 @@ _TEST_START_EX(TEST_double_parse_clear, CARGO_ADD_CLEARS_TARGETS)
 
 	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
 	cargo_assert(ret == 0, "Parse failed");
-	cargo_assert(s == NULL, "Expected s to be cleared");
+	cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
 
 	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
 	cargo_assert(ret == 0, "Parse failed");
