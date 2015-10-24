@@ -1875,6 +1875,10 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			_cargo_set_error(ctx, error);
 		}
 	}
+	else
+	{
+		_cargo_cleanup_option_value(opt, 1);
+	}
 
 	return 0;
 }
@@ -6993,7 +6997,7 @@ _TEST_END()
 #define _ADD_TEST_FIXED_ARRAY(fmt, printfmt)		 					\
 do 																		\
 {																		\
-	size_t count;														\
+	size_t count = 0;														\
 	size_t i;															\
 	_TEST_ARRAY_OPTION(a, ARRAY_SIZE, args, ARG_SIZE,					\
 		fmt, &a, &count, ARRAY_SIZE);									\
@@ -7032,6 +7036,7 @@ _TEST_START(TEST_add_static_long_long_int_array_option)
 	long long int a[3];
 	long long int a_expect[3] = { 9223372036854775807, -9223372036854775807, 3 };
 	char *args[] = { "program", "--beta", "9223372036854775807", "-9223372036854775807", "3" };
+	memset(a, 0, sizeof(a));
 	_ADD_TEST_FIXED_ARRAY(".[L]#", "%"CARGO_LONGLONG_FMT);
 	_TEST_CLEANUP();
 }
@@ -7071,10 +7076,11 @@ _TEST_START(TEST_add_static_string_array_option)
 {
 	#define LENSTR 5
 	char a[3][LENSTR];
-	size_t count;
+	size_t count = 0;
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
 	#define ARRAY2_SIZE (sizeof(a) / sizeof(a[0]))
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
+	memset(a, 0, sizeof(a));
 
 	_TEST_ARRAY_OPTION(a, ARRAY2_SIZE, args, ARG_SIZE,
 						".[s#]#", &a, LENSTR, &count, ARRAY2_SIZE);
@@ -7187,7 +7193,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option3)
 {
 	#define NUM_ELEMENTS 3
 	char *a[NUM_ELEMENTS];
-	size_t count;
+	size_t count = 0;
 	size_t i;
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
@@ -7216,7 +7222,7 @@ _TEST_START(TEST_add_alloc_fixed_string_array_option4)
 {
 	#define NUM_ELEMENTS 3
 	char *a[NUM_ELEMENTS];
-	size_t count;
+	size_t count = 0;
 	size_t i;
 	char *args[] = { "program", "--beta", "abc", "def", "ghi" };
 	#define ARG_SIZE (sizeof(args) / sizeof(args[0]))
@@ -7707,8 +7713,8 @@ _TEST_END()
 _TEST_START(TEST_parse_missing_array_value)
 {
 	int i[3];
-	size_t i_count;
-	int j;
+	size_t i_count = 0;
+	int j = 0;
 	char *args[] = { "program", "--beta", "2", "--alpha", "1", "2" };
 
 	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
@@ -7726,10 +7732,12 @@ _TEST_START(TEST_parse_missing_array_value_ensure_free)
 {
 	// Here we make sure allocated values get freed on a failed parse.
 	int i[3];
-	size_t i_count;
-	int *j;
-	size_t j_count;
+	size_t i_count = 0;
+	int *j = NULL;
+	size_t j_count = 0;
 	char *args[] = { "program", "--beta", "2", "3", "--alpha", "1", "2" };
+
+	memset(i, 0, sizeof(i));
 
 	ret = cargo_add_option(cargo, 0, "--alpha -a", "The alpha", ".[i]#", &i, &i_count, 3);
 	ret = cargo_add_option(cargo, 0, "--beta -b", "The beta", "[i]#", &j, &j_count, 2);
@@ -8138,10 +8146,10 @@ _TEST_END_NODESTROY()
 
 _TEST_START(TEST_parse_zero_or_more_with_args)
 {
-	int *i;
+	int *i = NULL;
 	int i_expect[] = { 1, 2 };
-	size_t i_count;
-	int j;
+	size_t i_count = 0;
+	int j = 0;
 	char *args[] = { "program", "--beta", "2", "--alpha", "1", "2" };
 
 	cargo_get_flags(cargo);
