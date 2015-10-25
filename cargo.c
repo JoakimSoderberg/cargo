@@ -850,6 +850,7 @@ typedef struct cargo_opt_s
 	int parsed;					// The argv index when we last parsed the option
 	cargo_option_flags_t flags;
 	int num_eaten;				// How many arguments consumed by this option.
+	int first_parse;			// First time we parse this? (cargo_parse can be called more than once)
 
 	int bool_store;				// Value to store when a bool flag is set.
 	int bool_count;				// If we should count occurances for bool flag.
@@ -1224,23 +1225,57 @@ done:
 		*count = 0;
 }
 
-static void _cargo_cleanup_option_value(cargo_opt_t *opt, int free_target)
+static void _cargo_cleanup_option_value(cargo_t ctx,
+										cargo_opt_t *opt,
+										int free_target)
 {
 	assert(opt);
 
 	opt->target_idx = 0;
-	opt->parsed = -1;		// This is the index into argv that we parsed this option at.
+	opt->parsed = -1;	 // index into argv that we parsed this option at.
 	opt->num_eaten = 0;
 
 	CARGODBG(3, "Cleanup option (%s) value: %s\n",
 			_cargo_type_to_str(opt->type), opt->name[0]);
 
+	// We don't want to always free the target, just reset it for parsing again.
+	// For instance when running cargo_parse multiple times in a row
+	// we only want the values we have already parsed to be freed if
+	// the new parse overwrites it.
 	if (!free_target)
 		return;
 
+	// To enable the user to have string literals as
+	// default values, on the first time cargo_parse is called
+	// we do not try to free the value, unless it has explicitly
+	// been overwritten by the user.
+	if (opt->first_parse)
+	{
+		if ((ctx->flags & CARGO_DEFAULT_LITERALS)
+		 || (opt->flags & CARGO_OPT_DEFAULT_LITERAL))
+		{
+			// Don't free a default value set like this:
+			// char *s = "abc";
+			// cargo_add_option(...., "s", &s);
+			// cargo_parse(...) <-- Don't try to free 's' here before assigning
+			//                      a new value!
+			// cargo_parse(...) <-- However, if we overwrote it in previous
+			//                      parse, we do want to free it here.
+			CARGODBG(3, "    Not freeing target on first parse!");
+			goto skip_free;
+		}
+		else
+		{
+			// This is for the case when the user did this:
+			// char *s = strdup("abc");
+			// cargo_add_option(...., "s", &s);
+			CARGODBG(3, "    First parse behaviour overwritten with "
+						"CARGO_OPT_FREE_DEFAULT");
+		}
+	}
+
 	CARGODBG(3, "  Freeing target:\n");
 
-	// TODO: Only free if we know we have allocated the memory, so keep track of that in the opt instead!
 	if (opt->custom)
 	{
 		_cargo_free_str_list(&opt->custom_target, &opt->custom_target_count);
@@ -1258,7 +1293,8 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt, int free_target)
 
 				if (opt->type == CARGO_STRING)
 				{
-					_cargo_free_str_list(((char ***)opt->target), opt->target_count);
+					_cargo_free_str_list(((char ***)opt->target),
+						opt->target_count);
 				}
 				else
 				{
@@ -1286,11 +1322,18 @@ static void _cargo_cleanup_option_value(cargo_opt_t *opt, int free_target)
 	else
 	{
 		if (opt->target && opt->target_count)
-			memset(opt->target, 0, _cargo_get_type_size(opt->type) * (*opt->target_count));
+		{
+			memset(opt->target, 0,
+				_cargo_get_type_size(opt->type) * (*opt->target_count));
+		}
 	}
 
+skip_free:
 	if (opt->target_count)
 		*opt->target_count = 0;
+
+	if (opt->alloc && opt->target)
+		*opt->target = NULL;
 }
 
 static void _cargo_cleanup_option_values(cargo_t ctx, int free_targets)
@@ -1300,7 +1343,7 @@ static void _cargo_cleanup_option_values(cargo_t ctx, int free_targets)
 
 	for (i = 0; i < ctx->opt_count; i++)
 	{
-		_cargo_cleanup_option_value(&ctx->options[i], free_targets);
+		_cargo_cleanup_option_value(ctx, &ctx->options[i], free_targets);
 	}
 }
 
@@ -1822,7 +1865,8 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 	return (name != NULL);
 }
 
-static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const char *name)
+static int _cargo_check_if_already_parsed(cargo_t ctx,
+										  cargo_opt_t *opt, const char *name)
 {
 	if (opt->parsed >= 0)
 	{
@@ -1833,7 +1877,7 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 		str.s = &error;
 
 		if ((opt->type == CARGO_BOOL)
-			  && (opt->bool_count || opt->bool_acc))
+		 && (opt->bool_count || opt->bool_acc))
 		{
 			// This is for parsing multiple arguments of the same type
 			// for instance -v -v -v.
@@ -1842,7 +1886,8 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			// array since target_idx is incremented on each parse.
 			opt->target_idx = 0;
 		}
-		else if ((ctx->flags & CARGO_UNIQUE_OPTS) || (opt->flags & CARGO_OPT_UNIQUE))
+		else if ((ctx->flags & CARGO_UNIQUE_OPTS)
+			  || (opt->flags & CARGO_OPT_UNIQUE))
 		{
 			CARGODBG(2, "%s: Parsing option as unique\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
@@ -1850,14 +1895,16 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 							2, // Number of highlights.
 							opt->parsed, "^"CARGO_COLOR_GREEN,
 							ctx->i, "~"CARGO_COLOR_RED);
-			cargo_aappendf(&str, "%s\n Error: %s was already specified before.\n", s, name);
+			cargo_aappendf(&str,
+				"%s\n Error: %s was already specified before.\n", s, name);
 			_cargo_xfree(&s);
 			_cargo_set_error(ctx, error);
 			return -1;
 		}
 		else
 		{
-			CARGODBG(2, "%s: Parsing option that has already been parsed\n", name);
+			CARGODBG(2,
+				"%s: Parsing option that has already been parsed\n", name);
 			s = cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
 							_cargo_get_cflag(ctx), ctx->max_width,
 							2,
@@ -1867,17 +1914,18 @@ static int _cargo_check_if_already_parsed(cargo_t ctx, cargo_opt_t *opt, const c
 			cargo_aappendf(&str, " Warning: %s was already specified before, "
 							"the latter value will be used.\n", name);
 
-			// TODO: Should we always do this? Say --abc takes a list of integers.
+			// TODO: Should we always do this?
+			// Say --abc takes a list of integers.
 			// --abc 1 2 3 ... or why not --abc 1 --def 5 --abc 2 3
 			// (probably a bad idea :D)
-			_cargo_cleanup_option_value(opt, 1);
+			_cargo_cleanup_option_value(ctx, opt, 1);
 			_cargo_xfree(&s);
 			_cargo_set_error(ctx, error);
 		}
 	}
 	else
 	{
-		_cargo_cleanup_option_value(opt, 1);
+		_cargo_cleanup_option_value(ctx, opt, 1);
 	}
 
 	return 0;
@@ -2016,6 +2064,7 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 	}
 
 	opt->parsed = ctx->i;
+	opt->first_parse = 0; // This is not reset between calls to cargo_parse
 
 	// Number of arguments eaten.
 	opt->num_eaten = (ctx->j - start);
@@ -5603,6 +5652,19 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 
 	CARGODBG(2, "-------- Add option \"%s\", \"%s\" --------\n", optnames, fmt);
 
+	if ((
+			(flags & CARGO_OPT_DEFAULT_LITERAL) ||
+			(ctx->flags & CARGO_DEFAULT_LITERALS)
+		)
+		&& !(ctx->flags & CARGO_AUTOCLEAN))
+	{
+		CARGODBG(1, "Option flag CARGO_OPT_DEFAULT_LITERAL or global flag "
+					"CARGO_DEFAULT_LITERALS must be "
+					"combined with the global flag CARGO_AUTOCLEAN "
+					"to avoid memory leak / crash.");
+		return -1;
+	}
+
 	// TODO: Allow multiple mutex groups...
 	if (!(optnames = _cargo_get_option_group_names(ctx, optnames,
 						&grpname, &mutex_grpname)))
@@ -5957,6 +6019,7 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 	}
 
 	o->flags = flags;
+	o->first_parse = 1;
 
 	// Check if the option has a prefix
 	// (if not it's positional).
@@ -10804,6 +10867,105 @@ _TEST_START(TEST_double_parse_clear)
 }
 _TEST_END()
 
+_TEST_START_EX(TEST_default_str, CARGO_AUTOCLEAN)
+{
+	char *args[] = { "program", "--alpha", "def" };
+	char *args2[] = { "program", "--beta", "DEF" };
+	char *s1 = strdup("abc");
+	char *s2 = "ABC"; // This should not be freed!
+	cargo_assert(s1, "Failed to allocate");
+
+	ret |= cargo_add_option(cargo, 0,
+			"--alpha -a", "an option", "s", &s1);
+	ret |= cargo_add_option(cargo, CARGO_OPT_DEFAULT_LITERAL,
+			"--beta -b", "another option", "s", &s2);
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s1 && !strcmp(s1, "def"), "Expected s to be 'def'");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s2 && !strcmp(s2, "DEF"), "Expected s to be 'DEF'");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START_EX(TEST_default_str2, CARGO_AUTOCLEAN | CARGO_DEFAULT_LITERALS)
+{
+	char *args[] = { "program", "--alpha", "def" };
+	char *args2[] = { "program", "--beta", "DEF" };
+	char *s1 = "abc";
+	char *s2 = "ABC"; // This should not be freed!
+	cargo_assert(s1, "Failed to allocate");
+
+	ret |= cargo_add_option(cargo, 0,
+			"--alpha -a", "an option", "s", &s1);
+	ret |= cargo_add_option(cargo, 0,
+			"--beta -b", "another option", "s", &s2);
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s1 && !strcmp(s1, "def"), "Expected s to be 'def'");
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args2) / sizeof(args2[0]), args2);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s2 && !strcmp(s2, "DEF"), "Expected s to be 'DEF'");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START_EX(TEST_default_str3, CARGO_AUTOCLEAN | CARGO_DEFAULT_LITERALS)
+{
+	char *args[] = { "program", "--alpha", "def" };
+	char *s1 = "abc";
+	char *s2 = "ABC"; // Don't touch this and make sure we don't try to free it.
+	cargo_assert(s1, "Failed to allocate");
+
+	ret |= cargo_add_option(cargo, 0,
+			"--alpha -a", "an option", "s", &s1);
+	ret |= cargo_add_option(cargo, 0,
+			"--beta -b", "another option", "s", &s2);
+
+	ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+	cargo_assert(ret == 0, "Parse failed");
+	cargo_assert(s1 && !strcmp(s1, "def"), "Expected s1 to be 'def'");
+	cargo_assert(s2 && !strcmp(s2, "ABC"), "Expected s2 to be 'ABC'");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START_EX(TEST_default_str_add_fail, CARGO_DEFAULT_LITERALS)
+{
+	char *s1 = "abc";
+	cargo_assert(s1, "Failed to allocate");
+
+	// This should fail sinc CARGO_AUTOCLEAN is not on.
+	ret = cargo_add_option(cargo, 0,
+			"--alpha -a", "an option", "s", &s1);
+	cargo_assert(ret != 0, "Expected to fail");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_default_str_add_fail2)
+{
+	char *s1 = "abc";
+	cargo_assert(s1, "Failed to allocate");
+
+	// This should fail sinc CARGO_AUTOCLEAN is not on.
+	ret = cargo_add_option(cargo, CARGO_OPT_DEFAULT_LITERAL,
+			"--alpha -a", "an option", "s", &s1);
+	cargo_assert(ret != 0, "Expected to fail");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 _TEST_START(TEST_nearly_equal)
 {
 	ret = _cargo_nearly_equal(3.2000001, 3.2, 0.00000001);
@@ -10979,6 +11141,11 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_choices_validation_ulonglong),
 	CARGO_ADD_TEST(TEST_double_parse),
 	CARGO_ADD_TEST(TEST_double_parse_clear),
+	CARGO_ADD_TEST(TEST_default_str),
+	CARGO_ADD_TEST(TEST_default_str2),
+	CARGO_ADD_TEST(TEST_default_str3),
+	CARGO_ADD_TEST(TEST_default_str_add_fail),
+	CARGO_ADD_TEST(TEST_default_str_add_fail2),
 	CARGO_ADD_TEST(TEST_nearly_equal)
 };
 

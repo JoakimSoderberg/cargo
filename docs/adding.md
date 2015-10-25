@@ -73,6 +73,10 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
                      const char *fmt, ...);
 ```
 
+********************************************************************************
+**Note:** You should always clear the value of the variables you pass into cargo. It is especially important that you set pointers to `NULL`. Since any pointer that is non-`NULL` will be freed by cargo before the new contents is saved into it).
+********************************************************************************
+
 ### Context
 
 As with all of the cargo API it takes a [`cargo_t`](api.md#cargo_t) context instance as the first argument.
@@ -117,8 +121,8 @@ Another example for adding an option that reads an array of integers. The `[]` a
 The `+` at the end means that cargo should parse **one or more** items. The default behaviour is to allocate the list of items.
 
 ```c
-int *integers;
-size_t integer_count;
+int *integers = NULL; // Important to always set pointers to NULL!
+size_t integer_count = 0;
 ...
 ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]+",
                        &integers, &integer_count);
@@ -130,8 +134,8 @@ Other options instead of using [`+`](api.md#arrays) is [`*`](api.md#arrays) and 
 `*` works the same as `+` and means **zero or more** items. `#` means that we should parse a fixed amount of items. To do this we must specify the max number of items as an argument as well, in this example `4`:
 
 ```c
-int *integers;
-size_t integer_count;
+int *integers = NULL;
+size_t integer_count = 0;
 ...
 ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", "[i]#",
                        &integers, &integer_count, 4);
@@ -142,7 +146,8 @@ When parsing using both [`*`](api.md#star) and [`+`](api.md#plus) the default be
 
 ```c
 int integers[4]; // Fixed size.
-size_t integer_count;
+size_t integer_count = 0;
+memset(integers, 0, sizeof(integers));
 ...
 ret = cargo_add_option(cargo, 0, "--integers -i", "Integers", ".[i]#", // Dot
                        &integers, &integer_count, 4);
@@ -151,6 +156,46 @@ assert(ret == 0);
 
 ********************************************************************************
 **Note:** A call to [`cargo_add_option`](api.md#cargo_add_option) should never fail. If it fails, either there is a bug in your code, the system is out of memory, or there is a bug in cargo itself. For this reason it is good to always `assert` that the return value is `0`. See [getting started](gettingstarted.md#debugging-cargo) for more information about debugging.
+********************************************************************************
+
+Default values
+==============
+As noted before, you should always initialize any variable you pass into cargo, since this value will be the default value in the case cargo doesn't override it while parsing.
+
+```c
+int integer = 5; // Default value should be 5.
+...
+ret = cargo_add_option(cargo, 0, "--integer -i", "An integer", "i", &integer);
+```
+
+For string variables this is very important, since they're pointers. And if cargo sees that a pointer is non-`NULL` it will attempt to `free` it before it overwrites it with some new value (to avoid a memory leak), so if the pointer points to some random data this will crash.
+
+Because of this, to add a default value for strings, you need to allocate it on the heap:
+
+```c
+char *str = strdup("awesome"); // Default value must be allocated on the heap!
+...
+ret = cargo_add_option(cargo, 0, "--string -s", "A string", "s", &str);
+```
+
+However, if you don't like this and simply want to be able to use a normal string literal as the default value. You can override this behavior, either on a per option basis using the [`CARGO_OPT_DEFAULT_LITERAL`](api.md#cargo_opt_default_literal) option flag. Or the global [`CARGO_DEFAULT_LITERALS`](api.md#cargo_default_literals) flag.
+
+Note that both of these MUST be used together with [`CAROG_AUTOCLEAN`](api.md#cargo_autoclean) or you will get an error from [`cargo_add_option`](api.md#cargo_add_option).
+
+```c
+char *str = "awesome"; // String literal!
+
+cargo_init(&cargo, CARGO_AUTOCLEAN, "%s", argv[0]))
+...
+ret = cargo_add_option(cargo, CARGO_OPT_DEFAULT_LITERAL, "--string -s", "A string", "s", &str);
+```
+
+The reason you have to use [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean) is so that you either don't try to free the default string literal. Or that there is a memory leak because you don't free a value that cargo overrode the default with.
+
+Since cargo knows internally if the value in the variable was overwritten or if it's the default value, it can always perform the correct action and not cause a memory leak or segfault.
+
+********************************************************************************
+**Note:** For [custom callbacks](adding.md#custom-parsing) you still always have to free any values by yourself.
 ********************************************************************************
 
 Option aliases
@@ -347,7 +392,7 @@ There are also functions available to get the group and mutex groups for an opti
 
 Example
 -------
-So let's say we want to parse a rectangle value where the dimensions are specified by the width and height in this format: `WxH`. And we want to put it                                                                                                                                                                                                                                                                                                                                  in our struct `rect_t`:
+So let's say we want to parse a rectangle value where the dimensions are specified by the width and height in this format: `WxH`. And we want to put it in our struct `rect_t`:
 
 ```c
 typedef struct rect_s
@@ -392,6 +437,7 @@ As arguments we first pass our `parse_rect_cb` callback function, and then the `
 
 ```c
 rect_t rect;
+memset(&rect, 0, sizeof(rect));
 
 ret = cargo_add_option(cargo, 0, "--rect","The rect",
                         "c", parse_rect_cb, &rect);
@@ -411,7 +457,7 @@ static int parse_rect_list_cb(cargo_t ctx, void *user, const char *optname,
     assert(ctx);
     assert(user);
     rect_t **u = (rect_t **)user;
-    rect_t *rect;
+    rect_t *rect = NULL;
 
     if (!(*u = calloc(argc, sizeof(rect_t))))
     {
@@ -463,8 +509,8 @@ So let's use our earlier example with a list of integers, we simply pass `"int *
 
 ```bash
 $ bin/cargo_helper "int *integers"
-int *integers;
-size_t integers_count;
+int *integers = NULL;
+size_t integers_count = 0;
 cargo_add_option(cargo, 0, "--integers -i", "Description of integers", "[i]#",
         &integers, &integers_count, 128); // Allocated with max length 128.
 cargo_add_option(cargo, 0, "--integers -i", "Description of integers", "[i]+",
@@ -476,7 +522,7 @@ Or with a fixed array of `4` integers:
 ```bash
 bin/cargo_helper "int integers[4]"
 int integers[4];
-size_t integers_count;
+size_t integers_count = 0;
 cargo_add_option(cargo, 0, "--integers -i", "Description of integers", ".[i]#",
                  &integers, &integers_count, 4);
 ```
@@ -487,7 +533,7 @@ An allocated string:
 
 ```bash
 $ bin/cargo_helper "char *str"
-char *str;
+char *str = NULL;
 cargo_add_option(cargo, 0, "--str -s", "Description of str", "s", &str);
 ```
 
@@ -496,6 +542,7 @@ A fixed size string:
 ```bash
 $ bin/cargo_helper "char str[32]"
 char str[32];
+*str = '\0';
 cargo_add_option(cargo, 0, "--str -s", "Description of str", ".s", &str, 32);
 ```
 
@@ -503,8 +550,8 @@ A list of strings:
 
 ```bash
 $ bin/cargo_helper "char **strs"
-char **strs;
-size_t strs_count;
+char **strs = NULL;
+size_t strs_count = 0;
 cargo_add_option(cargo, 0, "--strs -s", "Description of strs", "[s]#",
                  &strs, &strs_count, 128); // Allocated with max length 128.
 cargo_add_option(cargo, 0, "--strs -s", "Description of strs", "[s]+",

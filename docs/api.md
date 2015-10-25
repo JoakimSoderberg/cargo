@@ -466,6 +466,11 @@ This option instead moves this check to **before** the parsing is performed:
 
 Note that since we parse the arguments after we check for unknown options, using the option flag [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) will work differently in regards to unknown options. Options found after the stop point will still be processed during the unknown check.
 
+#### `CARGO_DEFAULT_LITERALS` ####
+This enables string literals to be used as default values for all string options.
+
+See [`CARGO_OPT_DEFAULT_LITERAL`](api.md#cargo_opt_default_literal) for details.
+
 ### cargo_usage_t ###
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
@@ -546,6 +551,15 @@ For instance you could have a option group hidden by default using [`CARGO_GROUP
 
 #### `CARGO_OPT_HIDE` ####
 Hides the option in the usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
+
+#### `CARGO_OPT_DEFAULT_LITERAL` ###
+Default values for strings normally needs to be a heap allocated string. However the more natural thing might be to simply use a string literal.
+
+This enables you to use string literals as the default value for string options.
+
+Note that this must be used in conjuction with [`CARGO_AUTOCLEAN`](api.md#cargo_autoclean). To set this behaviour for all options instead, use [`CARGO_DEFAULT_LITERALS`](api.md#cargo_default_literals)
+
+See [default values](api.md#default-values) for more details and examples.
 
 ### cargo_mutex_group_flags_t ###
 

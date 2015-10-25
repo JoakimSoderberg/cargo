@@ -151,7 +151,8 @@ typedef enum cargo_flags_e
 	CARGO_NO_FAIL_UNKNOWN				= (1 << 6),
 	CARGO_UNIQUE_OPTS					= (1 << 7),
 	CARGO_NOWARN						= (1 << 8),
-	CARGO_UNKNOWN_EARLY					= (1 << 9)
+	CARGO_UNKNOWN_EARLY					= (1 << 9),
+	CARGO_DEFAULT_LITERALS 				= (1 << 10)
 } cargo_flags_t;
 
 typedef enum cargo_format_e
@@ -177,6 +178,7 @@ typedef enum cargo_option_flags_e
 	CARGO_OPT_STOP						= (1 << 4),
 	CARGO_OPT_HIDE						= (1 << 5),
 	CARGO_OPT_STOP_HARD					= (1 << 6),
+	CARGO_OPT_DEFAULT_LITERAL			= (1 << 7)
 } cargo_option_flags_t;
 
 typedef enum cargo_mutex_group_flags_e
