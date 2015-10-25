@@ -812,6 +812,16 @@ typedef enum cargo_bool_acc_op_e
 	CARGO_BOOL_OP_STORE
 } cargo_bool_acc_op_t;
 
+struct cargo_validation_s
+{
+	const char *name;
+	cargo_validation_f validator;
+	cargo_validation_destroy_f destroy;
+	cargo_type_t types;
+	size_t ref_count;
+	void *user;
+};
+
 typedef struct cargo_group_s cargo_group_t;
 
 typedef struct cargo_opt_s
@@ -1363,9 +1373,10 @@ static void _cargo_free_validation(cargo_validation_t **vd)
 		if (v->destroy)
 		{
 			CARGODBG(3, "Calling validation destroy function\n");
-			v->destroy(v);
+			v->destroy(v->user);
 		}
 
+		_cargo_xfree(&v->user);
 		_cargo_xfree(vd);
 	}
 }
@@ -2809,7 +2820,7 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	}
 
 	if (metavar)
-		free(metavar);
+		_cargo_free(metavar);
 
 	return 0;
 }
@@ -6117,6 +6128,35 @@ int cargo_add_option(cargo_t ctx, cargo_option_flags_t flags,
 	return ret;
 }
 
+cargo_validation_t *cargo_create_validator(const char *name,
+										   cargo_validation_f validator,
+										   cargo_validation_destroy_f destroy,
+										   cargo_type_t types,
+										   void *user)
+{
+	cargo_validation_t *v = NULL;
+
+	if (!(v = _cargo_calloc(1, sizeof(cargo_validation_t))))
+	{
+		return NULL;
+	}
+
+	v->name = name;
+	v->validator = validator;
+	v->destroy = destroy;
+	v->types = types;
+	v->user = user;
+
+	return v;
+}
+
+void *cargo_validator_get_context(cargo_validation_t *validator)
+{
+	assert(validator);
+	return validator->user;
+}
+
+
 typedef union cargo_vals_s
 {
 	int i;
@@ -6129,7 +6169,6 @@ typedef union cargo_vals_s
 
 typedef struct cargo_range_validation_s
 {
-	cargo_validation_t super;
 	cargo_vals_t min;
 	cargo_vals_t max;
 	cargo_vals_t epsilon;
@@ -6148,7 +6187,7 @@ static int _cargo_nearly_equal(double a, double b, double epsilon)
 	return 0;
 }
 
-static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
+static int _cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd, void *value)
 {
 	#define _CARGO_COMPARE_RANGE(_type, valfmt, _member)					\
@@ -6184,10 +6223,12 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 	} while (0)
 
 	cargo_type_t type = cargo_get_option_type(ctx, opt);
-	cargo_range_validation_t *vr = (cargo_range_validation_t *)vd;
+	cargo_range_validation_t *vr = NULL;
 	assert(ctx);
 	assert(vd);
 	assert(opt);
+
+	vr = (cargo_range_validation_t *)cargo_validator_get_context(vd);
 
 	switch (type)
 	{
@@ -6212,8 +6253,8 @@ static int cargo_validate_range_cb(cargo_t ctx, cargo_validation_flags_t flags,
 	#undef _CARGO_COMPARE_FLOAT_RANGE
 }
 
-static cargo_range_validation_t *_cargo_create_range(const char *name,
-													cargo_type_t type)
+static cargo_validation_t *_cargo_create_range(const char *name,
+											   cargo_type_t type)
 {
 	cargo_range_validation_t *vr = NULL;
 	cargo_validation_t *v = NULL;
@@ -6223,24 +6264,27 @@ static cargo_range_validation_t *_cargo_create_range(const char *name,
 		return NULL;
 	}
 
-	v = (cargo_validation_t *)vr;
+	if (!(v = cargo_create_validator(name,
+									_cargo_validate_range_cb,
+									NULL, type, vr)))
+	{
+		_cargo_free(vr);
+		return NULL;
+	}
 
-	v->name = name;
-	v->validator = cargo_validate_range_cb;
-	v->destroy = NULL;
-	v->types |= type;
-
-	return vr;
+	return v;
 }
 
 #define _CARGO_CREATE_VALIDATE_RANGE_FUNC_BODY(type, _cargo_type, _member)			\
 	cargo_range_validation_t *vr = NULL;											\
-	if (!(vr = _cargo_create_range(#type" range", _cargo_type)))					\
+	cargo_validation_t *v = NULL;													\
+	if (!(v = _cargo_create_range(#type" range", _cargo_type)))					\
 		return NULL;																\
+	vr = cargo_validator_get_context(v);											\
 	vr->min._member = min;															\
 	vr->max._member = max;															\
 	vr->epsilon._member = epsilon;													\
-	return (cargo_validation_t *)vr;												\
+	return v;																		\
 
 #define _CARGO_CREATE_VALIDATE_RANGE_FUNC(name, type, _cargo_type, _member) 		\
 	cargo_validation_t *cargo_validate_##name(type min, type max)					\
@@ -6264,7 +6308,6 @@ _CARGO_CREATE_VALIDATE_FLOAT_RANGE_FUNC(double_range, double, CARGO_DOUBLE, d)
 
 typedef struct cargo_choices_validation_s
 {
-	cargo_validation_t super;
 	cargo_type_t type;
 	size_t count;
 	char **strs;
@@ -6274,25 +6317,30 @@ typedef struct cargo_choices_validation_s
 	char *err;
 } cargo_choices_validation_t;
 
-static void cargo_validate_choices_destroy_cb(cargo_validation_t *v)
+static void _cargo_validate_choices_destroy_cb(void *user)
 {
-	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)v;
+	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)user;
 
 	_cargo_xfree(&vc->nums);
 	_cargo_xfree(&vc->err);
 	_cargo_free_str_list(&vc->strs, &vc->count);
 }
 
-int cargo_validate_choices_cb(cargo_t ctx,
+int _cargo_validate_choices_cb(cargo_t ctx,
 							cargo_validation_flags_t flags,
 							const char *opt, cargo_validation_t *vd,
 							void *value)
 {
 	size_t i;
-	cargo_choices_validation_t *vc = (cargo_choices_validation_t *)vd;
-	int case_sensitive = vc->flags & CARGO_VALIDATE_CHOICES_CASE_SENSITIVE;
+	cargo_choices_validation_t *vc = NULL;
+	int case_sensitive = 0;
 	assert(ctx);
 	assert(vd);
+
+	vc = (cargo_choices_validation_t *)cargo_validator_get_context(vd);
+	assert(vc);
+
+	case_sensitive = vc->flags & CARGO_VALIDATE_CHOICES_CASE_SENSITIVE;
 
 	for (i = 0; i < vc->count; i++)
 	{
@@ -6361,6 +6409,7 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 	va_list ap;
 	size_t i;
 	cargo_astr_t str;
+	cargo_validation_t *v = NULL;
 	cargo_choices_validation_t *vc = NULL;
 	memset(&str, 0, sizeof(str));
 
@@ -6369,11 +6418,16 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 		return NULL;
 	}
 
-	vc->super.name = "choices";
-	vc->super.validator = cargo_validate_choices_cb;
-	vc->super.destroy = cargo_validate_choices_destroy_cb;
-	vc->super.types =  (CARGO_STRING | CARGO_INT | CARGO_UINT | CARGO_FLOAT |
-						CARGO_DOUBLE | CARGO_LONGLONG | CARGO_ULONGLONG);
+	if (!(v = cargo_create_validator("choices",
+				_cargo_validate_choices_cb,
+				_cargo_validate_choices_destroy_cb,
+				(CARGO_STRING | CARGO_INT | CARGO_UINT | CARGO_FLOAT |
+				 CARGO_DOUBLE | CARGO_LONGLONG | CARGO_ULONGLONG),
+				vc)))
+	{
+		_cargo_free(vc);
+		return NULL;
+	}
 
 	vc->flags = flags;
 	vc->type = type;
@@ -6474,12 +6528,13 @@ cargo_validation_t *cargo_validate_choices(cargo_validate_choices_flags_t flags,
 
 	va_end(ap);
 
-	return (cargo_validation_t *)vc;
+	return v;
 fail:
 	_cargo_xfree(&vc->strs);
 	_cargo_xfree(&vc->nums);
 	_cargo_xfree(&vc->err);
-	free(vc);
+	_cargo_free(vc);
+	_cargo_free(v);
 	return NULL;
 }
 
@@ -10976,6 +11031,7 @@ _TEST_START(TEST_nearly_equal)
 }
 _TEST_END()
 
+// TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
 // TODO: Test CARGO_UNIQUE_OPTS

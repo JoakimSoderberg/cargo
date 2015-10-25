@@ -395,21 +395,20 @@ typedef int (*cargo_validation_f)(cargo_t ctx,
 								cargo_validation_flags_t flags,
 								const char *opt, cargo_validation_t *vd,
 								void *value);
-typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
-
-struct cargo_validation_s
-{
-	const char *name;
-	cargo_validation_f validator;
-	cargo_validation_destroy_f destroy;
-	cargo_type_t types;
-	size_t ref_count;
-};
+typedef void (*cargo_validation_destroy_f)(void *user);
 
 #define CARGO_DEFAULT_EPSILON 0.000000000000000001
 
 int cargo_add_validation(cargo_t ctx, cargo_validation_flags_t flags,
 						const char *opt, cargo_validation_t *vd);
+
+cargo_validation_t *cargo_create_validator(const char *name,
+										   cargo_validation_f validator,
+										   cargo_validation_destroy_f destroy,
+										   cargo_type_t types,
+										   void *user);
+
+void *cargo_validator_get_context(cargo_validation_t *validator);
 
 //
 // Validators.

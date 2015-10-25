@@ -1776,6 +1776,49 @@ For validating that a variable is one of a set of choices:
 
 - [`cargo_validate_choices`](api.md#cargo_validate_choices)
 
+### cargo_create_validator ###
+
+```c
+cargo_validation_t *cargo_create_validator(const char *name,
+                       cargo_validation_f validator,
+                       cargo_validation_destroy_f destroy,
+                       cargo_type_t types,
+                       void *user);
+```
+
+---
+
+**name**: Name for the validator (used internally for error message only).
+
+**validator**: [`cargo_validation_f`](api.md#cargo_validation_f) callback used for validating option values.
+
+**destroy**: [`cargo_validation_destroy_f`](api.md#cargo_validation_destroy_f) callback used for cleaning up any allocated resources in the user context.
+
+**types**: Supported types for this validator, this can contain a OR:ed list of [`cargo_type_t`](api.md#cargo_type_t) types.
+
+**user**: The user context that is used when validating in the validator callback.
+
+---
+
+This is only meant to be used when specifying your own custom validator. The validator function that creates your validator should use this to specify the callbacks and context that is used.
+
+The returned struct can then be passed to [`cargo_add_validation`](api.md#cargo_add_validation).
+
+### cargo_validator_get_context ###
+
+```c
+void *cargo_validator_get_context(cargo_validation_t *validator);
+```
+
+---
+
+**validator**: The validator that you want the context for.
+
+---
+
+This returns the user context pointer that was specified in [`cargo_create_validator`](api.md#cargo_create_validator)
+
+
 ### cargo_validate_int_range ###
 
 ```c

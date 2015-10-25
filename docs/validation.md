@@ -117,32 +117,14 @@ For the types supported by cargo most validations are solved by the range and ch
 
 However, if you still need your own validator you can simply create your own. Let's say we want to create a validator that only allows even values for integers and they cannot be above a set max.
 
-The validator struct looks like this:
-
-```c
-struct cargo_validation_s
-{
-    const char *name;
-    cargo_validation_f validator;
-    cargo_validation_destroy_f destroy;
-    cargo_type_t types;
-    size_t ref_count;
-};
-```
-
-First we define our own validation struct based on this, since we need somewhere to place our `max` value allowed:
+First we define our own validation struct that we will use as a context when performing the validation. This is where we place the `max` value:
 
 ```c
 typedef struct even_validation_s
 {
-    cargo_validation_t super; // We "inherit" the base struct.
-                              // NOTE! This must be at the top.
-
-    int max;                  // We can use this for our own context.
+    int max; // We can use this for our own context.
 } even_validation_t;
 ```
-
-(Note that since we're putting the [`cargo_validation_t`](api.md#cargo_validation_t) at the top of the struct like this, we can pass a pointer to our struct to a function expecting a `cargo_validation_t *` pointer)
 
 Next we will need a callback function that does the actual validation of the argument values. This function has the following signature:
 
@@ -161,8 +143,11 @@ int even_validation_validate_cb(cargo_t ctx,
                       const char *opt, cargo_validation_t *vd,
                       void *value)
 {
-    even_validation_t *ev = (even_validation_t *)vd;
+    even_validation_t *ev = NULL;
     int v = *((int *)value);
+
+    // Retrieve our context struct.
+    ev = (even_validation_t *)cargo_validator_get_context(vd);
 
     if (v > ev->max)
     {
@@ -184,21 +169,21 @@ int even_validation_validate_cb(cargo_t ctx,
 Our `even_validation_t` struct doesn't contain any allocated memory, but for the sake of things we will still add a `cargo_validation_destroy_f` callback that cargo will call when `free`ing the validator. It has this signature:
 
 ```c
-typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
+typedef void (*cargo_validation_destroy_f)(void *user);
 ```
 
 Our destroy callback:
 
 ```c
-void even_validation_destroy_cb(cargo_validation_t *vd)
+void even_validation_destroy_cb(void *user)
 {
-    even_validation_t *ev = (even_validation_t *)vd;
+    even_validation_t *ev = (even_validation_t *)user;
 
     // Here we would free anything that we allocated in `ev`.
 }
 ```
 
-(Note that this destroy callback won't be called until the last reference to the validator is destroyed, so you do not have to care about the `ref_count`).
+(Note that this destroy callback won't be called until the last reference to the validator is destroyed).
 
 Finally we will need a function that creates the validation. This can have any signature we like except that it needs to return a `cargo_validation_t *` that it has allocated:
 
@@ -206,6 +191,7 @@ Finally we will need a function that creates the validation. This can have any s
 cargo_validation_t *even_validate_int(int max)
 {
     even_validation_t *ev = NULL;
+    cargo_validation_t *v = NULL;
 
     // Make sure we zero the entire struct.
     if (!(ev = calloc(1, sizeof(even_validation_t))))
@@ -213,22 +199,25 @@ cargo_validation_t *even_validate_int(int max)
         return NULL;
     }
 
-    // Give the validator a name. This is used for internal
-    // error messages by cargo if CARGO_DEBUG is turned on.
-    ev->super.name = "even";
+    if (!(v = cargo_create_validator(
+            // Give the validator a name. This is used for internal
+            // error messages by cargo if CARGO_DEBUG is turned on.
+            "even",
+            even_validation_validate_cb,
+            even_validation_destroy_cb,
+            // Set the types we support we could add multiple types here
+            CARGO_INT,
+            // Add our context.
+            ev)))
+    {
+        free(ev);
+        return NULL;
+    }
 
-    // Setup the callbacks.
-    ev->super.validator = even_validation_validate_cb;
-    ev->super.destroy = even_validation_destroy_cb;
-
-    // Set the types we support we could add multiple types here
-    // CARGO_INT | CARGO_STRING and so on...
-    ev->super.types = CARGO_INT;
-
-    // Set our own setting!
+    // Set our own setting in the context!
     ev->max = max;
 
-    return (cargo_validation_t *)ev;
+    return v;
 }
 ```
 
