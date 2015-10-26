@@ -146,7 +146,7 @@ typedef enum cargo_flags_e
 	CARGO_NOCOLOR 						= (1 << 1),
 	CARGO_NOERR_OUTPUT					= (1 << 2),
 	CARGO_NOERR_USAGE					= (1 << 3),
-	CARGO_ERR_STDOUT					= (1 << 4),
+	CARGO_STDOUT_ERR					= (1 << 4),
 	CARGO_NO_AUTOHELP					= (1 << 5),
 	CARGO_NO_FAIL_UNKNOWN				= (1 << 6),
 	CARGO_UNIQUE_OPTS					= (1 << 7),
@@ -177,8 +177,9 @@ typedef enum cargo_option_flags_e
 	CARGO_OPT_RAW_DESCRIPTION			= (1 << 3),
 	CARGO_OPT_STOP						= (1 << 4),
 	CARGO_OPT_HIDE						= (1 << 5),
-	CARGO_OPT_STOP_HARD					= (1 << 6),
-	CARGO_OPT_DEFAULT_LITERAL			= (1 << 7)
+	CARGO_OPT_HIDE_SHORT				= (1 << 6),
+	CARGO_OPT_STOP_HARD					= (1 << 7),
+	CARGO_OPT_DEFAULT_LITERAL			= (1 << 8)
 } cargo_option_flags_t;
 
 typedef enum cargo_mutex_group_flags_e
@@ -213,7 +214,8 @@ typedef enum cargo_parse_result_e
 
 typedef enum cargo_err_flags_e
 {
-	CARGO_ERR_DEFAULT					= 0
+	CARGO_ERR_DEFAULT					= (0 << 0),
+	CARGO_ERR_APPEND					= (1 << 0)
 } cargo_err_flags_t;
 
 typedef enum cargo_width_flags_e
@@ -395,6 +397,7 @@ typedef int (*cargo_validation_f)(cargo_t ctx,
 								cargo_validation_flags_t flags,
 								const char *opt, cargo_validation_t *vd,
 								void *value);
+
 typedef void (*cargo_validation_destroy_f)(void *user);
 
 #define CARGO_DEFAULT_EPSILON 0.000000000000000001

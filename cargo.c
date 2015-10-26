@@ -2756,9 +2756,9 @@ static int _cargo_get_short_option_usage(cargo_t ctx,
 	assert(opt);
 	assert(str);
 
-	if (opt->flags & CARGO_OPT_HIDE)
+	if ((opt->flags & CARGO_OPT_HIDE) || (opt->flags & CARGO_OPT_HIDE_SHORT))
 	{
-		return 0;
+		return 1;
 	}
 
 	// Positional arguments.
@@ -3882,7 +3882,7 @@ static cargo_parse_result_t _cargo_check_unknown_options_after(cargo_t ctx)
 
 static void _cargo_parse_show_error(cargo_t ctx)
 {
-	FILE *fd = (ctx->flags & CARGO_ERR_STDOUT) ? stdout : stderr;
+	FILE *fd = (ctx->flags & CARGO_STDOUT_ERR) ? stdout : stderr;
 	assert(ctx);
 
 	if (!ctx->error)
@@ -5068,12 +5068,25 @@ void cargo_set_errorv(cargo_t ctx, cargo_err_flags_t flags,
 {
 	int ret = 0;
 	char *error = NULL;
+	char *error2 = NULL;
 	assert(ctx);
 
 	ret = cargo_vasprintf(&error, fmt, ap);
 
 	if (ret >= 0)
 	{
+		// Maybe this can be done a bit nicer...
+		if (ctx->error && (flags & CARGO_ERR_APPEND))
+		{
+			ret = cargo_asprintf(&error2, "%s%s", ctx->error, error);
+
+			if (ret >= 0)
+			{
+				_cargo_free(error);
+				error = error2;
+			}
+		}
+
 		_cargo_xfree(&ctx->error);
 		ctx->error = error;
 	}
@@ -10390,12 +10403,36 @@ _TEST_END()
 _TEST_START(TEST_cargo_set_error)
 {
 	cargo_set_error(cargo, 0, "Hello %s\n", "world");
-	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello world\n"),
-		"Unexpected string");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello world\n"), "Unexpected string");
 
 	_TEST_CLEANUP();
 }
 _TEST_END()
+
+_TEST_START(TEST_cargo_set_error_append)
+{
+	cargo_set_error(cargo, 0, "Hello ");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello "), "Unexpected string");
+	cargo_set_error(cargo, CARGO_ERR_APPEND, "world\n");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello world\n"), "Unexpected string");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_set_error_append2)
+{
+	cargo_set_error(cargo, CARGO_ERR_APPEND, "Hello ");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello "), "Unexpected string");
+	cargo_set_error(cargo, CARGO_ERR_APPEND, "world\n");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "Hello world\n"), "Unexpected string");
+	cargo_set_error(cargo, 0, "The other\n");
+	cargo_assert(!strcmp(cargo_get_error(cargo), "The other\n"), "Unexpected string");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
 
 _TEST_START(TEST_cargo_set_memfunctions)
 {
@@ -10460,6 +10497,40 @@ _TEST_START(TEST_test_hidden_option)
 
 	cargo_assert(strstr(usage, "the hidden") == NULL,
 		"Found hidden option description in usage");
+
+	_TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_test_hidden_short_option)
+{
+	char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
+	int a = 0;
+	int b = 0;
+	const char *usage = NULL;
+	ret = cargo_add_option(cargo, CARGO_OPT_HIDE_SHORT, "--alpha", "the hidden", "i", &a);
+	ret = cargo_add_option(cargo, 0, "--beta -b", "an option", "i", &b);
+	cargo_assert(ret == 0, "Failed to add options");
+
+	// Only hide in short usage.
+	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	printf("%s\n", usage);
+
+	cargo_assert(strstr(usage, "--alpha") == NULL,
+		"Found hidden short option in short usage");
+
+	cargo_assert(strstr(usage, "the hidden") == NULL,
+		"Found hidden short option description in short usage");
+
+	// It should be shown in full usage.
+	usage = cargo_get_usage(cargo, CARGO_USAGE_FULL_USAGE);
+	printf("%s\n", usage);
+
+	cargo_assert(strstr(usage, "--alpha") != NULL,
+		"Did not find hidden short option in full usage");
+
+	cargo_assert(strstr(usage, "the hidden") != NULL,
+		"Did not find hidden short option description in full usage");
 
 	_TEST_CLEANUP();
 }
@@ -11165,8 +11236,11 @@ cargo_test_t tests[] =
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail),
 	CARGO_ADD_TEST(TEST_late_unknown_options_no_fail_stop),
 	CARGO_ADD_TEST(TEST_cargo_set_error),
+	CARGO_ADD_TEST(TEST_cargo_set_error_append),
+	CARGO_ADD_TEST(TEST_cargo_set_error_append2),
 	CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
 	CARGO_ADD_TEST(TEST_test_hidden_option),
+	CARGO_ADD_TEST(TEST_test_hidden_short_option),
 	CARGO_ADD_TEST(TEST_override_short_usage),
 	CARGO_ADD_TEST(TEST_duplicate_alias),
 	CARGO_ADD_TEST(TEST_cargo_get_option_type),

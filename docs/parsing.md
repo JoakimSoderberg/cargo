@@ -156,7 +156,7 @@ To turn off any automatic error output you can pass [`CARGO_NOERR_OUTPUT`](api.m
 
 If you instead rather have cargo output the full usage on an error you can pass the [`CARGO_USAGE_FULL_USAGE`](api.md#cargo_usage_full_usage) flag to the [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags) function. Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when using [`cargo_print_usage`](api.md#cargo_print_usage).
 
-By default the error messages are printed to `stderr`, if you instead want cargo to print them to `stdout` you can set the [`CARGO_ERR_STDOUT`](api.md#cargo_err_stdout) flag.
+By default the error messages are printed to `stderr`, if you instead want cargo to print them to `stdout` you can set the [`CARGO_STDOUT_ERR`](api.md#cargo_stdout_err) flag.
 
 Here are some examples on how this looks:
 

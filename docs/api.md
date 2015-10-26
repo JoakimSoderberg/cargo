@@ -430,7 +430,7 @@ This flags turns of the printing of the short usage on error.
 
 Note if you simply want to customize the usage output printed by cargo on internal errors you can set the usage flags using [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags).
 
-#### `CARGO_ERR_STDOUT` ####
+#### `CARGO_STDOUT_ERR` ####
 cargo prints errors to `stderr` by default. This flag changes so that it prints to `stdout` instead.
 
 #### `CARGO_NO_AUTOHELP` ####
@@ -551,6 +551,9 @@ For instance you could have a option group hidden by default using [`CARGO_GROUP
 
 #### `CARGO_OPT_HIDE` ####
 Hides the option in the usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
+
+#### `CARGO_OPT_HIDE_SHORT` ####
+Hides the option in the short usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
 
 #### `CARGO_OPT_DEFAULT_LITERAL` ###
 Default values for strings normally needs to be a heap allocated string. However the more natural thing might be to simply use a string literal.
@@ -689,7 +692,8 @@ If a custom option user callback parses an option and indicates that an error ha
 
 These are flags for the [`cargo_set_error`](api.md#cargo_set_error) function.
 
-Currently this is not used, but exists so that different behavior can be added in the future without changing the ABI.
+#### `CARGO_ERR_APPEND` ####
+Append to the error string instead of overwriting it.
 
 ### cargo_width_flags_t ###
 These flags are used with [`cargo_get_width`](api.md#cargo_get_width) that fetches the width of the usage/console.
