@@ -132,16 +132,16 @@ static void *_cargo_calloc(size_t count, size_t size)
 
 	p = calloc(count, size);
 
-	#ifdef WIN32
+	#ifdef _WIN32
 	// Windows doesn't set ENOMEM properly.
 	if (!p)
-		goto fail;
-	#endif
+	{
+		errno = ENOMEM;
+		return NULL;
+	}
+	#endif // _WIN32
 
 	return p;
-fail:
-	errno = ENOMEM;
-	return NULL;
 }
 
 static char *_cargo_strdup(const char *str)
@@ -167,7 +167,7 @@ static char *_cargo_strdup(const char *str)
 	}
 	else
 	{
-		#ifdef WIN32
+		#ifdef _WIN32
 		return _strdup(str);
 		#else
 		return strdup(str);
@@ -1822,13 +1822,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
 	}
 
 	return 0;
-}
-
-static int _cargo_zero_args_allowed(cargo_opt_t *opt)
-{
-	return (opt->nargs == CARGO_NARGS_ZERO_OR_MORE)
-		|| (opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
-		|| (opt->type == CARGO_BOOL);
 }
 
 static const char *_cargo_check_options(cargo_t ctx, cargo_opt_t **opt, char *arg)
@@ -3564,7 +3557,6 @@ static int _cargo_check_order_mutex_group(cargo_t ctx,
 	cargo_opt_t *opt = NULL;
 	cargo_opt_t *first_opt = NULL;
 	cargo_highlight_t *parse_highlights = NULL;
-	size_t parsed_count = 0;
 	int first_i = -1;
 	int is_invalid = 0;
 	size_t invalid_order_count = 0;
@@ -3659,7 +3651,6 @@ static cargo_parse_result_t _cargo_check_mutex_groups(cargo_t ctx)
 	char *error = NULL;
 	int ret = CARGO_PARSE_MUTEX_CONFLICT;
 	size_t i = 0;
-	size_t j = 0;
 	cargo_group_t *g = NULL;
 	assert(ctx);
 	memset(&str, 0, sizeof(cargo_astr_t));
@@ -10549,7 +10540,7 @@ _TEST_START(TEST_cargo_get_option_type)
 	int a;
 	int b;
 	float c;
-	char *s;
+	char *s = NULL;
 	const char *usage = NULL;
 	ret = cargo_add_option(cargo, 0, "--alpha -a", "an option", "b", &a);
 	cargo_assert(ret == 0, "Failed to add option");
