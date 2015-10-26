@@ -4456,7 +4456,7 @@ int cargo_init(cargo_t *ctx, cargo_flags_t flags, const char *progname_fmt, ...)
 	va_end(ap);
 
 	// By default we show only short usage on errors.
-	c->usage_flags = CARGO_USAGE_SHORT_USAGE;
+	c->usage_flags = CARGO_USAGE_SHORT;
 
 	// Add the default group.
 	cargo_add_group(c, 0, "", "", "");
@@ -5341,7 +5341,7 @@ const char *cargo_get_usage(cargo_t ctx, cargo_usage_t flags)
 	}
 
 	// Only show short usage.
-	if (flags & CARGO_USAGE_SHORT_USAGE)
+	if (flags & CARGO_USAGE_SHORT)
 	{
 		return short_usage;
 	}
@@ -9665,7 +9665,7 @@ _TEST_START(TEST_mutex_group_usage2)
 	cargo_assert(!strstr(s, "MGROUP2_DESCRIPTION"),
 		"MGROUP2_DESCRIPTION should not show by default");
 
-	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT);
 	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
 	cargo_assert(strstr(s, "--beta"), "Missing --beta");
 	cargo_assert(strstr(s, "--centauri"), "Missing --centauri");
@@ -9699,7 +9699,7 @@ _TEST_START(TEST_mutex_group_usage3)
 	cargo_assert(strstr(s, "MGROUP2_DESCRIPTION"),
 		"MGROUP2_DESCRIPTION should be shown when grouped");
 
-	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT);
 	cargo_assert(strstr(s, "--alpha"), "Missing --alpha");
 	cargo_assert(strstr(s, "--beta"), "Missing --beta");
 	cargo_assert(strstr(s, "--centauri"), "Missing --centauri");
@@ -9729,7 +9729,7 @@ _TEST_START(TEST_mutex_group_usage_set_metavar)
 
 	cargo_print_usage(cargo, 0);
 
-	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	s = cargo_get_usage(cargo, CARGO_USAGE_SHORT);
 	cargo_assert(s, "Got NULL short usage");
 	cargo_assert(strstr(s, "MUTEX"), "Expected to find mutex group metavar");
 	cargo_assert(!strstr(s, "--beta"), "--beta should be hidden");
@@ -10513,7 +10513,7 @@ _TEST_START(TEST_test_hidden_short_option)
 	cargo_assert(ret == 0, "Failed to add options");
 
 	// Only hide in short usage.
-	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT);
 	printf("%s\n", usage);
 
 	cargo_assert(strstr(usage, "--alpha") == NULL,
@@ -10523,7 +10523,7 @@ _TEST_START(TEST_test_hidden_short_option)
 		"Found hidden short option description in short usage");
 
 	// It should be shown in full usage.
-	usage = cargo_get_usage(cargo, CARGO_USAGE_FULL_USAGE);
+	usage = cargo_get_usage(cargo, CARGO_USAGE_FULL);
 	printf("%s\n", usage);
 
 	cargo_assert(strstr(usage, "--alpha") != NULL,
@@ -10549,7 +10549,7 @@ _TEST_START(TEST_override_short_usage)
 	cargo_set_progname(cargo, "%s [options] args", args[0]);
 	usage = cargo_get_usage(cargo,
 		CARGO_USAGE_OVERRIDE_SHORT |
-		CARGO_USAGE_SHORT_USAGE);
+		CARGO_USAGE_SHORT);
 	printf("%s\n", usage);
 
 	cargo_assert(strstr(usage, "--help") == NULL,
@@ -10565,7 +10565,7 @@ _TEST_START(TEST_override_short_usage)
 	cargo_set_progname(cargo, "%s [options] args", "some/long/path/program");
 	usage = cargo_get_usage(cargo,
 		CARGO_USAGE_OVERRIDE_SHORT |
-		CARGO_USAGE_SHORT_USAGE);
+		CARGO_USAGE_SHORT);
 	printf("STRIP:\n%s\n", usage);
 
 	cargo_assert(strstr(usage, "some/long/path/") == NULL,
@@ -10574,7 +10574,7 @@ _TEST_START(TEST_override_short_usage)
 	usage = cargo_get_usage(cargo,
 		CARGO_USAGE_NO_STRIP_PROGNAME |
 		CARGO_USAGE_OVERRIDE_SHORT |
-		CARGO_USAGE_SHORT_USAGE);
+		CARGO_USAGE_SHORT);
 	printf("NO STRIP:\n%s\n", usage);
 
 	cargo_assert(strstr(usage, "some/long/path/"),
@@ -10653,7 +10653,7 @@ _TEST_START(TEST_cargo_large_list_and_usage)
 			".[s]#", &lst, &lst_count, LST_SIZE);
 	cargo_assert(ret == 0, "Failed to add option");
 
-	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+	usage = cargo_get_usage(cargo, CARGO_USAGE_SHORT);
 
 	_TEST_CLEANUP();
 }

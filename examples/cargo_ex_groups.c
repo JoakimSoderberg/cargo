@@ -77,7 +77,7 @@ int main(int argc, char **argv)
 
     if (argc < 2)
     {
-        cargo_print_usage(cargo, CARGO_USAGE_SHORT_USAGE);
+        cargo_print_usage(cargo, CARGO_USAGE_SHORT);
     }
 
     if (cargo_parse(cargo, 0, 1, argc, argv))

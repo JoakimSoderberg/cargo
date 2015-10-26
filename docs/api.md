@@ -475,12 +475,12 @@ See [`CARGO_OPT_DEFAULT_LITERAL`](api.md#cargo_opt_default_literal) for details.
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
 
-#### `CARGO_USAGE_FULL_USAGE` ####
+#### `CARGO_USAGE_FULL` ####
 Show the full usage. This is the default, same as specifying `0`.
 
 Note that this includes the short usage as well. If you want the full usage but excluding the short usage you can use [`CARGO_USAGE_HIDE_SHORT`](api.md#cargo_usage_hide_short)
 
-#### `CARGO_USAGE_SHORT_USAGE` ####
+#### `CARGO_USAGE_SHORT` ####
 Show only the short usage.
 
 #### `CARGO_USAGE_RAW_DESCRIPTION` ####
@@ -1163,7 +1163,7 @@ This sets the internal usage flags used when cargo automatically outputs errors 
 
 These are the same flags that you set when calling [`cargo_get_usage`](api.md#cargo_get_usage).
 
-By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL_USAGE`](api.md#cargo_usage_full_usage) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
+By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL`](api.md#cargo_usage_full) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
 
 ### cargo_parse ###
 

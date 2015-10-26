@@ -157,8 +157,8 @@ typedef enum cargo_flags_e
 
 typedef enum cargo_format_e
 {
-	CARGO_USAGE_FULL_USAGE				= 0,
-	CARGO_USAGE_SHORT_USAGE				= (1 << 0),
+	CARGO_USAGE_FULL					= (0 << 0),
+	CARGO_USAGE_SHORT					= (1 << 0),
 	CARGO_USAGE_RAW_DESCRIPTION 		= (1 << 1),
 	CARGO_USAGE_RAW_OPT_DESCRIPTIONS	= (1 << 2),
 	CARGO_USAGE_RAW_EPILOG				= (1 << 3),

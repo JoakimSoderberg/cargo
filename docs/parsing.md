@@ -154,7 +154,7 @@ If you instead want to output your own error message, or for whatever reason do 
 
 To turn off any automatic error output you can pass [`CARGO_NOERR_OUTPUT`](api.md#cargo_noerr_output), and for no usage [`CARGO_NOERR_USAGE`](api.md#cargo_noerr_usage). When you do this, you can still fetch any error message using [`cargo_get_error`](api.md#cargo_get_error).
 
-If you instead rather have cargo output the full usage on an error you can pass the [`CARGO_USAGE_FULL_USAGE`](api.md#cargo_usage_full_usage) flag to the [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags) function. Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when using [`cargo_print_usage`](api.md#cargo_print_usage).
+If you instead rather have cargo output the full usage on an error you can pass the [`CARGO_USAGE_FULL`](api.md#cargo_usage_full) flag to the [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags) function. Or use any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags like when using [`cargo_print_usage`](api.md#cargo_print_usage).
 
 By default the error messages are printed to `stderr`, if you instead want cargo to print them to `stdout` you can set the [`CARGO_STDOUT_ERR`](api.md#cargo_stdout_err) flag.
 
@@ -191,7 +191,7 @@ Usage: bin/cargo_ex_ints [--sum] [--help] INTEGERS [INTEGERS ...]
 
 ### Long usage
 
-`cargo_set_internal_usage_flags(cargo, CARGO_USAGE_FULL_USAGE);`
+`cargo_set_internal_usage_flags(cargo, CARGO_USAGE_FULL);`
 
 ```bash
 $ cargo_ex_ints
