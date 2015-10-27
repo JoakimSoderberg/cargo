@@ -11107,6 +11107,16 @@ _TEST_START(TEST_nearly_equal)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_strdup_invalid_arg)
+{
+    char *p = _cargo_strdup(NULL);
+    cargo_assert(p == NULL, "Expected strdup to fail");
+    cargo_assert(errno == EINVAL, "Expected indication of faulty input argument");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -11282,7 +11292,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_default_str3),
     CARGO_ADD_TEST(TEST_default_str_add_fail),
     CARGO_ADD_TEST(TEST_default_str_add_fail2),
-    CARGO_ADD_TEST(TEST_nearly_equal)
+    CARGO_ADD_TEST(TEST_nearly_equal),
+    CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
