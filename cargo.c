@@ -11100,7 +11100,7 @@ _TEST_END()
 _TEST_START(TEST_nearly_equal)
 {
     ret = _cargo_nearly_equal(3.2000001, 3.2, 0.00000001);
-    ret = _cargo_nearly_equal(3.2001, 3.2, 0.00000001);
+    ret |= _cargo_nearly_equal(3.2001, 3.2, 0.00000001);
     cargo_assert(ret == 0, "Should be equal");
 
     _TEST_CLEANUP();
