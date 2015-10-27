@@ -10479,6 +10479,20 @@ _TEST_START(TEST_cargo_set_memfunctions)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_malloc_zero_bytes)
+{
+    cargo_set_memfunctions(_cargo_test_malloc, NULL, NULL);
+    _cargo_test_set_malloc_fail_count(0);
+
+    cargo_assert(_cargo_malloc(0) == NULL, "Did not get expected error");
+    cargo_assert(malloc_current == 0, "Unexpected call to malloc");
+
+    _TEST_CLEANUP();
+    cargo_set_memfunctions(NULL, NULL, NULL);
+    _cargo_test_set_malloc_fail_count(0);
+}
+_TEST_END()
+
 _TEST_START(TEST_test_hidden_option)
 {
     char *args[] = { "program", "--alpha", "123", "--centauri", "--beta", "3" };
@@ -11093,6 +11107,16 @@ _TEST_START(TEST_nearly_equal)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_strdup_invalid_arg)
+{
+    char *p = _cargo_strdup(NULL);
+    cargo_assert(p == NULL, "Expected strdup to fail");
+    cargo_assert(errno == EINVAL, "Expected indication of faulty input argument");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -11239,6 +11263,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_cargo_set_error_append),
     CARGO_ADD_TEST(TEST_cargo_set_error_append2),
     CARGO_ADD_TEST(TEST_cargo_set_memfunctions),
+    CARGO_ADD_TEST(TEST_cargo_malloc_zero_bytes),
     CARGO_ADD_TEST(TEST_test_hidden_option),
     CARGO_ADD_TEST(TEST_test_hidden_short_option),
     CARGO_ADD_TEST(TEST_override_short_usage),
@@ -11267,7 +11292,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_default_str3),
     CARGO_ADD_TEST(TEST_default_str_add_fail),
     CARGO_ADD_TEST(TEST_default_str_add_fail2),
-    CARGO_ADD_TEST(TEST_nearly_equal)
+    CARGO_ADD_TEST(TEST_nearly_equal),
+    CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
