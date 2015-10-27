@@ -29,50 +29,50 @@
 
 int main(int argc, char **argv)
 {
-	int ret = 0;
-	cargo_t cargo;
-	int optiona = -1;
-	int optionb = -1;
-	int optionc = -1;
-	int flag1 = 0;
-	int flag2 = 0;
-	size_t i;
-	const char **args = NULL;
-	size_t args_count = 0;
+    int ret = 0;
+    cargo_t cargo;
+    int optiona = -1;
+    int optionb = -1;
+    int optionc = -1;
+    int flag1 = 0;
+    int flag2 = 0;
+    size_t i;
+    const char **args = NULL;
+    size_t args_count = 0;
 
-	if (cargo_init(&cargo, 0, "%s", argv[0]))
-	{
-		fprintf(stderr, "Failed to init command line parsing\n");
-		return -1;
-	}
+    if (cargo_init(&cargo, 0, "%s", argv[0]))
+    {
+        fprintf(stderr, "Failed to init command line parsing\n");
+        return -1;
+    }
 
-	ret |= cargo_add_option(cargo, 0, "--optiona -a", "Option A", "i", &optiona);
-	ret |= cargo_add_option(cargo, 0, "--optionb -b", "Option B", "i", &optionb);
-	ret |= cargo_add_option(cargo, 0, "--optionc -c", "Option C", "i", &optionc);
-	ret |= cargo_add_option(cargo, 0, "--flag1 -f", "Flag 1", "b", &flag1);
-	ret |= cargo_add_option(cargo, 0, "--flag2 -g", "Flag 2", "b", &flag2);
-	ret |= cargo_add_option(cargo, 0, "args", "Remaining args", "[s]*", &args, &args_count);
-	assert(ret == 0);
+    ret |= cargo_add_option(cargo, 0, "--optiona -a", "Option A", "i", &optiona);
+    ret |= cargo_add_option(cargo, 0, "--optionb -b", "Option B", "i", &optionb);
+    ret |= cargo_add_option(cargo, 0, "--optionc -c", "Option C", "i", &optionc);
+    ret |= cargo_add_option(cargo, 0, "--flag1 -f", "Flag 1", "b", &flag1);
+    ret |= cargo_add_option(cargo, 0, "--flag2 -g", "Flag 2", "b", &flag2);
+    ret |= cargo_add_option(cargo, 0, "args", "Remaining args", "[s]*", &args, &args_count);
+    assert(ret == 0);
 
-	if (cargo_parse(cargo, 0, 1, argc, argv))
-	{
-		return -1;
-	}
+    if (cargo_parse(cargo, 0, 1, argc, argv))
+    {
+        return -1;
+    }
 
-	// Print remaining commandline arguments.
-	// args = cargo_get_args(cargo, &args_count);
-	for (i = 0; i < args_count; i++)
-	{
-		printf("Extra argument: %s\n", args[i]);
-	}
+    // Print remaining commandline arguments.
+    // args = cargo_get_args(cargo, &args_count);
+    for (i = 0; i < args_count; i++)
+    {
+        printf("Extra argument: %s\n", args[i]);
+    }
 
-	printf("Final value of optiona: %d\n", optiona);
-	printf("Final value of optionb: %d\n", optionb);
-	printf("Final value of optionc: %d\n", optionc);
-	printf("Final value of flag1: %d\n", flag1);
-	printf("Final value of flag2: %d\n", flag2);
+    printf("Final value of optiona: %d\n", optiona);
+    printf("Final value of optionb: %d\n", optionb);
+    printf("Final value of optionc: %d\n", optionc);
+    printf("Final value of flag1: %d\n", flag1);
+    printf("Final value of flag2: %d\n", flag2);
 
-	cargo_destroy(&cargo);
+    cargo_destroy(&cargo);
 
-	return 0;
+    return 0;
 }
