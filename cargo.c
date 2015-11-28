@@ -1271,7 +1271,7 @@ static void _cargo_cleanup_option_value(cargo_t ctx,
             //                      a new value!
             // cargo_parse(...) <-- However, if we overwrote it in previous
             //                      parse, we do want to free it here.
-            CARGODBG(3, "    Not freeing target on first parse!");
+            CARGODBG(3, "    Not freeing target on first parse!\n");
             goto skip_free;
         }
         else
@@ -1279,8 +1279,7 @@ static void _cargo_cleanup_option_value(cargo_t ctx,
             // This is for the case when the user did this:
             // char *s = strdup("abc");
             // cargo_add_option(...., "s", &s);
-            CARGODBG(3, "    First parse behaviour overwritten with "
-                        "CARGO_OPT_FREE_DEFAULT");
+            CARGODBG(3, "    Default values will be freed\n");
         }
     }
 
@@ -1717,7 +1716,8 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
             {
                 // Special case for static lists of allocated strings:
                 //  char *strs[5];
-                CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST\n");
+                CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST %lu\n", opt->target_idx);
+                CARGODBG(2, "          loc: %p\n", &((char **)target)[opt->target_idx]);
                 if (!(((char **)target)[opt->target_idx] = _cargo_strdup(val)))
                 {
                     return -1;
@@ -11117,6 +11117,34 @@ _TEST_START(TEST_cargo_strdup_invalid_arg)
 }
 _TEST_END()
 
+
+_TEST_START(TEST_cargo_static_list_alloced_items)
+{
+    #define MAX_INPUT_TEMPLATES 5
+    char *inputs[MAX_INPUT_TEMPLATES];
+    size_t input_count = 0;
+    char *args[] = { "catcierge", "--input", "abc", "def" };
+
+    ret |= cargo_add_option(cargo, 0,
+            "--template --input", NULL,
+            ".[s]+", &inputs, &input_count, MAX_INPUT_TEMPLATES);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed");
+    cargo_assert(inputs[0] && !strcmp(inputs[0], "abc"),
+        "Expected inputs[0] == 'abc'");
+    cargo_assert(inputs[1] && !strcmp(inputs[1], "def"),
+        "Expected inputs[0] == 'def'");
+    cargo_assert(input_count == 2, "Expected two inputs");
+
+    _TEST_CLEANUP();
+    free(inputs[0]);
+    free(inputs[1]);
+}
+_TEST_END()
+
+
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -11293,7 +11321,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_default_str_add_fail),
     CARGO_ADD_TEST(TEST_default_str_add_fail2),
     CARGO_ADD_TEST(TEST_nearly_equal),
-    CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg)
+    CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg),
+    CARGO_ADD_TEST(TEST_cargo_static_list_alloced_items)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
