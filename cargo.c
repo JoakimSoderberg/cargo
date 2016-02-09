@@ -8428,6 +8428,65 @@ _TEST_START(TEST_custom_callback)
 }
 _TEST_END()
 
+_TEST_START(TEST_custom_callback2)
+{
+    _test_data_t data;
+    int b = 0;
+
+    #define GROUP_COUNT (CARGO_DEFAULT_MAX_GROUPS * 8 - 1)
+    #define GROUP_OPT_COUNT (CARGO_DEFAULT_MAX_GROUP_OPTS * 3)
+    int vals[GROUP_COUNT][GROUP_OPT_COUNT];
+    char grpname[256];
+    char title[256];
+    char optname[256];
+    size_t i;
+    size_t j;
+    char *args[] = { "program", "--beta", "--alpha", "128x64" };
+
+    cargo_set_flags(cargo, CARGO_AUTOCLEAN);
+
+    // Add a custom argument
+    ret |= cargo_add_option(cargo, 0, "--alpha", "The alpha", "c", _test_cb, &data);
+
+    ret |= cargo_add_option(cargo, 0, "--beta", "The beta", "b", &b);
+    cargo_assert(ret == 0, "Failed to add options");
+
+    // Add many groups. We do this to trigger a reallocation.
+    for (i = 0; i < GROUP_COUNT; i++)
+    {
+        cargo_snprintf(grpname, sizeof(grpname), "group%d", i+1);
+        cargo_snprintf(title, sizeof(title), "The Group%d", i+1);
+        ret |= cargo_add_group(cargo, 0, grpname, title, "Group");
+        cargo_assert(ret == 0, "Failed to add group");
+
+        for (j = 0; j < GROUP_OPT_COUNT; j++)
+        {
+            cargo_snprintf(optname, sizeof(optname), "--optg%02do%02d", i+1, j+1);
+            ret |= cargo_add_option(cargo, 0, optname, LOREM_IPSUM, "i", &vals[i][j]);
+            ret |= cargo_group_add_option(cargo, grpname, optname);
+            cargo_assert(ret == 0, "Failed to add option");
+        }
+    }
+
+    cargo_assert(ret == 0, "Failed to add groups");
+
+    // Test to parse twice.
+    ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+    printf("%dx%d\n", data.width, data.height);
+    cargo_assert(data.width == 128, "Width expected to be 128");
+    cargo_assert(data.height == 64, "Height expected to be 128");
+    cargo_assert(b == 1, "Expected b == 1");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+    printf("%dx%d\n", data.width, data.height);
+    cargo_assert(data.width == 128, "Width expected to be 128");
+    cargo_assert(data.height == 64, "Height expected to be 128");
+    cargo_assert(b == 1, "Expected b == 1");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 static int _test_cb_fixed_array(cargo_t ctx, void *user, const char *optname,
                                 int argc, char **argv)
 {
@@ -11229,6 +11288,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_required_option_missing),
     CARGO_ADD_TEST(TEST_required_option),
     CARGO_ADD_TEST(TEST_custom_callback),
+    CARGO_ADD_TEST(TEST_custom_callback2),
     CARGO_ADD_TEST(TEST_custom_callback_fixed_array),
     CARGO_ADD_TEST(TEST_custom_callback_fixed_array_no_count),
     CARGO_ADD_TEST(TEST_many_options_custom),
