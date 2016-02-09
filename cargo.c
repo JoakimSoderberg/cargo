@@ -1073,7 +1073,28 @@ static int _cargo_validate_option_args(cargo_t ctx, cargo_opt_t *o)
     return 0;
 }
 
-static int _cargo_grow_options(cargo_opt_t **options,
+static int _cargo_reset_custom_targets(cargo_t ctx, cargo_opt_t *options,
+                                       size_t opt_count)
+{
+    size_t i;
+    cargo_opt_t *o;
+    assert(ctx);
+
+    for (i = 0; i < opt_count; i++)
+    {
+        o = &options[i];
+
+        if (o->custom)
+        {
+            o->target = (void **)&o->custom_target;
+            o->target_count = &o->custom_target_count;
+        }
+    }
+
+    return 0;
+}
+
+static int _cargo_grow_options(cargo_t ctx, cargo_opt_t **options,
                                 size_t *opt_count, size_t *max_opts)
 {
     assert(options);
@@ -1106,6 +1127,11 @@ static int _cargo_grow_options(cargo_opt_t **options,
         }
 
         *options = new_options;
+
+        // Custom parsers use a target that is internal to the cargo_opt_t
+        // struct. Since we have reallocated these they might point to
+        // invalid memory now, so reset them.
+        _cargo_reset_custom_targets(ctx, *options, *opt_count);
     }
 
     return 0;
@@ -2967,7 +2993,7 @@ static cargo_opt_t *_cargo_option_init(cargo_t ctx,
     cargo_opt_t *o = NULL;
     assert(ctx);
 
-    if (_cargo_grow_options(&ctx->options, &ctx->opt_count, &ctx->max_opts))
+    if (_cargo_grow_options(ctx, &ctx->options, &ctx->opt_count, &ctx->max_opts))
     {
         return NULL;
     }
@@ -5781,7 +5807,8 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
             o->custom = va_arg(ap, cargo_custom_f);
             o->custom_user = va_arg(ap, void *);
 
-            // Internal target.
+            // We use an internal target for custom variables, this will then
+            // be passed on to the callback as argv and argc.
             o->target = (void **)&o->custom_target;
             o->target_count = &o->custom_target_count;
 
@@ -5823,8 +5850,10 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
             o->custom_user = NULL;
             o->lenstr = 0;
             o->nargs = 0;
+
             o->target = (void **)&o->custom_target;
             o->target_count = &o->custom_target_count;
+
             nargs_is_set = 1;
             break;
         }
@@ -8780,8 +8809,8 @@ _TEST_START(TEST_many_groups)
 {
     size_t i = 0;
     size_t j = 0;
-    #define GROUP_COUNT 20
-    #define GROUP_OPT_COUNT 20
+    #define GROUP_COUNT (CARGO_DEFAULT_MAX_GROUPS * 8 - 1)
+    #define GROUP_OPT_COUNT (CARGO_DEFAULT_MAX_GROUP_OPTS * 3)
     int vals[GROUP_COUNT][GROUP_OPT_COUNT];
     char grpname[256];
     char title[256];
