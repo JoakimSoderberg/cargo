@@ -1476,7 +1476,7 @@ static char *_cargo_highlight_current_target_value(cargo_t ctx)
     return cargo_get_fprint_args(ctx->argc, ctx->argv, ctx->start,
                         _cargo_get_cflag(ctx), ctx->max_width,
                         2,
-                        ctx->i - 1, "^"CARGO_COLOR_YELLOW,
+                        ctx->i, "^"CARGO_COLOR_YELLOW,
                         ctx->j, "~"CARGO_COLOR_RED);
 }
 

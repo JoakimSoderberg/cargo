@@ -1325,7 +1325,7 @@ This sets the description shown first in the usage output, before the list of op
 
 ```c
 void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap);
-``
+```
 
 Variadic version of [`cargo_set_description`](api.md#cargo_set_description).
 
