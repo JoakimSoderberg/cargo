@@ -136,7 +136,7 @@ ghi
 
 Note that [`cargo_get_args`](api.md#cargo_get_args) returns a read only list that is internal to cargo. If you run [`cargo_parse`](api.md#cargo_parse) again the pointer may point to invalid data.
 
-If you instead want a complete copy of this list you can use [`cargo_parse_copy`](api.md#cargo_parse_copy) and free it yourself using [`cargo_free_commandline`](api.md#cargo_free_commandline).
+If you instead want a complete copy of this list you can use [`cargo_get_args_copy`](api.md#cargo_get_args_copy) and free it yourself using [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
 Unknown options
 ---------------

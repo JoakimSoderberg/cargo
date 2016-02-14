@@ -2036,7 +2036,7 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 
     if (opt->type == CARGO_BOOL)
     {
-        if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
+        if ((ret = _cargo_set_target_value(ctx, opt, name, NULL)) < 0)
         {
             CARGODBG(1, "Failed to set value for no argument option\n");
             return CARGO_PARSE_FAIL_OPT;
@@ -2056,8 +2056,7 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
             arg = argv[ctx->j];
         }
 
-        if ((ret = _cargo_set_target_value(ctx,
-                        opt, name, arg) < 0))
+        if ((ret = _cargo_set_target_value(ctx,  opt, name, arg) < 0))
         {
             CARGODBG(1, "Failed to set value for no argument option\n");
             return CARGO_PARSE_FAIL_OPT;
@@ -11232,6 +11231,22 @@ _TEST_START(TEST_cargo_static_list_alloced_items)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_zero_start_one_option)
+{
+    int b = 0;
+    char *args[] = { "--beta" };
+
+    ret |= cargo_add_option(cargo, 0, "--beta", NULL, "b", &b);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed");
+    cargo_assert(b == 1, "Expected b == 1");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
@@ -11411,7 +11426,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_default_str_add_fail2),
     CARGO_ADD_TEST(TEST_nearly_equal),
     CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg),
-    CARGO_ADD_TEST(TEST_cargo_static_list_alloced_items)
+    CARGO_ADD_TEST(TEST_cargo_static_list_alloced_items),
+    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
