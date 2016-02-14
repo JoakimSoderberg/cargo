@@ -213,11 +213,17 @@ char *str;
 ..., "s", &str);
 ```
 
+### Optional value
+
 If an option has an optional value, you can append `?`. If no value was specified on the commandline for the option, the extra string parameter is used `"0.5"` in the example below:
 ```c
-float val = 0.3f;
+float val;
 cargo_add_option(cargo, 0, "--opt", "description", "f?", &val, "0.5");
 ```
+
+That is `--opt` -> `val = 0.5f`, but `--opt 0.3` -> `val = 0.3f`.
+
+**Note** This should be used with care if you are also parsing positional parameters, since this might "eat" one of those:
 
 ### Booleans / flags
 
@@ -262,7 +268,7 @@ cargo_add_option(cargo, 0, "--verbosity -v", "Verbosity level",
 
 ```
 
-So `"-vvv"` would give a debug level of `INFO`.
+So `"-vvv"` would give a debug level of `INFO` (including `ERROR` and `WARN`).
 
 ### Arrays
 

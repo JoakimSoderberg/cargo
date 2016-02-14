@@ -871,8 +871,10 @@ typedef struct cargo_opt_s
     size_t bool_acc_count;              // Current index into the accumulate vals.
     size_t bool_acc_max_count;          // Number of accumulation values.
 
-    char *zero_or_one_default;  // Default value used for target value when
-
+    char *zero_or_one_default;  // Default value used for target value when 
+                                // CARGO_NARGS_ZERO_OR_ONE is used 
+                                // ('?' format character). This value is passed
+                                // by the caller.
     cargo_validation_t *validation; // Validation for target values.
     cargo_validation_flags_t validation_flags;
 } cargo_opt_t;
@@ -2047,12 +2049,16 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
         char *arg;
 
         if ((args_to_look_for == 0)
+            || (ctx->j >= ctx->argc)
             || _cargo_is_another_option(ctx, argv[ctx->j]))
         {
+            // When CARGO_NARGS_ZERO_OR_ONE ('?' format char) is used
+            // the caller has passed a default value when no value is given.
             arg = opt->zero_or_one_default;
         }
         else
         {
+            assert(ctx->j < ctx->argc);
             arg = argv[ctx->j];
         }
 
