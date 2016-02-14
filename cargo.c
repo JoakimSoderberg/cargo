@@ -11231,7 +11231,7 @@ _TEST_START(TEST_cargo_static_list_alloced_items)
 }
 _TEST_END()
 
-_TEST_START(TEST_cargo_zero_start_one_option)
+_TEST_START(TEST_cargo_zero_start_bool_option)
 {
     int b = 0;
     char *args[] = { "--beta" };
@@ -11247,6 +11247,55 @@ _TEST_START(TEST_cargo_zero_start_one_option)
 }
 _TEST_END()
 
+_TEST_START(TEST_cargo_zero_start_one_option)
+{
+    int b = 0;
+    char *args[] = { "--beta", "123" };
+
+    ret |= cargo_add_option(cargo, 0, "--beta", NULL, "i", &b);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed");
+    cargo_assert(b == 123, "Expected b == 123");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_zero_start_one_option_no_args)
+{
+    int b = 0;
+    char *args[] = { "--beta" };
+
+    ret |= cargo_add_option(cargo, 0, "--beta", NULL, "i", &b);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+    printf("ret == %d\n", ret);
+    cargo_assert(ret == CARGO_PARSE_MISS_REQUIRED, "Parse should fail");
+    cargo_assert(b == 0, "Expected b == 0");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START(TEST_cargo_zero_start_one_option_zero_or_none)
+{
+    int b = 0;
+    char *args[] = { "--beta" };
+
+    ret |= cargo_add_option(cargo, 0, "--beta", NULL, "i?", &b, "5");
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+    printf("ret == %d\n", ret);
+    cargo_assert(ret == 0, "Parse failed");
+    cargo_assert(b == 5, "Expected b == 5");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
 
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
@@ -11427,7 +11476,10 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_nearly_equal),
     CARGO_ADD_TEST(TEST_cargo_strdup_invalid_arg),
     CARGO_ADD_TEST(TEST_cargo_static_list_alloced_items),
-    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option)
+    CARGO_ADD_TEST(TEST_cargo_zero_start_bool_option),
+    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option),
+    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option_no_args),
+    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option_zero_or_none)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
