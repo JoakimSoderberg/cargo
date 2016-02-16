@@ -4932,6 +4932,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
     //  overwrite default or already parsed values)
     _cargo_cleanup_option_values(ctx, 0);
 
+    // TODO: Handle the case when argc == 0 (this will fail then).
     if (!(ctx->args = (char **)_cargo_calloc(argc, sizeof(char *))))
     {
         CARGODBG(1, "Out of memory!\n");
