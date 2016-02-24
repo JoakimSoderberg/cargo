@@ -1482,7 +1482,12 @@ static char *_cargo_highlight_current_target_value(cargo_t ctx)
                         ctx->j, "~"CARGO_COLOR_RED);
 }
 
-static void *_cargo_set_target_value_get_ptr(cargo_t ctx, cargo_opt_t *opt)
+//
+// This gets the start of the given options target pointer.
+// If we're parsing an array of allocated items this will allocate the
+// initial array we will read the values into.
+//
+static void *_cargo_get_initial_target_ptr(cargo_t ctx, cargo_opt_t *opt)
 {
     void *target = NULL;
 
@@ -1545,6 +1550,45 @@ static void *_cargo_set_target_value_get_ptr(cargo_t ctx, cargo_opt_t *opt)
 
     return target;
 }
+
+//
+// The target pointer is a void pointer that points to an array of whatever
+// the type the option is. This gives a pointer into this array based on
+// the target index we are at.
+//
+static void *_cargo_get_target_offset_ptr(cargo_t ctx, cargo_opt_t *opt, void *target)
+{
+    void *trg;
+
+    switch (opt->type)
+    {
+        case CARGO_BOOL:
+        case CARGO_INT:
+            trg = (void *)&((int *)target)[opt->target_idx];
+            break;
+        case CARGO_UINT:
+            trg = (void *)&((unsigned int *)target)[opt->target_idx];
+            break;
+        case CARGO_FLOAT:
+            trg = (void *)&((float *)target)[opt->target_idx];
+            break;
+        case CARGO_DOUBLE:
+            trg = (void *)&((double *)target)[opt->target_idx];
+            break;
+        case CARGO_LONGLONG:
+            trg = (void *)&((long long int *)target)[opt->target_idx];
+            break;
+        case CARGO_ULONGLONG:
+            trg = (void *)&((unsigned long long int *)target)[opt->target_idx];
+            break;
+        case CARGO_STRING:
+            trg = (void *)((char **)target)[opt->target_idx];
+            break;
+    }
+
+    return trg;
+}
+
 
 static void _cargo_set_target_value_bool(cargo_t ctx, cargo_opt_t *opt, void *target)
 {
@@ -1732,14 +1776,15 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
     CARGODBG(2, "  alloc: %d\n", opt->alloc);
     CARGODBG(2, "  nargs: %d\n", opt->nargs);
 
-    // Get a pointer to the value we currently want to change.
+    // Get a pointer to the value for the option we currently want to change.
     // If the target value is a pointer we're supposed to allocate
-    // this is done here as well.
-    if (!(target = _cargo_set_target_value_get_ptr(ctx, opt)))
+    // this is done here as well, if it was not done previously.
+    if (!(target = _cargo_get_initial_target_ptr(ctx, opt)))
     {
         return -1;
     }
 
+    // Parse the actual value we're parsing based on the option type.
     switch (opt->type)
     {
         case CARGO_BOOL:
@@ -1820,36 +1865,11 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         // Use validation function to verify target value.
         if (opt->validation)
         {
-            // Cast the current target index properly.
-            void *trg = NULL;
+            // Gets the offset into the target array given the option type.
+            // That is the value at "ctx->target_idx" into "target"
+            void *target_at_idx = _cargo_get_target_offset_ptr(ctx, opt, target);
 
-            switch (opt->type)
-            {
-                case CARGO_BOOL:
-                case CARGO_INT:
-                    trg = (void *)&((int *)target)[opt->target_idx];
-                    break;
-                case CARGO_UINT:
-                    trg = (void *)&((unsigned int *)target)[opt->target_idx];
-                    break;
-                case CARGO_FLOAT:
-                    trg = (void *)&((float *)target)[opt->target_idx];
-                    break;
-                case CARGO_DOUBLE:
-                    trg = (void *)&((double *)target)[opt->target_idx];
-                    break;
-                case CARGO_LONGLONG:
-                    trg = (void *)&((long long int *)target)[opt->target_idx];
-                    break;
-                case CARGO_ULONGLONG:
-                    trg = (void *)&((unsigned long long int *)target)[opt->target_idx];
-                    break;
-                case CARGO_STRING:
-                    trg = (void *)((char **)target)[opt->target_idx];
-                    break;
-            }
-
-            if (_cargo_validate_option_value(ctx, opt, trg))
+            if (_cargo_validate_option_value(ctx, opt, target_at_idx))
             {
                 CARGODBG(1, "Failed to validate \"%s\" for \"%s\"\n", val, opt->name[0]);
                 highlight = _cargo_highlight_current_target_value(ctx);
