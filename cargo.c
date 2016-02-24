@@ -2125,6 +2125,53 @@ static int _cargo_parse_option_with_args(cargo_t ctx,
     return 0;
 }
 
+static int _cargo_parse_option_custom(cargo_t ctx,
+                cargo_opt_t *opt,
+                const char *name)
+{
+    int custom_eaten = 0;
+
+    if (!opt->custom)
+        return 0;
+
+    // Set the value of the return count for the caller as well:
+    // ... "[c]#", callback_func, &data, &data_count, DATA_COUNT);
+    //                                   ^^^^^^^^^^^
+    if (opt->custom_user_count)
+    {
+        CARGODBG(3, "Set custom user count: %lu\n", opt->custom_target_count);
+        *opt->custom_user_count = opt->custom_target_count;
+    }
+
+    custom_eaten = opt->custom(ctx, opt->custom_user, opt->name[0],
+                                opt->custom_target_count, opt->custom_target);
+
+    if (custom_eaten < 0)
+    {
+        CARGODBG(1, "Custom callback indicated error\n");
+        return CARGO_PARSE_CALLBACK_ERR;
+    }
+
+    CARGODBG(2, "Custom call back ate: %d\n", custom_eaten);
+
+    return 0;
+}
+
+static void _cargo_parse_option_check_stop(cargo_t ctx, cargo_opt_t *opt)
+{
+    if (opt->flags & CARGO_OPT_STOP)
+    {
+        ctx->stopped = ctx->j;
+        CARGODBG(2, "%s: Stopping parse (index %d)\n", opt->name[0], ctx->stopped);
+
+        if (opt->flags & CARGO_OPT_STOP_HARD)
+        {
+            ctx->stopped_hard = 1;
+            CARGODBG(2, "%s: Stopping HARD (Mutex groups won't be checked)\n", opt->name[0]);
+        }
+    }
+}
+
 static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
                                 cargo_opt_t *opt,
                                 const char *name,
@@ -2179,51 +2226,23 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
         }
     }
 
-    opt->parsed = ctx->i;
+    opt->parsed = ctx->i; // Save the index we parsed this option at.
     opt->first_parse = 0; // This is not reset between calls to cargo_parse
-
-    // Number of arguments eaten.
-    opt->num_eaten = (ctx->j - start);
+    opt->num_eaten = (ctx->j - start); // Number of arguments eaten.
 
     CARGODBG(2, "_cargo_parse_option ate %d\n", opt->num_eaten);
 
-    // If we're parsing using a custom callback, pass it onto that.
-    if (opt->custom)
+    // If we're parsing using a custom callback, we have parsed the arguments
+    // above into internal storage, so here we pass that on to the custom parse
+    // function provided by the caller.
+    if ((ret = _cargo_parse_option_custom(ctx, opt, name)) < 0)
     {
-        int custom_eaten = 0;
-
-        // Set the value of the return count for the caller as well:
-        // ... "[c]#", callback_func, &data, &data_count, DATA_COUNT);
-        //                                   ^^^^^^^^^^^
-        if (opt->custom_user_count)
-        {
-            CARGODBG(3, "Set custom user count: %lu\n", opt->custom_target_count);
-            *opt->custom_user_count = opt->custom_target_count;
-        }
-
-        custom_eaten = opt->custom(ctx, opt->custom_user, opt->name[0],
-                                    opt->custom_target_count, opt->custom_target);
-
-        if (custom_eaten < 0)
-        {
-            CARGODBG(1, "Custom callback indicated error\n");
-            return CARGO_PARSE_CALLBACK_ERR;
-        }
-
-        CARGODBG(2, "Custom call back ate: %d\n", custom_eaten);
+        return ret;
     }
 
-    if (opt->flags & CARGO_OPT_STOP)
-    {
-        ctx->stopped = ctx->j;
-        CARGODBG(2, "%s: Stopping parse (index %d)\n", opt->name[0], ctx->stopped);
-
-        if (opt->flags & CARGO_OPT_STOP_HARD)
-        {
-            ctx->stopped_hard = 1;
-            CARGODBG(2, "%s: Stopping HARD (Mutex groups won't be checked)\n", opt->name[0]);
-        }
-    }
+    // Does this option have stop flags set which would stop us from
+    // parsing anymore.
+    _cargo_parse_option_check_stop(ctx, opt);
 
     return (opt->positional) ? opt->num_eaten : (opt->num_eaten + 1);
 }
