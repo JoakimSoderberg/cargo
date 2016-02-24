@@ -1900,6 +1900,11 @@ static int _cargo_is_another_option(cargo_t ctx, char *arg)
 static int _cargo_check_if_already_parsed(cargo_t ctx,
                                           cargo_opt_t *opt, const char *name)
 {
+    // It makes no sense to say that a positional argument
+    // is already parsed. Either it has eaten all its arguments or not.
+    if (opt->positional)
+        return 0;
+
     if (opt->parsed >= 0)
     {
         cargo_astr_t str;
@@ -1978,34 +1983,36 @@ static const char *_cargo_nargs_str(int nargs)
     }
 }
 
-static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
-                                cargo_opt_t *opt,
-                                const char *name,
-                                int argc, char **argv)
+static int _cargo_parse_option_get_start_index(cargo_t ctx, cargo_opt_t *opt)
 {
-    int ret;
-    int args_to_look_for;
-    int start = opt->positional ? ctx->i : (ctx->i + 1);
-
-    CARGODBG(2, "------ Parse option %s ------\n", opt->name[0]);
-    CARGODBG(2, "argc: %d\n", argc);
-    CARGODBG(2, "i: %d\n", ctx->i);
-    CARGODBG(2, "start: %d\n", start);
-    CARGODBG(2, "parsed: %d\n", opt->parsed);
-    CARGODBG(2, "positional: %d\n", opt->positional);
-
-    if (!opt->positional
-        && _cargo_check_if_already_parsed(ctx, opt, name))
+    if (opt->positional)
     {
-        return CARGO_PARSE_OPT_ALREADY_PARSED;
+        // We are not dealing with an option name, so we want to
+        // include the current argv into what we parse.
+        // "... a b c"
+        //      ^---- We are here and want to parse a, b and c.
+        return ctx->i;
     }
+    else
+    {
+        // We're parsing an option, so we want to exclude the
+        // option name itself from the next stuff we parse.
+        // " ... --opt a b c"
+        // exclude -^  ^--- start parsing here.
+        return (ctx->i + 1);
+    }
+}
+
+static int _cargo_parse_option_get_args_to_look_for(cargo_t ctx, cargo_opt_t *opt, int start)
+{
+    int args_to_look_for = 0;
 
     // Keep looking until the end of the argument list.
     if ((opt->nargs == CARGO_NARGS_ONE_OR_MORE) ||
         (opt->nargs == CARGO_NARGS_ZERO_OR_MORE) ||
         (opt->nargs == CARGO_NARGS_ZERO_OR_ONE))
     {
-        args_to_look_for = (argc - start);
+        args_to_look_for = (ctx->argc - start);
 
         switch (opt->nargs)
         {
@@ -2030,6 +2037,118 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
         args_to_look_for = ctx->argc - start;
     }
 
+    return args_to_look_for;
+}
+
+static int _cargo_parse_option_bool(cargo_t ctx,
+                cargo_opt_t *opt,
+                const char *name)
+{
+    int ret;
+
+    // TODO: Maybe move bool handling out of set_target_value
+    if ((ret = _cargo_set_target_value(ctx, opt, name, NULL)) < 0)
+    {
+        CARGODBG(1, "Failed to set value for no argument option\n");
+        return CARGO_PARSE_FAIL_OPT;
+    }
+
+    return 0;
+}
+
+static int _cargo_parse_option_zero_or_one(cargo_t ctx,
+                cargo_opt_t *opt,
+                const char *name,
+                int args_to_look_for)
+{
+    int ret;
+    char *arg;
+
+    if ((args_to_look_for == 0)
+        || (ctx->j >= ctx->argc)
+        || _cargo_is_another_option(ctx, ctx->argv[ctx->j]))
+    {
+        // When CARGO_NARGS_ZERO_OR_ONE ('?' format char) is used
+        // the caller has passed a default value when no value is given.
+        arg = opt->zero_or_one_default;
+    }
+    else
+    {
+        assert(ctx->j < ctx->argc);
+        arg = ctx->argv[ctx->j];
+    }
+
+    if ((ret = _cargo_set_target_value(ctx,  opt, name, arg) < 0))
+    {
+        CARGODBG(1, "Failed to set value for no argument option\n");
+        return CARGO_PARSE_FAIL_OPT;
+    }
+
+    return 0;
+}
+
+static int _cargo_parse_option_with_args(cargo_t ctx,
+                cargo_opt_t *opt,
+                const char *name,
+                int start,
+                int args_to_look_for)
+{
+    int ret = 0;
+
+    // Read until we find another option, or we've "eaten" the
+    // arguments we want.
+    for (ctx->j = start; ctx->j < (start + args_to_look_for); ctx->j++)
+    {
+        CARGODBG(3, "    argv[%i]: %s\n", ctx->j, ctx->argv[ctx->j]);
+
+        if (_cargo_is_another_option(ctx, ctx->argv[ctx->j]))
+        {
+            // We found another option, stop parsing arguments
+            // for this option.
+            CARGODBG(3, "%s", "    Found other option\n");
+            break;
+        }
+
+        if ((ret = _cargo_set_target_value(ctx, opt, name, ctx->argv[ctx->j])) < 0)
+        {
+            CARGODBG(1, "Failed to set target value for %s: \n", name);
+            return CARGO_PARSE_FAIL_OPT;
+        }
+
+        // If we have exceeded opt->max_target_count
+        // for CARGO_NARGS_ZERO_OR_MORE or CARGO_NARGS_ONE_OR_MORE
+        // we should stop so we don't eat all the remaining arguments.
+        if (ret)
+            break;
+    }
+
+    return 0;
+}
+
+static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
+                                cargo_opt_t *opt,
+                                const char *name,
+                                int argc, char **argv)
+{
+    // TODO: Split up into functions.
+    int ret;
+    int args_to_look_for;
+    int start = _cargo_parse_option_get_start_index(ctx, opt);
+
+    CARGODBG(2, "------ Parse option %s ------\n", opt->name[0]);
+    CARGODBG(2, "argc: %d\n", argc);
+    CARGODBG(2, "i: %d\n", ctx->i);
+    CARGODBG(2, "start: %d\n", start);
+    CARGODBG(2, "parsed: %d\n", opt->parsed);
+    CARGODBG(2, "positional: %d\n", opt->positional);
+
+    if (_cargo_check_if_already_parsed(ctx, opt, name))
+    {
+        return CARGO_PARSE_OPT_ALREADY_PARSED;
+    }
+
+    args_to_look_for = _cargo_parse_option_get_args_to_look_for(ctx, opt, start);
+
     CARGODBG(3, "Looking for %d args\n", args_to_look_for);
     CARGODBG(3, "Start %d, End %d (argc %d, nargs %d)\n",
             start, (start + args_to_look_for), argc, opt->nargs);
@@ -2038,63 +2157,25 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
 
     if (opt->type == CARGO_BOOL)
     {
-        if ((ret = _cargo_set_target_value(ctx, opt, name, NULL)) < 0)
+        if ((ret = _cargo_parse_option_bool(ctx, opt, name) < 0))
         {
-            CARGODBG(1, "Failed to set value for no argument option\n");
-            return CARGO_PARSE_FAIL_OPT;
+            return ret;
         }
     }
     else if (opt->nargs == CARGO_NARGS_ZERO_OR_ONE)
     {
-        char *arg;
-
-        if ((args_to_look_for == 0)
-            || (ctx->j >= ctx->argc)
-            || _cargo_is_another_option(ctx, argv[ctx->j]))
+        if ((ret = _cargo_parse_option_zero_or_one(ctx,
+                        opt, name, args_to_look_for)) < 0)
         {
-            // When CARGO_NARGS_ZERO_OR_ONE ('?' format char) is used
-            // the caller has passed a default value when no value is given.
-            arg = opt->zero_or_one_default;
-        }
-        else
-        {
-            assert(ctx->j < ctx->argc);
-            arg = argv[ctx->j];
-        }
-
-        if ((ret = _cargo_set_target_value(ctx,  opt, name, arg) < 0))
-        {
-            CARGODBG(1, "Failed to set value for no argument option\n");
-            return CARGO_PARSE_FAIL_OPT;
+            return ret;
         }
     }
     else
     {
-        // Read until we find another option, or we've "eaten" the
-        // arguments we want.
-        for (ctx->j = start; ctx->j < (start + args_to_look_for); ctx->j++)
+        if ((ret = _cargo_parse_option_with_args(ctx,
+                        opt, name, start, args_to_look_for)) < 0)
         {
-            CARGODBG(3, "    argv[%i]: %s\n", ctx->j, argv[ctx->j]);
-
-            if (_cargo_is_another_option(ctx, argv[ctx->j]))
-            {
-                // We found another option, stop parsing arguments
-                // for this option.
-                CARGODBG(3, "%s", "    Found other option\n");
-                break;
-            }
-
-            if ((ret = _cargo_set_target_value(ctx, opt, name, argv[ctx->j])) < 0)
-            {
-                CARGODBG(1, "Failed to set target value for %s: \n", name);
-                return CARGO_PARSE_FAIL_OPT;
-            }
-
-            // If we have exceeded opt->max_target_count
-            // for CARGO_NARGS_ZERO_OR_MORE or CARGO_NARGS_ONE_OR_MORE
-            // we should stop so we don't eat all the remaining arguments.
-            if (ret)
-                break;
+            return ret;
         }
     }
 
