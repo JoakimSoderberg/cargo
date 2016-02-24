@@ -1421,6 +1421,53 @@ void _cargo_option_destroy_validation(cargo_opt_t *o)
     }
 }
 
+//
+// The target pointer is a void pointer that points to an array of whatever
+// the type the option is. This gives a pointer into this array based on
+// the target index we are at.
+//
+static void *_cargo_get_target_offset_ptr(cargo_t ctx,
+                cargo_opt_t *opt, void *target, size_t i)
+{
+    void *trg;
+
+    switch (opt->type)
+    {
+        case CARGO_BOOL:
+        case CARGO_INT:
+            trg = (void *)&((int *)target)[i];
+            break;
+        case CARGO_UINT:
+            trg = (void *)&((unsigned int *)target)[i];
+            break;
+        case CARGO_FLOAT:
+            trg = (void *)&((float *)target)[i];
+            break;
+        case CARGO_DOUBLE:
+            trg = (void *)&((double *)target)[i];
+            break;
+        case CARGO_LONGLONG:
+            trg = (void *)&((long long int *)target)[i];
+            break;
+        case CARGO_ULONGLONG:
+            trg = (void *)&((unsigned long long int *)target)[i];
+            break;
+        case CARGO_STRING:
+            if (opt->alloc || opt->str_alloc_items)
+            {
+                trg = (void *)&((char **)target)[i];
+            }
+            else
+            {
+                // A fixed size array of fix sized strings.
+                trg = (void *)((char *)target + opt->target_idx * opt->lenstr);
+            }
+            break;
+    }
+
+    return trg;
+}
+
 int _cargo_validate_option_value(cargo_t ctx, cargo_opt_t *o, void *value)
 {
     assert(ctx);
@@ -1440,6 +1487,7 @@ int _cargo_validate_option_value(cargo_t ctx, cargo_opt_t *o, void *value)
 int _cargo_validate_option_values(cargo_t ctx, cargo_opt_t *o)
 {
     size_t i;
+    void *target_at_idx;
     assert(ctx);
     assert(o);
 
@@ -1448,7 +1496,9 @@ int _cargo_validate_option_values(cargo_t ctx, cargo_opt_t *o)
 
     for (i = 0; i < o->target_idx; i++)
     {
-        if (_cargo_validate_option_value(ctx, o, o->target[i]))
+        target_at_idx = _cargo_get_target_offset_ptr(ctx, o, o->target, i);
+
+        if (_cargo_validate_option_value(ctx, o, target_at_idx))
         {
             return i;
         }
@@ -1550,45 +1600,6 @@ static void *_cargo_get_initial_target_ptr(cargo_t ctx, cargo_opt_t *opt)
 
     return target;
 }
-
-//
-// The target pointer is a void pointer that points to an array of whatever
-// the type the option is. This gives a pointer into this array based on
-// the target index we are at.
-//
-static void *_cargo_get_target_offset_ptr(cargo_t ctx, cargo_opt_t *opt, void *target)
-{
-    void *trg;
-
-    switch (opt->type)
-    {
-        case CARGO_BOOL:
-        case CARGO_INT:
-            trg = (void *)&((int *)target)[opt->target_idx];
-            break;
-        case CARGO_UINT:
-            trg = (void *)&((unsigned int *)target)[opt->target_idx];
-            break;
-        case CARGO_FLOAT:
-            trg = (void *)&((float *)target)[opt->target_idx];
-            break;
-        case CARGO_DOUBLE:
-            trg = (void *)&((double *)target)[opt->target_idx];
-            break;
-        case CARGO_LONGLONG:
-            trg = (void *)&((long long int *)target)[opt->target_idx];
-            break;
-        case CARGO_ULONGLONG:
-            trg = (void *)&((unsigned long long int *)target)[opt->target_idx];
-            break;
-        case CARGO_STRING:
-            trg = (void *)((char **)target)[opt->target_idx];
-            break;
-    }
-
-    return trg;
-}
-
 
 static void _cargo_set_target_value_bool(cargo_t ctx, cargo_opt_t *opt, void *target)
 {
@@ -1707,7 +1718,7 @@ static void _cargo_set_target_value_bool(cargo_t ctx, cargo_opt_t *opt, void *ta
 }
 
 static int _cargo_set_target_value_string(cargo_t ctx,
-                cargo_opt_t *opt, void *target, char *val)
+                cargo_opt_t *opt, void *target_at_idx, char *val)
 {
     CARGODBG(2, "      string \"%s\"\n", val);
     if (opt->alloc)
@@ -1718,8 +1729,7 @@ static int _cargo_set_target_value_string(cargo_t ctx,
             //char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
             CARGODBG(2, "          COPY FULL STRING\n");
 
-            if (!(((char **)target)[opt->target_idx]
-                    = _cargo_strdup(val)))
+            if (!(*((char **)target_at_idx) = _cargo_strdup(val)))
             {
                 return -1;
             }
@@ -1727,8 +1737,7 @@ static int _cargo_set_target_value_string(cargo_t ctx,
         else
         {
             CARGODBG(2, "          MAX LENGTH: %lu\n", opt->lenstr);
-            if (!(((char **)target)[opt->target_idx]
-                    = cargo_strndup(val, opt->lenstr)))
+            if (!(*((char **)target_at_idx) = cargo_strndup(val, opt->lenstr)))
             {
                 return -1;
             }
@@ -1739,15 +1748,14 @@ static int _cargo_set_target_value_string(cargo_t ctx,
         // Special case for static lists of allocated strings:
         //  char *strs[5];
         CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST %lu\n", opt->target_idx);
-        CARGODBG(2, "          loc: %p\n", &((char **)target)[opt->target_idx]);
-        if (!(((char **)target)[opt->target_idx] = _cargo_strdup(val)))
+        if (!(*((char **)target_at_idx) =  _cargo_strdup(val)))
         {
             return -1;
         }
     }
     else // static string.
     {
-        char *t = (char *)((char *)target + opt->target_idx * opt->lenstr);
+        char *t = (char *)target_at_idx;
         CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
         strncpy(t, val, opt->lenstr);
         CARGODBG(2, "       \"%s\"\n", t);
@@ -1760,6 +1768,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
                                     const char *name, char *val)
 {
     void *target;
+    void *target_at_idx;
     char *end = NULL;
     assert(ctx);
     assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_ULONGLONG));
@@ -1784,6 +1793,11 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         return -1;
     }
 
+    // Gets the offset into the target array given the option type.
+    // That is the value at "ctx->target_idx" into "target"
+    target_at_idx = _cargo_get_target_offset_ptr(ctx, opt, target, opt->target_idx);
+    assert(target_at_idx != NULL);
+
     // Parse the actual value we're parsing based on the option type.
     switch (opt->type)
     {
@@ -1796,41 +1810,41 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         case CARGO_INT:
         {
             CARGODBG(2, "      int %s\n", val);
-            ((int *)target)[opt->target_idx] = strtol(val, &end, 10);
+            *((int *)target_at_idx) = strtol(val, &end, 10);
             break;
         }
         case CARGO_UINT:
         {
             CARGODBG(2, "      uint %s\n", val);
-            ((unsigned int *)target)[opt->target_idx] = strtoul(val, &end, 10);
+            *((unsigned int *)target_at_idx) = strtoul(val, &end, 10);
             break;
         }
         case CARGO_LONGLONG:
         {
             CARGODBG(2, "      long long %s\n", val);
-            ((long long int *)target)[opt->target_idx] = strtoll(val, &end, 10);
+            *((long long int *)target_at_idx) = strtoll(val, &end, 10);
             break;
         }
         case CARGO_ULONGLONG:
         {
             CARGODBG(2, "      unsigned long long %s\n", val);
-            ((unsigned long long int *)target)[opt->target_idx] = strtoull(val, &end, 10);
+            *((unsigned long long int *)target_at_idx) = strtoull(val, &end, 10);
             break;
         }
         case CARGO_FLOAT:
         {
             CARGODBG(2, "      float %s\n", val);
-            ((float *)target)[opt->target_idx] = (float)strtof(val, &end);
+            *((float *)target_at_idx) = (float)strtof(val, &end);
             break;
         }
         case CARGO_DOUBLE:
         {
             CARGODBG(2, "      double %s\n", val);
-            ((double *)target)[opt->target_idx] = (double)strtod(val, &end);
+            *((double *)target_at_idx) = (double)strtod(val, &end);
             break;
         }
         case CARGO_STRING:
-            if (_cargo_set_target_value_string(ctx, opt, target, val))
+            if (_cargo_set_target_value_string(ctx, opt, target_at_idx, val))
             {
                 return -1;
             }
@@ -1865,9 +1879,13 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         // Use validation function to verify target value.
         if (opt->validation)
         {
-            // Gets the offset into the target array given the option type.
-            // That is the value at "ctx->target_idx" into "target"
-            void *target_at_idx = _cargo_get_target_offset_ptr(ctx, opt, target);
+            // We want the validation function to always get a consistant
+            // pointer for all types of values. However strings are special,
+            // since they can point to a static string as well.
+            if (opt->type == CARGO_STRING)
+            {
+                target_at_idx = *(char **)target_at_idx;
+            }
 
             if (_cargo_validate_option_value(ctx, opt, target_at_idx))
             {
@@ -10953,7 +10971,7 @@ _TEST_END()
         if (dofail) cargo_assert(ret < 0, "Expected parse failure for " #val);\
         else  cargo_assert(ret == 0, "Failed to parse");                    \
     } while (0)
-
+ 
 _TEST_START(TEST_int_range_validation)
 {
     int a = 0;
@@ -11064,6 +11082,26 @@ _TEST_START(TEST_choices_validation_case_sensitive)
     _CARGO_TEST_VALIDATE_VALUE(klmn, 1);
     _CARGO_TEST_VALIDATE_VALUE(ABC, 1);
     _CARGO_TEST_VALIDATE_VALUE(DEF, 1);
+    _TEST_CLEANUP();
+    _cargo_xfree(&str);
+}
+_TEST_END()
+
+_TEST_START(TEST_choices_validation_static_str)
+{
+    char str[32];
+
+    ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, ".s#", &str, sizeof(str));
+    cargo_assert(ret == 0, "Failed to add option");
+    ret = cargo_add_validation(cargo, 0, "--alpha",
+            cargo_validate_choices(0, CARGO_STRING, 2, "abc", "def"));
+    cargo_assert(ret == 0, "Failed to add validation");
+
+    _CARGO_TEST_VALIDATE_VALUE(abc, 0);
+    _CARGO_TEST_VALIDATE_VALUE(def, 0);
+    _CARGO_TEST_VALIDATE_VALUE(klmn, 1);
+    _CARGO_TEST_VALIDATE_VALUE(ABC, 0);
+    _CARGO_TEST_VALIDATE_VALUE(DEF, 0);
     _TEST_CLEANUP();
     _cargo_xfree(&str);
 }
@@ -11618,6 +11656,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_ulonglong_range_validation),
     CARGO_ADD_TEST(TEST_choices_validation),
     CARGO_ADD_TEST(TEST_choices_validation_case_sensitive),
+    CARGO_ADD_TEST(TEST_choices_validation_static_str),
     CARGO_ADD_TEST(TEST_choices_validation_int),
     CARGO_ADD_TEST(TEST_choices_validation_uint),
     CARGO_ADD_TEST(TEST_choices_validation_float),
