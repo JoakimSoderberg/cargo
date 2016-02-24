@@ -1482,25 +1482,9 @@ static char *_cargo_highlight_current_target_value(cargo_t ctx)
                         ctx->j, "~"CARGO_COLOR_RED);
 }
 
-static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
-                                    const char *name, char *val)
+static void *_cargo_set_target_value_get_ptr(cargo_t ctx, cargo_opt_t *opt)
 {
-    void *target;
-    char *end = NULL;
-    assert(ctx);
-    assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_ULONGLONG));
-
-    if ((opt->type != CARGO_BOOL)
-        && (opt->target_idx >= opt->max_target_count))
-    {
-        CARGODBG(1, "Target index out of bounds (%lu > max %lu)\n",
-                opt->target_idx, opt->max_target_count);
-        return 1;
-    }
-
-    CARGODBG(2, "_cargo_set_target_value:\n");
-    CARGODBG(2, "  alloc: %d\n", opt->alloc);
-    CARGODBG(2, "  nargs: %d\n", opt->nargs);
+    void *target = NULL;
 
     // If number of arguments is just 1 don't allocate an array
     // (Except for custom callback, then we always use an array
@@ -1532,8 +1516,7 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
             if (!(new_target = (void **)_cargo_calloc(alloc_count,
                         _cargo_get_type_size(opt->type))))
             {
-                CARGODBG(1, "Out of memory!\n");
-                return -1;
+                CARGODBG(1, "Out of memory!\n"); return NULL;
             }
 
             CARGODBG(3, "Allocated %dx %s!\n",
@@ -1560,122 +1543,209 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         target = (void *)opt->target;
     }
 
+    return target;
+}
+
+static void _cargo_set_target_value_bool(cargo_t ctx, cargo_opt_t *opt, void *target)
+{
+    int *val = &((int *)target)[opt->target_idx];
+    CARGODBG(2, "      bool\n");
+
+    // TODO: This could be more general to support
+    //       short command lines bundled together:
+    //       "-vaet" same as "-v -a -e -t"...
+
+    // If BOOL COUNT is turned on, we allow multiple occurances of
+    // a bool option. "-v -v -v" will be parsed as 3.
+    if (opt->bool_count)
+    {
+        char *arg = ctx->argv[ctx->i];
+        CARGODBG(2, "        bool count enabled\n");
+
+        // We can specify it as "-vvv" as well.
+        if (!_cargo_is_option_name(ctx, opt, arg)
+          && _cargo_is_option_name_compact(ctx, opt, arg))
+        {
+            int amount;
+            CARGODBG(2, "          Compact %s\n", arg);
+            arg += strspn(arg, ctx->prefix);
+            amount = (int)strlen(arg);
+            CARGODBG(2, "              %d\n", amount);
+            (*val) += amount;
+        }
+        else
+        {
+            CARGODBG(2, "          Normal\n");
+            (*val)++;
+        }
+    }
+    else if (opt->bool_acc)
+    {
+        // TODO: Maybe move all this complexity from
+        // handling -vvv as a special case here, to instead expanding it
+        // at the beginning of the parse... "-vvv" -> "-v", "-v", "-v"
+        size_t count;
+        int acc_val;
+        size_t i = 0;
+        char *arg = ctx->argv[ctx->i];
+        CARGODBG(2, "           ARG: %s\n", arg);
+
+        // "-vvv" support.
+        if (!_cargo_is_option_name(ctx, opt, arg)
+          && _cargo_is_option_name_compact(ctx, opt, arg))
+        {
+            CARGODBG(2, "          Compact %s\n", arg);
+            arg += strspn(arg, ctx->prefix);
+            count = strlen(arg);
+            CARGODBG(2, "              %lu\n", count);
+        }
+        else
+        {
+            count = 1;
+        }
+
+        for (i = opt->bool_acc_count;
+            (i < opt->bool_acc_count + count)
+            && (i < opt->bool_acc_max_count);
+            i++)
+        {
+            acc_val = opt->bool_acc[i];
+
+            CARGODBG(2, "       %lu Bool acc %x\n", i, acc_val);
+            switch (opt->bool_acc_op)
+            {
+                case CARGO_BOOL_OP_OR:
+                {
+                    CARGODBG(2, "       OR\n");
+                    *val |= acc_val;
+                    break;
+                }
+                case CARGO_BOOL_OP_AND:
+                {
+                    CARGODBG(2, "       AND\n");
+                    *val &= acc_val;
+                    break;
+                }
+                case CARGO_BOOL_OP_PLUS:
+                {
+                    CARGODBG(2, "       PLUS\n");
+                    *val += acc_val;
+                    break;
+                }
+                case CARGO_BOOL_OP_STORE:
+                {
+                    CARGODBG(2, "       STORE\n");
+                    *val = acc_val;
+                    break;
+                }
+                default:
+                {
+                    CARGODBG(1, "Got unknown operation\n");
+                    break;
+                }
+            }
+        }
+
+        opt->bool_acc_count = i;
+
+        if (opt->bool_acc_count >= opt->bool_acc_max_count)
+        {
+            CARGODBG(2, "       Bool acc reached maxcount %lu\n",
+                    opt->bool_acc_max_count);
+            return;
+        }
+    }
+    else
+    {
+        CARGODBG(2, "       No bool count\n");
+        *val = opt->bool_store;
+    }
+}
+
+static int _cargo_set_target_value_string(cargo_t ctx,
+                cargo_opt_t *opt, void *target, char *val)
+{
+    CARGODBG(2, "      string \"%s\"\n", val);
+    if (opt->alloc)
+    {
+        CARGODBG(2, "       ALLOCATED STRING\n");
+        if (opt->lenstr == 0)
+        {
+            //char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
+            CARGODBG(2, "          COPY FULL STRING\n");
+
+            if (!(((char **)target)[opt->target_idx]
+                    = _cargo_strdup(val)))
+            {
+                return -1;
+            }
+        }
+        else
+        {
+            CARGODBG(2, "          MAX LENGTH: %lu\n", opt->lenstr);
+            if (!(((char **)target)[opt->target_idx]
+                    = cargo_strndup(val, opt->lenstr)))
+            {
+                return -1;
+            }
+        }
+    }
+    else if (opt->str_alloc_items)
+    {
+        // Special case for static lists of allocated strings:
+        //  char *strs[5];
+        CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST %lu\n", opt->target_idx);
+        CARGODBG(2, "          loc: %p\n", &((char **)target)[opt->target_idx]);
+        if (!(((char **)target)[opt->target_idx] = _cargo_strdup(val)))
+        {
+            return -1;
+        }
+    }
+    else // static string.
+    {
+        char *t = (char *)((char *)target + opt->target_idx * opt->lenstr);
+        CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
+        strncpy(t, val, opt->lenstr);
+        CARGODBG(2, "       \"%s\"\n", t);
+    }
+
+    return 0;
+}
+
+static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
+                                    const char *name, char *val)
+{
+    void *target;
+    char *end = NULL;
+    assert(ctx);
+    assert((opt->type >= CARGO_BOOL) && (opt->type <= CARGO_ULONGLONG));
+
+    if ((opt->type != CARGO_BOOL)
+        && (opt->target_idx >= opt->max_target_count))
+    {
+        CARGODBG(1, "Target index out of bounds (%lu > max %lu)\n",
+                opt->target_idx, opt->max_target_count);
+        return 1;
+    }
+
+    CARGODBG(2, "_cargo_set_target_value:\n");
+    CARGODBG(2, "  alloc: %d\n", opt->alloc);
+    CARGODBG(2, "  nargs: %d\n", opt->nargs);
+
+    // Get a pointer to the value we currently want to change.
+    // If the target value is a pointer we're supposed to allocate
+    // this is done here as well.
+    if (!(target = _cargo_set_target_value_get_ptr(ctx, opt)))
+    {
+        return -1;
+    }
+
     switch (opt->type)
     {
         case CARGO_BOOL:
         {
-            int *val = &((int *)target)[opt->target_idx];
-            CARGODBG(2, "      bool\n");
-
-            // TODO: This could be more general to support
-            //       short command lines bundled together:
-            //       "-vaet" same as "-v -a -e -t"...
-
-            // If BOOL COUNT is turned on, we allow multiple occurances of
-            // a bool option. "-v -v -v" will be parsed as 3.
-            if (opt->bool_count)
-            {
-                char *arg = ctx->argv[ctx->i];
-                CARGODBG(2, "        bool count enabled\n");
-
-                // We can specify it as "-vvv" as well.
-                if (!_cargo_is_option_name(ctx, opt, arg)
-                  && _cargo_is_option_name_compact(ctx, opt, arg))
-                {
-                    int amount;
-                    CARGODBG(2, "          Compact %s\n", arg);
-                    arg += strspn(arg, ctx->prefix);
-                    amount = (int)strlen(arg);
-                    CARGODBG(2, "              %d\n", amount);
-                    (*val) += amount;
-                }
-                else
-                {
-                    CARGODBG(2, "          Normal\n");
-                    (*val)++;
-                }
-            }
-            else if (opt->bool_acc)
-            {
-                // TODO: Maybe move all this complexity from
-                // handling -vvv as a special case here, to instead expanding it
-                // at the beginning of the parse... "-vvv" -> "-v", "-v", "-v"
-                size_t count;
-                int acc_val;
-                size_t i = 0;
-                char *arg = ctx->argv[ctx->i];
-                CARGODBG(2, "           ARG: %s\n", arg);
-
-                // "-vvv" support.
-                if (!_cargo_is_option_name(ctx, opt, arg)
-                  && _cargo_is_option_name_compact(ctx, opt, arg))
-                {
-                    CARGODBG(2, "          Compact %s\n", arg);
-                    arg += strspn(arg, ctx->prefix);
-                    count = strlen(arg);
-                    CARGODBG(2, "              %lu\n", count);
-                }
-                else
-                {
-                    count = 1;
-                }
-
-                for (i = opt->bool_acc_count;
-                    (i < opt->bool_acc_count + count)
-                    && (i < opt->bool_acc_max_count);
-                    i++)
-                {
-                    acc_val = opt->bool_acc[i];
-
-                    CARGODBG(2, "       %lu Bool acc %x\n", i, acc_val);
-                    switch (opt->bool_acc_op)
-                    {
-                        case CARGO_BOOL_OP_OR:
-                        {
-                            CARGODBG(2, "       OR\n");
-                            *val |= acc_val;
-                            break;
-                        }
-                        case CARGO_BOOL_OP_AND:
-                        {
-                            CARGODBG(2, "       AND\n");
-                            *val &= acc_val;
-                            break;
-                        }
-                        case CARGO_BOOL_OP_PLUS:
-                        {
-                            CARGODBG(2, "       PLUS\n");
-                            *val += acc_val;
-                            break;
-                        }
-                        case CARGO_BOOL_OP_STORE:
-                        {
-                            CARGODBG(2, "       STORE\n");
-                            *val = acc_val;
-                            break;
-                        }
-                        default:
-                        {
-                            CARGODBG(1, "Got unknown operation\n");
-                            break;
-                        }
-                    }
-                }
-
-                opt->bool_acc_count = i;
-
-                if (opt->bool_acc_count >= opt->bool_acc_max_count)
-                {
-                    CARGODBG(2, "       Bool acc reached maxcount %lu\n",
-                            opt->bool_acc_max_count);
-                    break;
-                }
-            }
-            else
-            {
-                CARGODBG(2, "       No bool count\n");
-                *val = opt->bool_store;
-            }
+            // TODO: This could be handled separately to avoid all the != CARGO_BOOL checks.
+            _cargo_set_target_value_bool(ctx, opt, target);
             break;
         }
         case CARGO_INT:
@@ -1715,48 +1785,9 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
             break;
         }
         case CARGO_STRING:
-            CARGODBG(2, "      string \"%s\"\n", val);
-            if (opt->alloc)
+            if (_cargo_set_target_value_string(ctx, opt, target, val))
             {
-                CARGODBG(2, "       ALLOCATED STRING\n");
-                if (opt->lenstr == 0)
-                {
-                    //char **t = (char **)((char *)target + opt->target_idx * sizeof(char *));
-                    CARGODBG(2, "          COPY FULL STRING\n");
-
-                    if (!(((char **)target)[opt->target_idx]
-                            = _cargo_strdup(val)))
-                    {
-                        return -1;
-                    }
-                }
-                else
-                {
-                    CARGODBG(2, "          MAX LENGTH: %lu\n", opt->lenstr);
-                    if (!(((char **)target)[opt->target_idx]
-                            = cargo_strndup(val, opt->lenstr)))
-                    {
-                        return -1;
-                    }
-                }
-            }
-            else if (opt->str_alloc_items)
-            {
-                // Special case for static lists of allocated strings:
-                //  char *strs[5];
-                CARGODBG(2, "          COPY FULL STRING INTO STATIC LIST %lu\n", opt->target_idx);
-                CARGODBG(2, "          loc: %p\n", &((char **)target)[opt->target_idx]);
-                if (!(((char **)target)[opt->target_idx] = _cargo_strdup(val)))
-                {
-                    return -1;
-                }
-            }
-            else // static string.
-            {
-                char *t = (char *)((char *)target + opt->target_idx * opt->lenstr);
-                CARGODBG(2, "       STATIC STRING, bufsize = %lu\n", opt->lenstr);
-                strncpy(t, val, opt->lenstr);
-                CARGODBG(2, "       \"%s\"\n", t);
+                return -1;
             }
             break;
     }
