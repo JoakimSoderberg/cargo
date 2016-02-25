@@ -1844,11 +1844,13 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
             break;
         }
         case CARGO_STRING:
+        {
             if (_cargo_set_target_value_string(ctx, opt, target_at_idx, val))
             {
                 return -1;
             }
             break;
+        }
     }
 
     // Error checks.
@@ -1884,7 +1886,13 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
             // since they can point to a static string as well.
             if (opt->type == CARGO_STRING)
             {
-                target_at_idx = *(char **)target_at_idx;
+                // For static strings we already just treat
+                // the target pointer as a char * so only 
+                // deference this when we're allocating.
+                if (opt->alloc || opt->str_alloc_items)
+                {
+                    target_at_idx = *(char **)target_at_idx;
+                }
             }
 
             if (_cargo_validate_option_value(ctx, opt, target_at_idx))
@@ -11107,6 +11115,64 @@ _TEST_START(TEST_choices_validation_static_str)
 }
 _TEST_END()
 
+_TEST_START(TEST_choices_validation_static_str_list)
+{
+    char strs[3][3];
+    size_t str_count = 0;
+
+    ret = cargo_add_option(cargo, 0, "--alpha -a",
+            NULL, ".[s#]+", &strs, 3, &str_count, 3);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_add_validation(cargo, 0, "--alpha",
+            cargo_validate_choices(0, CARGO_STRING, 2, "abc", "def"));
+    cargo_assert(ret == 0, "Failed to add validation");
+
+    {
+        char *args[] = { "program", "--alpha", "abc", "def" };
+        ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+        cargo_assert(ret == 0, "Failed to parse");
+    }
+
+    {
+        char *args[] = { "program", "--alpha", "abc", "ea" };
+        ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+        cargo_assert(ret < 0, "Expected to fail to parse");
+    }
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
+_TEST_START_EX(TEST_choices_validation_str_list, CARGO_AUTOCLEAN)
+{
+    char **strs = NULL;
+    size_t str_count = 0;
+
+    ret = cargo_add_option(cargo, 0, "--alpha -a",
+            NULL, "[s]+", &strs, &str_count);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_add_validation(cargo, 0, "--alpha",
+            cargo_validate_choices(0, CARGO_STRING, 2, "abc", "def"));
+    cargo_assert(ret == 0, "Failed to add validation");
+
+    {
+        char *args[] = { "program", "--alpha", "abc", "def" };
+        ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+        cargo_assert(ret == 0, "Failed to parse");
+    }
+
+    {
+        char *args[] = { "program", "--alpha", "abc", "ea" };
+        ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+        cargo_assert(ret < 0, "Expected to fail to parse");
+    }
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 _TEST_START(TEST_choices_validation_int)
 {
     int a;
@@ -11657,6 +11723,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_choices_validation),
     CARGO_ADD_TEST(TEST_choices_validation_case_sensitive),
     CARGO_ADD_TEST(TEST_choices_validation_static_str),
+    CARGO_ADD_TEST(TEST_choices_validation_static_str_list),
+    CARGO_ADD_TEST(TEST_choices_validation_str_list),
     CARGO_ADD_TEST(TEST_choices_validation_int),
     CARGO_ADD_TEST(TEST_choices_validation_uint),
     CARGO_ADD_TEST(TEST_choices_validation_float),
