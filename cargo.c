@@ -1853,6 +1853,14 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
         }
     }
 
+    opt->target_idx++;
+    CARGODBG(3, "UPDATED TARGET INDEX: %lu\n", opt->target_idx);
+
+    if (opt->target_count)
+    {
+        *opt->target_count = opt->target_idx;
+    }
+
     // Error checks.
     {
         cargo_astr_t str;
@@ -1916,14 +1924,6 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
                 return -1;
             }
         }
-    }
-
-    opt->target_idx++;
-    CARGODBG(3, "UPDATED TARGET INDEX: %lu\n", opt->target_idx);
-
-    if (opt->target_count)
-    {
-        *opt->target_count = opt->target_idx;
     }
 
     return 0;
