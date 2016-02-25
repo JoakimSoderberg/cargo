@@ -32,7 +32,7 @@ matrix:
       env: CARGO_METHOD=coveralls CMAKE_ARGS="-DCARGO_WITH_MEMCHECK=OFF -DCARGO_COVERALLS=ON -DCARGO_TEST=ON -DCMAKE_BUILD_TYPE=Debug"
 install:
   - if [ x$TRAVIS_OS_NAME == xlinux ]; then sudo apt-get -qq -y update && sudo apt-get install valgrind; fi
-  - if [ x$TRAVIS_OS_NAME == xosx ]; then brew install --HEAD valgrind; fi
+  - if [ x$TRAVIS_OS_NAME == xosx ]; then brew install valgrind; fi
 script:
   - if [ "$COVERITY_SCAN_BRANCH" != 1 ]; then mkdir build && cd build && cmake -DCARGO_DEBUG=4 $CMAKE_ARGS .. && make && ctest --output-on-failure; fi
   - if [ "$COVERITY_SCAN_BRANCH" != 1 ] && [ "$CARGO_METHOD" == "coveralls" ]; then cmake -DCARGO_DEBUG=0 .. && make && make coveralls; fi
