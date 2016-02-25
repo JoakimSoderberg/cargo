@@ -11111,7 +11111,6 @@ _TEST_START(TEST_choices_validation_static_str)
     _CARGO_TEST_VALIDATE_VALUE(ABC, 0);
     _CARGO_TEST_VALIDATE_VALUE(DEF, 0);
     _TEST_CLEANUP();
-    _cargo_xfree(&str);
 }
 _TEST_END()
 
@@ -11119,6 +11118,7 @@ _TEST_START(TEST_choices_validation_static_str_list)
 {
     char strs[3][3];
     size_t str_count = 0;
+    memset(strs, 0, sizeof(strs));
 
     ret = cargo_add_option(cargo, 0, "--alpha -a",
             NULL, ".[s#]+", &strs, 3, &str_count, 3);
