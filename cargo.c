@@ -5067,6 +5067,15 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
     return 0;
 }
 
+static int _cargo_add_extra_arg(cargo_t ctx)
+{
+    CARGODBG(2, "    Extra argument: %s\n", ctx->argv[ctx->i]);
+    ctx->args[ctx->arg_count] = ctx->argv[ctx->i];
+    ctx->arg_count++;
+
+    return 1;
+}
+
 int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, char **argv)
 {
     int ret = CARGO_PARSE_OK;
@@ -5076,6 +5085,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
     const char *name = NULL;
     cargo_opt_t *opt = NULL;
     cargo_flags_t global_flags = ctx->flags;
+    assert(ctx);
 
     // Override if any flags are set.
     if (flags)
@@ -5153,42 +5163,42 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
 
         // TODO: Add support for abbreviated prefix matching so that
         // --ar will match --arne unless it's ambigous with some other option.
-        if (!ctx->stopped && (name = _cargo_check_options(ctx, &opt, arg)))
-        {
-            // We found an option, parse any arguments it might have.
-            if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
-                                                    argc, argv)) < 0)
-            {
-                CARGODBG(1, "Failed to parse %s option: %s\n",
-                        _cargo_type_to_str(opt->type), name);
-                ret = opt_arg_count; goto fail;
-            }
-        }
-        else
+        if (!ctx->stopped)
         {
             size_t opt_i = 0;
-            CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+            int is_positional = 0;
 
-            // Positional argument.
-            if (!ctx->stopped && (_cargo_get_positional(ctx, &opt_i) == 0))
+            // Look for options "--myoption 1 2 3"
+            if (!(name = _cargo_check_options(ctx, &opt, arg)))
             {
+                // Or a positional argument "1 2 3"
+                // (just an argument that is parsed into a specific options target)
+                is_positional = !_cargo_get_positional(ctx, &opt_i);
                 opt = &ctx->options[opt_i];
-                if ((opt_arg_count = _cargo_parse_option(ctx, opt,
-                                                    opt->name[0],
-                                                    argc, argv)) < 0)
+                CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+            }
+
+            if (name || is_positional)
+            {
+                // We found an option, parse any arguments it might have.
+                if ((opt_arg_count = _cargo_parse_option(ctx, opt, name,
+                                                        argc, argv)) < 0)
                 {
-                    CARGODBG(1, "    Failed to parse %s option: %s\n",
-                            _cargo_type_to_str(opt->type), name);
+                    CARGODBG(1, "Failed to parse %s option: %s\n",
+                            _cargo_type_to_str(opt->type), opt->name[0]);
                     ret = opt_arg_count; goto fail;
                 }
             }
             else
             {
-                CARGODBG(2, "    Extra argument: %s\n", argv[ctx->i]);
-                ctx->args[ctx->arg_count] = argv[ctx->i];
-                ctx->arg_count++;
-                opt_arg_count = 1;
+                // A leftover argument that no option wants.
+                opt_arg_count = _cargo_add_extra_arg(ctx);
             }
+        }
+        else
+        {
+            // Stopped parsing, so everything is saved as extra arguments.
+            opt_arg_count = _cargo_add_extra_arg(ctx);
         }
 
         ctx->i += opt_arg_count;
