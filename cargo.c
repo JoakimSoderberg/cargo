@@ -11116,7 +11116,7 @@ _TEST_END()
 
 _TEST_START(TEST_choices_validation_static_str_list)
 {
-    char strs[3][3];
+    char strs[4][4];
     size_t str_count = 0;
     memset(strs, 0, sizeof(strs));
 
