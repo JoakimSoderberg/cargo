@@ -11,13 +11,19 @@ cargo API reference
 
 If this is set, `cargo.h` will `#include cargo_config.h` where you can override any of the default macros below. So that you can leave `cargo.h` untouched.
 
+---
+
 ### `CARGO_NAME_COUNT` ###
 
 The max number of names allowed for an option. Defines how many names and aliases any given option is allowed to have.
 
+---
+
 ### `CARGO_DEFAULT_PREFIX` ###
 
 This defines the default prefix characters for options. Note that this can also be changed using [`cargo_set_prefix`](api.md#cargo_set_prefix).
+
+---
 
 ### `CARGO_DEFAULT_MAX_OPTS` ###
 
@@ -25,23 +31,33 @@ The default start value for the max number of options. If more options are added
 
 This can also be changed using the function [`cargo_set_option_count_hint`](api.md#cargo_set_option_count_hint)
 
+---
+
 ### `CARGO_DEFAULT_MAX_WIDTH` ###
 
 The default max width for the usage output if we cannot get the console width from the operating system. By default the max width is set to [`CARGO_AUTO_MAX_WIDTH`](api.md#cargo_auto_max_width).
 
 This is used by [`cargo_set_max_width`](api.md#cargo_set_max_width).
 
+---
+
 ### `CARGO_AUTO_MAX_WIDTH` ###
 
 Sets the max width for the usage output to the console width.
+
+---
 
 ### `CARGO_MAX_MAX_WIDTH` ###
 
 The absolute max console width allowed, any value set via [`cargo_set_max_width`](api.md#cargo_set_max_width), will be capped to this.
 
+---
+
 ### `CARGO_MAX_OPT_MUTEX_GROUP` ###
 
 The max number of mutex groups an option is allowed to be a member of.
+
+---
 
 cargo version
 -------------
@@ -50,17 +66,25 @@ cargo version
 
 The major version of cargo. Example: **1**.2.3
 
+---
+
 ### `CARGO_MINOR_VERSION` ###
 
 The minor version of cargo. Example: 1.**2**.3
+
+---
 
 ### `CARGO_PATCH_VERSION` ###
 
 The patch version of cargo. Example: 1.2.**3**
 
+---
+
 ### `CARGO_RELEASE` ###
 
 If this is a release build, this will be set to `0`. Otherwise it is a development build.
+
+---
 
 ### `CARGO_VERSION` ###
 
@@ -91,9 +115,13 @@ And check for specific capabilities based on version:
 ...
 ```
 
+---
+
 ### `CARGO_VERSION_STR` ###
 
 The cargo version as a string. Example: `"0.2.0"`.
+
+---
 
 ### cargo_get_version ###
 
@@ -102,6 +130,8 @@ const char *cargo_get_version()
 ```
 
 Function that gets the cargo version as a string. Example: `"0.2.0"`.
+
+---
 
 ## Function pointers ##
 
@@ -115,6 +145,8 @@ typedef int (*cargo_custom_f)(cargo_t ctx, void *user, const char *optname,
 This is the callback function for doing custom parsing as specified when using [`cargo_add_option`](api.md#cargo_add_option) and giving the `c` type specifier in the **format** string.
 
 You can read more about adding custom parser callbacks in the [add options guide](adding.md#custom-parsing).
+
+---
 
 ### cargo_validation_f ###
 
@@ -131,6 +163,8 @@ The function is passed the [`cargo_validation_t`](api.md#cargo_validation_t) ins
 
 The value is given as a `void *`, so you will have to cast it to the appropriate type: `char *str = ((char *)value);` or `int a = *((int *)value);`
 
+---
+
 ### cargo_validation_destroy_f ###
 
 ```c
@@ -138,6 +172,8 @@ typedef void (*cargo_validation_destroy_f)(cargo_validation_t *vd);
 ```
 
 If you create your own `cargo_validation_t` type, and add data to it, you might need to specify one of these to clean up after you.
+
+---
 
 ## Formatting language ##
 
@@ -349,6 +385,8 @@ cargo_add_option(cargo, 0, "--opt", "description",
                  ".[s]#", &strs, &count, 5);
 ```
 
+---
+
 ## Types ##
 
 ### cargo_t ###
@@ -357,12 +395,15 @@ This is the type of the cargo context. This type is opaque and should never be m
 
 To allocate a new instance [`cargo_init`](api.md#cargo_init) is used. And to destroy it use [`cargo_destroy`](api.md#cargo_destroy)
 
+---
 
 ### cargo_type_t ###
 
 This is an enum of the different types an option can be. This is only used
 internally by the API. The reason this is a part of the public API is so that
 it is possible to do some introspection.
+
+---
 
 ### cargo_validation_t ###
 
@@ -385,11 +426,15 @@ typdef struct cargo_some_validation_s
 } cargo_some_validation_t;
 ```
 
+---
+
 ## Flags ##
 
 ### cargo_flags_t ###
 
 These flags are global for the cargo instance and set when calling [`cargo_init`](api.md#cargo_init) or [`cargo_set_flags`](api.md#cargo_set_flags)
+
+---
 
 #### `CARGO_AUTOCLEAN` ####
 By default it is up to the caller to free any option values that are returned by cargo when parsing.
@@ -419,8 +464,12 @@ cargo_add_option(cargo, CARGO_AUTOCLEAN, "--opt", "Some string", "s", &str);
 cargo_destroy(&cargo); // str is freed here.
 ```
 
+---
+
 #### `CARGO_NOCOLOR` ####
 Turn off color output for any cargo output.
+
+---
 
 #### `CARGO_NOERR_OUTPUT` ####
 By default cargo will print any parse error automatically to `stderr`.
@@ -429,6 +478,8 @@ This turns this off. Use this if you want to customize the error output.
 
 [`cargo_get_error`](api.md#cargo_get_error) can be used to get the error.
 
+---
+
 #### `CARGO_NOERR_USAGE` ####
 Whenever cargo prints parse errors internally it will also print the short usage information.
 
@@ -436,16 +487,24 @@ This flags turns of the printing of the short usage on error.
 
 Note if you simply want to customize the usage output printed by cargo on internal errors you can set the usage flags using [`cargo_set_internal_usage_flags`](api.md#cargo_set_internal_usage_flags).
 
+---
+
 #### `CARGO_STDOUT_ERR` ####
 cargo prints errors to `stderr` by default. This flag changes so that it prints to `stdout` instead.
 
+---
+
 #### `CARGO_NO_AUTOHELP` ####
 This flag turns off the automatic creating of the `--help` option.
+
+---
 
 #### `CARGO_NO_FAIL_UNKNOWN` ####
 Don't fail the parse when unknown options are found, simply add them to the list of unknown options.
 
 You can still get a list of the unknown options using [`cargo_get_unknown`](api.md#cargo_get_unknown).
+
+---
 
 #### `CARGO_UNIQUE_OPTS` ####
 By default if an options is specified more than once, the last value for the last occurrance is the one that counts, and will override anything specified earlier.
@@ -453,6 +512,8 @@ By default if an options is specified more than once, the last value for the las
 This option will instead give an error if any option is specified more than once (except special cases for boolean options).
 
 This can be set on a per option basis as well using [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique).
+
+---
 
 #### `CARGO_NOWARN` ####
 Don't show warnings.
@@ -472,46 +533,72 @@ This option instead moves this check to **before** the parsing is performed:
 
 Note that since we parse the arguments after we check for unknown options, using the option flag [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) will work differently in regards to unknown options. Options found after the stop point will still be processed during the unknown check.
 
+---
+
 #### `CARGO_DEFAULT_LITERALS` ####
 This enables string literals to be used as default values for all string options.
 
 See [`CARGO_OPT_DEFAULT_LITERAL`](api.md#cargo_opt_default_literal) for details.
 
+---
+
 ### cargo_usage_t ###
 
 This is used to specify how the usage is output. These flags are used by the [`cargo_get_usage`](api.md#cargo_get_usage) function and friends.
+
+---
 
 #### `CARGO_USAGE_FULL` ####
 Show the full usage. This is the default, same as specifying `0`.
 
 Note that this includes the short usage as well. If you want the full usage but excluding the short usage you can use [`CARGO_USAGE_HIDE_SHORT`](api.md#cargo_usage_hide_short)
 
+---
+
 #### `CARGO_USAGE_SHORT` ####
 Show only the short usage.
+
+---
 
 #### `CARGO_USAGE_RAW_DESCRIPTION` ####
 The description passed to [`cargo_init`](api.md#cargo_init) or set using [`cargo_set_description`](api.md#cargo_set_description) will be displayed as is, and no automatic formatting is done by cargo.
 
+---
+
 #### `CARGO_USAGE_RAW_OPT_DESCRIPTIONS` ####
 All option descriptions will be treated as raw. Note that this can be set on a per option basis as well using [`CARGO_OPT_RAW_DESCRIPTION`](api.md#cargo_opt_raw_description). cargo will not perform any automatic formatting on the option descriptions.
+
+---
 
 #### `CARGO_USAGE_RAW_EPILOG` ####
 The epilog (text after all option descriptions) set using [`cargo_set_epilog`](api.md#cargo_set_epilog) will be displayed as is, and no automatic formatting is done by cargo.
 
+---
+
 #### `CARGO_USAGE_HIDE_DESCRIPTION` ####
 Hides the description.
+
+---
 
 #### `CARGO_USAGE_HIDE_EPILOG` ####
 Hides the epilog.
 
+---
+
 #### `CARGO_USAGE_HIDE_SHORT` ####
 Hide the short usage information but show the rest.
+
+---
 
 #### `CARGO_USAGE_OVERRIDE_SHORT` ####
 The program name specified in [`cargo_init`](api.md#cargo_init) overrides the automatically generated short usage.
 
+---
+
 #### `CARGO_USAGE_NO_STRIP_PROGNAME` ####
 By default the program name passed to [`cargo_init`](api.md#cargo_init) will have the path stripped from it so that `/usr/bin/program` becomes simple `program`.
+
+---
 
 ### cargo_option_flags_t ###
 
@@ -522,18 +609,26 @@ The default behaviour for an option that is specified more than once is to use t
 
 This setting makes cargo not allow this, and instead give an error when specifying an option more than once.
 
+---
+
 #### `CARGO_OPT_REQUIRED` ####
 By default any option prepended with prefix characters `--option` are considered optional (hence the name option), this flag turns off this behavior and makes it required.
+
+---
 
 #### `CARGO_OPT_NOT_REQUIRED` ####
 When adding an option that is not prepended by any prefix characters `argument` it is considered to be a **positional** argument, and required.
 
 This flag turns off this behaviour and makes it not required.
 
+---
+
 #### `CARGO_OPT_RAW_DESCRIPTION` ####
 This makes the option description considered literal by cargo, and no automatic formatting will be performed.
 
 To enable this for all options instead the [`CARGO_USAGE_RAW_OPT_DESCRIPTIONS`](api.md#cargo_usage_raw_opt_descriptions) flag can be passed to [`cargo_init`](api.md#cargo_init)
+
+---
 
 #### `CARGO_OPT_STOP` ####
 Settings this flag for an option will cause the [`cargo_parse`](api.md#cargo_parse) to stop parsing any further arguments after the first occurance of that option in a given argument list.
@@ -546,6 +641,8 @@ Any options after the stop point won't show up in the unknown options list eithe
 
 This can be useful if you're only parsing part of the arguments using one parser, and then want to pass the remaining arguments on to another parser to proccess the rest of the arguments. Simply pass the same `argv` and then use the `stop` index as the `start` index for the second parser.
 
+---
+
 #### `CARGO_OPT_STOP_HARD` ####
 Must be combined with [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) to work.
 
@@ -555,11 +652,17 @@ This could be useful if you have something like `--advanced_help` where you simp
 
 For instance you could have a option group hidden by default using [`CARGO_GROUP_HIDE`](api.md#cargo_group_hide), and then on `--advanced_help` show it by removing that flag before showing usage.
 
+---
+
 #### `CARGO_OPT_HIDE` ####
 Hides the option in the usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
 
+---
+
 #### `CARGO_OPT_HIDE_SHORT` ####
 Hides the option in the short usage. See [`cargo_get_usage`](api.md#cargo_get_usage).
+
+---
 
 #### `CARGO_OPT_DEFAULT_LITERAL` ###
 Default values for strings normally needs to be a heap allocated string. However the more natural thing might be to simply use a string literal.
@@ -570,9 +673,13 @@ Note that this must be used in conjuction with [`CARGO_AUTOCLEAN`](api.md#cargo_
 
 See [default values](api.md#default-values) for more details and examples.
 
+---
+
 ### cargo_mutex_group_flags_t ###
 
 These flags control how a mutex group created using [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group) behaves.
+
+---
 
 #### `CARGO_MUTEXGRP_ONE_REQUIRED` ####
 By default none of the options in a mutex group is required.
@@ -581,12 +688,16 @@ This flag will require that at one of the members of the group is specified (but
 
 Note that you probably want to make sure that the [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required) flag is set for all options that are part of the mutex group, otherwise you will get conflicting requirements.
 
+---
+
 #### `CARGO_MUTEXGRP_GROUP_USAGE` ####
 By default any members that are part of a mutex group are not shown together, but rather in whatever order they were added in.
 
 This flag will instead group them and show the description given to the group in [`cargo_add_mutex_group`](api.md#cargo_add_mutex_group).
 
 Note that the options grouped like this will not be shown in their normal group/position.
+
+---
 
 #### `CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE` ####
 Mutex group variables are by default shown grouped together like this `{--opt1, --opt2, --opt3}` to indicate only one of them should be picked.
@@ -597,8 +708,12 @@ Note that when having options in multiple mutex groups this flag might be useful
 
 Another way of overriding this is to simply display the variables in the mutex group completely as you like by setting it manually using [`cargo_mutex_group_set_metavar`](api.md#cargo_mutex_group_set_metavar)
 
+---
+
 #### `CARGO_MUTEXGRP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the mutex group description.
+
+---
 
 #### `CARGO_MUTEXGRP_ORDER_BEFORE` ####
 This flag enables you to force the order a set of options is parsed in. The first option added to this group is special. Any options added after it must be specified before it on the command line.
@@ -632,22 +747,29 @@ These options must all be specified before "--alpha":
 --beta, --centauri
 ```
 
+---
+
 #### `CARGO_MUTEXGRP_ORDER_AFTER` ####
 Same as [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_after) except that the rest of the variables in the mutex group must be parsed after the first one.
 
+---
 
 ### cargo_group_flags_t ###
 
 These flags are used to specify the behaviour of groups added using [`cargo_add_group`](api.md#cargo_add_group)
+
 
 #### `CARGO_GROUP_HIDE` ####
 This hides the group in the usage.
 
 A use case for this might be an `--advanced_help` that unhides the group and prints the usage.
 
+---
+
 #### `CARGO_GROUP_RAW_DESCRIPTION` ####
 This turns of any automatic formatting for the group description.
 
+---
 
 ### cargo_parse_result_t ###
 
@@ -658,6 +780,8 @@ You can also get the internal error message that cargo displays by default by us
 #### (0) `CARGO_PARSE_OK` ####
 For a successful parse this is returned.
 
+---
+
 #### (-1) `CARGO_PARSE_UNKNOWN_OPTS` ####
 If the parse fails because there are unknown options in the given command line this will be returned.
 
@@ -667,32 +791,48 @@ You can get the list of unknown options found using [`cargo_get_unknown`](api.md
 
 Note that you can tell cargo not to fail on unknown options by setting the flag [`CARGO_NO_FAIL_UNKNOWN`](api.md#cargo_no_fail_unknown).
 
+---
+
 #### (-2) `CARGO_PARSE_NOMEM` ####
 If cargo runs out of memory this will be returned when parsing.
 
+---
+
 #### (-3) `CARGO_PARSE_FAIL_OPT` ####
 When cargo fails to parse an option for some reason.
+
+---
 
 #### (-4) `CARGO_PARSE_MISS_REQUIRED` ####
 If any required option is missing.
 
 See [`CARGO_OPT_REQUIRED`](api.md#cargo_opt_required) and [`CARGO_OPT_NOT_REQUIRED`](api.md#cargo_opt_not_required).
 
+---
+
 #### (-5) `CARGO_PARSE_MUTEX_CONFLICT` ####
 When a mutex group conflict occurs. Either that at least one option is required in a mutex group. Or that more than one in the mutex group has been specified at the same time.
 
 See [`CARGO_MUTEXGRP_ONE_REQUIRED`](api.md#cargo_mutexgrp_one_required)
+
+---
 
 #### (-6) `CARGO_PARSE_MUTEX_CONFLICT_ORDER` ####
 An order mutex group rule has been broken.
 
 See [`CARGO_MUTEXGRP_ORDER_BEFORE`](api.md#cargo_mutexgrp_order_before) and See [`CARGO_MUTEXGRP_ORDER_AFTER`](api.md#cargo_mutexgrp_order_before)
 
+---
+
 #### (-7) `CARGO_PARSE_OPT_ALREADY_PARSED` ####
 If an option has already been parsed before (specified more than once) and either [`CARGO_OPT_UNIQUE`](api.md#cargo_opt_unique) for the option is set. Alternatively if [`CARGO_UNIQUE_OPTS`](api.md#cargo_unique_opts) is set.
 
+---
+
 #### (-8) `CARGO_PARSE_CALLBACK_ERR` ####
 If a custom option user callback parses an option and indicates that an error has occurred.
+
+---
 
 ### cargo_err_flags_t ###
 
@@ -701,16 +841,24 @@ These are flags for the [`cargo_set_error`](api.md#cargo_set_error) function.
 #### `CARGO_ERR_APPEND` ####
 Append to the error string instead of overwriting it.
 
+---
+
 ### cargo_width_flags_t ###
 These flags are used with [`cargo_get_width`](api.md#cargo_get_width) that fetches the width of the usage/console.
 
+---
+
 #### `CARGO_WIDTH_USED` ####
 Return the width that is used internally by cargo.
+
+---
 
 #### `CARGO_WIDTH_RAW` ####
 Return the raw console width as reported by the operating system.
 
 Note that this may fail and `-1` will be returned instead.
+
+---
 
 
 ### cargo_validation_flags_t ###
@@ -719,6 +867,8 @@ Flags for [`cargo_add_validation`](api.md#cargo_add_validation). Currently not u
 
 #### CARGO_VALIDATION_NONE ####
 
+---
+
 ### cargo_validate_choices_flags_t ###
 
 Flags for the validation function 
@@ -726,11 +876,17 @@ Flags for the validation function
 #### `CARGO_VALIDATE_CHOICES_NONE` ####
 Same as 0, no flags.
 
+---
+
 #### `CARGO_VALIDATE_CHOICES_CASE_SENSITIVE` ####
 When validating a list of string choices, this makes the comparison case sensitive.
 
+---
+
 #### `CARGO_VALIDATE_CHOICES_SET_EPSILON` ####
 When alidating `float` or `double` a function to compare values *near* to the list of choices with a given epsilon. Det default value is `CARGO_DEFAULT_EPSILON`. But if this flag is set, the first value in the argument list is instead a new epsilon value that overrides the default.
+
+---
 
 ## Functions ##
 
@@ -769,6 +925,7 @@ Argument | Description
 -------- | -----------
 **ctx**  | A pointer to a [`cargo_t`](api.md#cargo_t) context.
 
+---
 
 ### cargo_set_flags ###
 
@@ -784,6 +941,7 @@ Argument  | Description
 **ctx**   | A [`cargo_t`](api.md#cargo_t) context.
 **flags** | The flags [`cargo_flags_t`](api.md#cargo_flags_t).
 
+---
 
 ### cargo_get_flags ###
 
@@ -797,6 +955,7 @@ Argument | Description
 -------- | -----------
 **ctx**  | A [`cargo_t`](api.md#cargo_t) context.
 
+---
 
 ### cargo_add_optionv ###
 
@@ -808,6 +967,8 @@ int cargo_add_optionv(cargo_t ctx, cargo_option_flags_t flags,
 ```
 
 Variable arguments version of [`cargo_add_option`](api.md#cargo_add_option)
+
+---
 
 ### cargo_add_option ###
 
@@ -826,6 +987,8 @@ Argument        | Description
 **fmt**         | Format string that tells cargo what arguments it should expect it will be passed. Just like how `printf` works. cargo will use this format definition when it parses the command line to know what it should attempt to parse. See [formatting language](api.md#formatting-language) for details.
 
 Adds an option for cargo to parse.
+
+---
 
 ### cargo_add_alias ###
 
@@ -885,6 +1048,8 @@ set the `name` will be used instead.
 
 You can add options to the group by either using [`cargo_group_add_option`](api.md#cargo_group_add_option) or inline in [`cargo_add_option`](api.md#cargo_add_option).
 
+---
+
 ### cargo_group_add_option ###
 
 ```c
@@ -910,6 +1075,8 @@ ret = cargo_add_option(cargo, 0, "<group1> --option",
                        "Description", "i", &val);
 ```
 
+---
+
 ### cargo_group_set_flags ###
 
 ```c
@@ -924,6 +1091,8 @@ Argument  | Description
 **flags** | See [`cargo_group_flags_t`](api.md#cargo_group_flags_t) for flags.
 
 Sets the flags for a group.
+
+---
 
 ### cargo_add_mutex_group ###
 
@@ -948,6 +1117,8 @@ This creates a mutually exclusive group. Only one of the options in this group i
 
 If you specify the `CARGO_MUTEXGRP_ONE_REQUIRED` flag, one of the flag *has* to be specified.
 
+---
+
 ### cargo_mutex_group_add_option ###
 
 ```c
@@ -963,6 +1134,8 @@ Argument  | Description
 **opt**   | The name of the option to add to the mutex group.
 
 Adds an option to a mutex group.
+
+---
 
 ### cargo_mutex_group_set_metavar ###
 
@@ -1005,6 +1178,8 @@ Usage: program [--alpha ALPHA] VARS
 
 For another setting related how the mutex group is shown in the usage see [`CARGO_MUTEXGRP_NO_GROUP_SHORT_USAGE`](api.md#cargo_mutexgrp_no_group_short_usage).
 
+---
+
 ### cargo_mutex_group_set_metavarv ###
 
 ```c
@@ -1015,6 +1190,7 @@ int cargo_mutex_group_set_metavarv(cargo_t ctx,
 
 Variadic version of [`cargo_mutex_group_set_metavar`](api.md#cargo_mutex_group_set_metavar).
 
+---
 
 ### cargo_set_option_description ###
 
@@ -1032,6 +1208,8 @@ Argument    | Description
 
 This sets an options description with printf formatting avaialable.
 
+---
+
 ### cargo_set_option_descriptionv ###
 
 ```c
@@ -1040,6 +1218,8 @@ int cargo_set_option_descriptionv(cargo_t ctx,
 ```
 
 Variadic version of [`cargo_set_option_description`](api.md#cargo_set_option_description).
+
+---
 
 ### cargo_set_metavar ###
 
@@ -1078,6 +1258,8 @@ Which gives:
 
 Note that this function allows you to use `printf` formatting.
 
+---
+
 ### cargo_set_metavarv ###
 
 ```c
@@ -1088,6 +1270,7 @@ int cargo_set_metavarv(cargo_t ctx,
 
 Variadic version of [`cargo_set_metavar`](api.md#cargo_set_metavar).
 
+---
 
 ### cargo_set_internal_usage_flags ###
 
@@ -1105,6 +1288,8 @@ This sets the internal usage flags used when cargo automatically outputs errors 
 These are the same flags that you set when calling [`cargo_get_usage`](api.md#cargo_get_usage).
 
 By default on an error only the short usage is shown together with the error. If you want the long error you would set [`CARGO_USAGE_FULL`](api.md#cargo_usage_full) flag here. Or any of the [`cargo_usage_t`](api.md#cargo_usage_t) flags to customize the output.
+
+---
 
 ### cargo_parse ###
 
@@ -1150,6 +1335,7 @@ For example if the reason for the failed parse is that unknown options where fou
 
 Note that by default cargo adds a `--help` option. When this is specified in a command line cargo will return [`CARGO_PARSE_SHOW_HELP`](api.md#cargo_parse_show_help) which is defined as `1`, so that you know that you should quit the program even though no error occurred. This will not happen if the [`CARGO_NO_AUTOHELP`](api.md#cargo_no_autohelp) flag is set in [`cargo_init`](api.md#cargo_init).
 
+---
 
 ### cargo_set_prefix ###
 
@@ -1165,6 +1351,8 @@ Argument         | Description
 This will set the prefix characters that cargo will use. By default this is set to [`CARGO_DEFAULT_PREFIX`](api.md#cargo_default_prefix) which is `"-"` unless it has been overriden in `"cargo_config.h"`.
 
 For instance you can allow both `"-"` and `"+"` by setting this to `"-+"`. So then you can add an option such as `"--option"` or `"++option"`.
+
+---
 
 ### cargo_set_max_width ###
 
@@ -1183,6 +1371,8 @@ If it fails to get the console width from the operating system it will fall back
 
 The max width allowed for this is [`CARGO_MAX_MAX_WIDTH`](api.md#cargo_max_max_width).
 
+---
+
 ### cargo_get_width ###
 
 ```c
@@ -1198,6 +1388,7 @@ This will return the max width for the usage that is used by cargo. This always 
 
 If you instead want the raw console width that the OS reports you can use the flag [`CARGO_WIDTH_RAW`](api.md#cargo_width_raw). Note that this may fail and will in that case return -1.
 
+---
 
 ### cargo_set_progname ###
 
@@ -1217,6 +1408,8 @@ This is the same as you can set using [`cargo_init`](api.md#cargo_init).
 
 Note that by default this will be followed by the automatically generated option usage, unless [`CARGO_USAGE_OVERRIDE_SHORT`](api.md#cargo_usage_override_short) is specified. See [`cargo_usage_t`](api.md#cargo_usage_t) for more usage flags.
 
+---
+
 ### cargo_set_prognamev ###
 
 ```c
@@ -1224,6 +1417,8 @@ void cargo_set_prognamev(cargo_t ctx, const char *fmt, va_list ap);
 ```
 
 Variadic version of [`cargo_set_progname`](api.md#cargo_set_progname).
+
+---
 
 ### cargo_set_description ###
 
@@ -1239,6 +1434,8 @@ Argument | Description
 
 This sets the description shown first in the usage output, before the list of options.
 
+---
+
 ### cargo_set_descriptionv ###
 
 ```c
@@ -1246,6 +1443,8 @@ void cargo_set_descriptionv(cargo_t ctx, const char *fmt, va_list ap);
 ```
 
 Variadic version of [`cargo_set_description`](api.md#cargo_set_description).
+
+---
 
 ### cargo_set_epilog ###
 
@@ -1261,6 +1460,8 @@ Argument | Description
 
 This sets the epilog, the text shown after the list of options.
 
+---
+
 ### cargo_set_epilogv ###
 
 ```c
@@ -1268,6 +1469,8 @@ void cargo_set_epilogv(cargo_t ctx, const char *fmt, va_list ap);
 ```
 
 Variadic verison of [`cargo_set_epilog`](api.md#cargo_set_epilog)
+
+---
 
 ### cargo_fprint_usage ###
 
@@ -1287,6 +1490,8 @@ This is a convenience function and does the same thing as doing:
 fprintf(f, "%s\n", cargo_get_usage(cargo, flags));
 ```
 
+---
+
 ### cargo_print_usage ###
 
 ```c
@@ -1304,6 +1509,8 @@ This is a convenience function and does the same thing as doing:
 printf("%s\n", cargo_get_usage(cargo, flags));
 ```
 
+---
+
 ### cargo_get_usage ###
 
 ```c
@@ -1318,6 +1525,8 @@ Argument  | Description
 This returns a string containing the usage for the given cargo context.
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
+
+---
 
 ### cargo_set_error ###
 
@@ -1335,6 +1544,8 @@ Argument  | Description
 **...**   | Variable arguments for format string.
 
 This is meant to be used inside of [`custom callback`](api.md#cargo_custom_f) function to set errors when parsing custom values.
+
+---
 
 ### cargo_set_errorv ###
 
@@ -1354,6 +1565,8 @@ Argument  | Description
 
 Varargs version of [`cargo_set_error`](api.md#cargo_set_error).
 
+---
+
 ### cargo_get_error ###
 
 ```c
@@ -1369,6 +1582,8 @@ This will return any error that was set by [`cargo_parse`](api.md#cargo_parse) i
 
 Please note that cargo is responsible for freeing this string, so if you want to keep it make sure you create a copy.
 
+---
+
 ### cargo_get_stop_index ###
 
 ```c
@@ -1382,6 +1597,8 @@ Argument | Description
 Gets the index where the parse was stopped. This will either be the end index passed in `argc` or it can be the index of an option with the [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) flag set.
 
 This can be useful when using multiple parsers, or simply wanting to stop parsing for some other reason. See details [`CARGO_OPT_STOP`](api.md#cargo_opt_stop).
+
+---
 
 ### cargo_get_unknown ###
 
@@ -1400,6 +1617,8 @@ Please note that cargo is responsible for freeing this string, so if you want to
 
 Note that if you call [`cargo_parse`](api.md#cargo_parse) again the pointer returned by this will become invalid.
 
+---
+
 ### cargo_get_unknown_copy ###
 
 ```c
@@ -1413,6 +1632,7 @@ Argument          | Description
 
 Same as [`cargo_get_unknown`](api.md#cargo_get_unknown) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
 
+---
 
 ### cargo_get_args ###
 
@@ -1427,6 +1647,8 @@ Argument | Description
 
 This will return any remaining arguments left after [`cargo_parse`](api.md#cargo_parse) has parsed the arguments passed to it.
 
+---
+
 ### cargo_get_args_copy ###
 
 ```c
@@ -1439,6 +1661,8 @@ Argument | Description
 **argc** | A pointer to a `size_t` where the number of arguments passed to [`cargo_parse`](api.md#cargo_parse) that were not consumed is retruned.
 
 Same as [`cargo_get_args`](api.md#cargo_get_args) except that it returns a copy of the list. It's the callers responsibility to clean this up. There's a helper function for this [`cargo_free_commandline`](api.md#cargo_free_commandline).
+
+---
 
 ### cargo_set_context ###
 
@@ -1453,6 +1677,8 @@ Argument | Description
 
 This sets a global user context for the cargo parser. This can then be used in the custom callback functions when parsing. You can get this using [`cargo_get_context`](api.md#cargo_get_context)
 
+---
+
 ### cargo_get_context ###
 
 ```c
@@ -1464,6 +1690,8 @@ Argument | Description
 **ctx**  | A [`cargo_t`](api.md#cargo_t) context.
 
 This returns the global user context set using [`cargo_set_context`](api.md#cargo_set_context)
+
+---
 
 ### cargo_set_group_context ###
 
@@ -1481,6 +1709,8 @@ You can use this function to save a context for an option group. You can later g
 Passing `NULL` as the `group` name adds the context to the default group. This is the group all options are added to by default unless another group is specified.
 
 This can be used to pass your own group context to a [`cargo_custom_f`](api.md#cargo_custom_f) when parsing a custom argument.
+
+---
 
 ### cargo_get_group_context ###
 
@@ -1513,6 +1743,7 @@ int the_parse_callback(cargo_t ctx, void *user, const char *optname,
 }
 ```
 
+---
 
 ### cargo_set_mutex_group_context ###
 
@@ -1547,6 +1778,7 @@ This gets the context for the given mutex group. Just like [`cargo_get_group_con
 
 Note however that an option can be a member of multiple mutex groups at once, so when getting them you will be given a list instead of a single group name. See [`cargo_get_option_mutex_groups`](api.md#cargo_get_option_mutex_groups)
 
+---
 
 ### cargo_get_option_group ###
 
@@ -1562,6 +1794,8 @@ Argument | Description
 
 
 Gets the group a given option is associated with.
+
+---
 
 ### cargo_get_option_mutex_groups ###
 
@@ -1581,6 +1815,8 @@ This will get the list of mutex groups associated with a given option.
 
 Note that the list is kept internally in cargo and should not be freed by the caller.
 
+---
+
 ### cargo_get_option_type ###
 
 ```c
@@ -1595,6 +1831,8 @@ Argument | Description
 This returns the [`cargo_type_t`](api.md#cargo_type_t) type of a given option.
 
 If the option name is invalid -1 is returned.
+
+---
 
 ### cargo_add_validation ###
 
@@ -1627,6 +1865,8 @@ For validating that a variable is one of a set of choices:
 
 - [`cargo_validate_choices`](api.md#cargo_validate_choices)
 
+---
+
 ### cargo_create_validator ###
 
 ```c
@@ -1649,6 +1889,8 @@ This is only meant to be used when specifying your own custom validator. The val
 
 The returned struct can then be passed to [`cargo_add_validation`](api.md#cargo_add_validation).
 
+---
+
 ### cargo_validator_get_context ###
 
 ```c
@@ -1661,6 +1903,7 @@ Argument      | Description
 
 This returns the user context pointer that was specified in [`cargo_create_validator`](api.md#cargo_create_validator)
 
+---
 
 ### cargo_validate_int_range ###
 
@@ -1677,6 +1920,7 @@ Validates a range for an option.
 
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
+---
 
 ### cargo_validate_uint_range ###
 
@@ -1693,6 +1937,8 @@ Validates a range for an option.
 
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
+
+---
 
 ### cargo_validate_longlong_range ###
 
@@ -1712,6 +1958,8 @@ Validates a range for an option.
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
 
+---
+
 ### cargo_validate_ulonglong_range ###
 
 ```c
@@ -1728,6 +1976,8 @@ Validates a range for an option.
 
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
+
+---
 
 ### cargo_validate_float_range ###
 
@@ -1747,6 +1997,8 @@ Validates a range for an option.
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
 
+---
+
 ### cargo_validate_double_range ###
 
 ```c
@@ -1764,6 +2016,8 @@ Validates a range for an option.
 
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
+
+---
 
 ### cargo_validate_choices ###
 
@@ -1792,6 +2046,8 @@ For string lists use the [`CARGO_VALIDATE_CHOICES_CASE_SENSITIVE`](api.md#cargo_
 See [`cargo_add_validation`](api.md#cargo_add_validation).
 
 
+---
+
 ### cargo_set_memfunctions ###
 
 ```c
@@ -1814,8 +2070,12 @@ This is used to change the memory allocation functions used by cargo.
 
 These flags are used by the `fprint_args` family of functions used to highlight errors in the command line.
 
+---
+
 #### `CARGO_FPRINT_NOCOLOR` ####
 This turns off the ANSI color output.
+
+---
 
 #### `CARGO_FPRINT_NOARGS` ####
 If the command line arguments should be shown or not in the output. That is, if only the highlight should be shown.
@@ -1833,6 +2093,8 @@ With this flag:
 ^^^^^^^     ~~~~~~ ---
 ```
 
+---
+
 #### `CARGO_FPRINT_NOHIGHLIGHT` ####
 If the highlight should be hidden.
 
@@ -1849,18 +2111,26 @@ Without this flag:
 ^^^^^^^     ~~~~~~ ---
 ```
 
+---
+
 ### cargo_splitcmd_flags_t ###
 
 Flags for the [`cargo_split_commandline`](api.md#cargo_split_commandline) function.
 
 Currently this exist only to avoid breaking API changes in the future, by adding a flag to change any internal behaviour that might be needed.
 
+---
+
 #### `CARGO_SPLITCMD_DEFAULT` ####
 Uses the OS specific version for splitting command lines in Windows and Unix.
+
+---
 
 ## Utility functions ##
 
 These are not a part of the core, but are nice to have.
+
+---
 
 ### cargo_fprintf ###
 
@@ -1875,6 +2145,8 @@ Argument | Description
 **...**  | Format arguments.
 
 This behaves just like the normal `fprintf` except that on **Windows** this also supports the ANSI color codes (Unix has native support for that).
+
+---
 
 ### cargo_get_fprint_args ###
 
@@ -1940,6 +2212,8 @@ Note that cargo internally also supports outputting these ANSI colors on **Windo
 
 If you prefer to return the output the result without any colors applied you can pass the [`CARGO_FPRINT_NOCOLOR`](api.md#cargo_fprint_nocolor) flag.
 
+---
+
 ### cargo_get_fprintl_args ###
 
 ```c
@@ -1977,6 +2251,8 @@ char *cargo_get_vfprint_args(int argc, char **argv, int start,
 
 The var args version of [`cargo_get_fprint_args`](api.md#cargo_get_fprint_args).
 
+---
+
 ### cargo_fprint_args ###
 
 ```c
@@ -1989,6 +2265,8 @@ Convenience function for [`cargo_get_fprint_args`](api.md#cargo_get_fprint_args)
 
 This will print the proper ANSI color even on **Windows**.
 
+---
+
 ### cargo_fprintl_args ###
 
 ```c
@@ -2000,6 +2278,8 @@ int cargo_fprintl_args(FILE *f, int argc, char **argv, int start,
 Convenience function for [`cargo_get_fprintl_args`](api.md#cargo_get_fprintl_args) that prints to a given `FILE *` instead.
 
 This will print the proper ANSI color even on **Windows**.
+
+---
 
 ### cargo_split_commandline ###
 
@@ -2017,6 +2297,8 @@ Argument  | Description
 This can be used to split a command line string into an `argv` array that you then can pass to [`cargo_parse`](api.md#cargo_parse).
 
 Internally this uses [`wordexp`](http://linux.die.net/man/3/wordexp) on Unix systems and [`CommandLineToArgvW`](https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391%28v=vs.85%29.aspx) on Windows.
+
+---
 
 ### cargo_free_commandline ###
 
@@ -2045,4 +2327,6 @@ argv = cargo_split_commandline(0, "some --command line", &argc);
 // Free and NULL argv.
 cargo_free_commandline(&argv, argc);
 ```
+
+---
 
