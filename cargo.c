@@ -913,11 +913,6 @@ typedef struct cargo_s
     int start;
     int stopped;
     int stopped_hard;
-    int is_compact;
-    int compact_idx;    // When parsing multiple bools in one argv
-                        // "-v -i" => "-vi" we use this to know which
-                        // suboption we are at.
-
     int help;
 
     cargo_group_t *groups;
@@ -1189,32 +1184,14 @@ static const char *_cargo_is_option_name(cargo_t ctx,
     return NULL;
 }
 
-static const char *_cargo_is_option_name_compact(cargo_t ctx,
-                    cargo_opt_t *opt, const char *arg)
+//
+// Does the given option have a short option matching optchar.
+//
+static const char *_cargo_get_short_option(cargo_t ctx, cargo_opt_t *opt, char optchar)
 {
     size_t i;
     const char *name = NULL;
-
-    // This looks for the format -vvv when we have
-    // an option "--verbosity -v" of type CARGO_BOOL
-    // that has 'b!' format specifier set.
-    // Which means to count each flag occurance.
-    // Then "-v -v -v" and "-vvv" is equivalent and should
-    // parse the bool as 3.
-
-    if (!_cargo_starts_with_prefix(ctx, arg))
-        return NULL;
-
-    // "-vvv" -> "vvv"
-    if (ctx->compact_idx == 0)
-    {
-        // Only allow one prefix char for combined bool flags.
-        size_t prefix_count = strspn(arg, ctx->prefix);
-        if (prefix_count != 1)
-            return NULL;
-
-        ctx->compact_idx++;
-    }
+    assert(opt);
 
     for (i = 0; i < opt->name_count; i++)
     {
@@ -1230,14 +1207,61 @@ static const char *_cargo_is_option_name_compact(cargo_t ctx,
         if (strlen(name) > 1)
             continue;
 
-        if ((opt->type == CARGO_BOOL) && (arg[ctx->compact_idx] == name[0]))
+        if ((opt->type == CARGO_BOOL) && (optchar == name[0]))
         {
-            ctx->is_compact = 1;
             return opt->name[i];
         }
     }
 
     return NULL;
+}
+
+static const char *_cargo_find_short_option(cargo_t ctx,
+                    cargo_opt_t **opt, char optchar)
+{
+    size_t i;
+    cargo_opt_t *o = NULL;
+    const char *name = NULL;
+
+    *opt = NULL;
+
+    for (i = 0; i < ctx->opt_count; i++)
+    {
+        if ((name = _cargo_get_short_option(ctx, &ctx->options[i], optchar)))
+        {
+            *opt = &ctx->options[i];
+            return name;
+        }
+    }
+
+    return NULL;
+}
+
+static const char *_cargo_is_arg_combined_option(cargo_t ctx, const char *arg)
+{
+    int i = 0;
+    const char *name = NULL;
+    cargo_opt_t *opt = NULL;
+
+    if (!_cargo_starts_with_prefix(ctx, arg))
+        return NULL;
+
+    // Only allow one prefix char for combined bool flags.
+    // -abc, but not --abc
+    size_t prefix_count = strspn(arg, ctx->prefix);
+    if (prefix_count != 1)
+        return NULL;
+
+    for (i = 1 ; i < strlen(arg); i++)
+    {
+        if (!(name = _cargo_find_short_option(ctx, &opt, arg[i])))
+        {
+            return NULL;
+        }
+    }
+
+    // All characters in arg where valid options.
+    return arg;
 }
 
 static void _cargo_free_str_list(char ***s, size_t *count)
@@ -1886,12 +1910,11 @@ static int _cargo_set_target_value(cargo_t ctx, cargo_opt_t *opt,
     return 0;
 }
 
-static const char *_cargo_check_options(cargo_t ctx,
+static const char *_cargo_find_full_option(cargo_t ctx,
                     cargo_opt_t **opt, char *arg)
 {
     size_t j;
     const char *name = NULL;
-    size_t len;
     assert(opt);
 
     if (!_cargo_starts_with_prefix(ctx, arg))
@@ -1909,22 +1932,26 @@ static const char *_cargo_check_options(cargo_t ctx,
         }
     }
 
-    len = strlen(arg);
+    *opt = NULL;
 
-    // Now look for the special case "-vvv" for bools.
-    for (j = 0; (j < ctx->opt_count) && (ctx->compact_idx < len); j++)
+    return NULL;
+}
+
+static const char *_cargo_check_options(cargo_t ctx,
+                    cargo_opt_t **opt, char *arg)
+{
+    const char *name = NULL;
+    assert(opt);
+
+    if ((name = _cargo_find_full_option(ctx, opt, arg)))
     {
-        name = NULL;
-        *opt = &ctx->options[j];
-
-        if ((name = _cargo_is_option_name_compact(ctx, *opt, arg)))
-        {
-            ctx->compact_idx++;
-            return name;
-        }
+        return name;
     }
 
-    *opt = NULL;
+    if ((name = _cargo_is_arg_combined_option(ctx, arg)))
+    {
+        return name;
+    }
 
     return NULL;
 }
@@ -2285,19 +2312,12 @@ static cargo_parse_result_t _cargo_parse_option(cargo_t ctx,
     // Return how many arguments we have consumed.
     if (opt->positional)
     {
+        // 1 2 3
         return opt->num_eaten;
     }
     else
     {
-        // When parsing combined bool flags "-abc", we need to
-        // return that we have eaten 0 args until we have gone
-        // through each letter in the arg.
-        if ((ctx->is_compact)
-            && (ctx->compact_idx < strlen(ctx->argv[ctx->i])))
-        {
-            return 0;
-        }
-
+        // --opt 1 2 3
         return (opt->num_eaten + 1);
     }
 }
@@ -5138,10 +5158,6 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
         ret = CARGO_PARSE_UNKNOWN_OPTS; goto fail;
     }
 
-    // Used for combined short flags "-abc"
-    ctx->compact_idx = 0;
-    ctx->is_compact = 0;
-
     for (ctx->i = ctx->start; ctx->i < ctx->argc; )
     {
         arg = argv[ctx->i];
@@ -5149,7 +5165,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
         opt_arg_count = 0;
 
         CARGODBG(3, "\n");
-        CARGODBG(3, "argv[%d] = %s   compact index: %d\n", ctx->i, arg, ctx->compact_idx);
+        CARGODBG(3, "argv[%d] = %s\n", ctx->i, arg);
         CARGODBG(3, "  Look for opt matching %s:\n", arg);
 
         // TODO: Add support for a "--" option which forces all
@@ -5162,15 +5178,41 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
         {
             size_t opt_i = 0;
             int is_positional = 0;
+            int is_combined = 0;
 
             // Look for options "--myoption 1 2 3"
-            if (!(name = _cargo_check_options(ctx, &opt, arg)))
+            if (!(name = _cargo_find_full_option(ctx, &opt, arg)))
             {
-                // Or a positional argument "1 2 3"
-                // (just an argument that is parsed into a specific options target)
-                is_positional = !_cargo_get_positional(ctx, &opt_i);
-                opt = &ctx->options[opt_i];
-                CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+                // Is this a set of combined short options?
+                // -a -b -c -> -abc
+                if ((is_combined = (_cargo_is_arg_combined_option(ctx, arg) != NULL)))
+                {
+                    size_t i;
+                    const char *combined = NULL;
+
+                    // Skip '-' by starting at 1.
+                    for (i = 1; i < strlen(arg); i++)
+                    {
+                        combined = _cargo_find_short_option(ctx, &opt, arg[i]);
+                        assert(combined != NULL);
+
+                        if ((opt_arg_count = _cargo_parse_option(ctx, opt, combined,
+                                                                argc, argv)) < 0)
+                        {
+                            CARGODBG(1, "Failed to parse %s option: %s\n",
+                                    _cargo_type_to_str(opt->type), opt->name[0]);
+                            ret = opt_arg_count; goto fail;
+                        }
+                    }
+                }
+                else
+                {
+                    // Or a positional argument "1 2 3"
+                    // (just an argument that is parsed into a specific options target)
+                    is_positional = !_cargo_get_positional(ctx, &opt_i);
+                    opt = &ctx->options[opt_i];
+                    CARGODBG(2, "    Positional argument: %s\n", argv[ctx->i]);
+                }
             }
 
             if (name || is_positional)
@@ -5184,7 +5226,7 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
                     ret = opt_arg_count; goto fail;
                 }
             }
-            else
+            else if (!is_combined)
             {
                 // A leftover argument that no option wants.
                 opt_arg_count = _cargo_add_extra_arg(ctx);
@@ -5197,14 +5239,6 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
         }
 
         CARGODBG(3, "opt_arg_count == %d\n", opt_arg_count);
-
-        // When parsing combined options "-a" "-b" "-c" => "-abc"
-        // we will keep parsing the argv several times.
-        if (opt_arg_count > 0)
-        {
-            ctx->compact_idx = 0;
-            ctx->is_compact = 0;
-        }
 
         ctx->i += opt_arg_count;
 
@@ -10277,6 +10311,29 @@ _TEST_START(TEST_bool_combined)
 }
 _TEST_END()
 
+_TEST_START(TEST_bool_combined_unknown)
+{
+    unsigned int a = 0;
+    unsigned int b = 0;
+    unsigned int c = 0;
+    char *args[] = { "program", "-add", "123"};
+
+    ret = cargo_add_option(cargo, 0, "--alpha -a", NULL, "b", &a);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_add_option(cargo, 0, "--beta -b", NULL, "b", &b);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_add_option(cargo, 0, "--centauri -c", NULL, "b", &c);
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == -1, "Parse should fail");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 _TEST_START(TEST_bool_acc_or2)
 {
     unsigned int a = 0;
@@ -11766,6 +11823,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_bool_acc_plus),
     CARGO_ADD_TEST(TEST_bool_acc_store),
     CARGO_ADD_TEST(TEST_bool_combined),
+    CARGO_ADD_TEST(TEST_bool_combined_unknown),
     CARGO_ADD_TEST(TEST_mutex_order_group_before),
     CARGO_ADD_TEST(TEST_mutex_order_group_after),
     CARGO_ADD_TEST(TEST_medium_length_usage),
