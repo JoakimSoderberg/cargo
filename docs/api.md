@@ -185,55 +185,42 @@ To demonstrate how this language works here is a list of examples and what they 
 
 These examples is what you would pass as `fmt` string, and the `...` variable arguments to [`cargo_add_option`](api.md#cargo_add_option):
 
-* `"i", &val`
-  Parse a single integer into `int val`.
-* `"b", &val`
-  Parse an option as a flag without any arguments. Stores `1` in `val` if flag is set.
-* `"b=", &val, 5`
-  Parse an option as a flag. Stores 5 in `val` if flag is set.
-* `"b!", &val`
-  Parse an option as a flag. Allow multiple occurances, count them and store the result in `val`.
-* `"f", &val`
-  Parse a single float into `float val`.
-* `"d", &val`
-  Parse a single double into `double val`.
-* `"s", &str`
-  Parse and allocate memory for `char *str`.
-* `"s#", &str, 32`
-  Parse and allocate memory for `char *str` of max length 32.
-* `".s#", &str, 32`
-  Parse and copy max 32 characters to `char str[32]`.
-* `"[i]*", &vals, &count`
-  Parse and allocate **zero or more** integers into `int *vals` and store the number of values parsed into `size_t count`.
-* `"[f]+", &vals, &count`
-  Parse and allocate **one or more** floats into `float *vals` and store the number of values parsed into `size_t count`
-* `"[s]+", &strs, &count`
-  Parse and allocate **one or more** strings into `char **strs` and store the number of strings parsed into `size_t count`
-* `"[i]#", &vals, &count, 4`
-  Parse and allocate max 4 integers into `int *vals` and store the number of integers parsed into `size_t count`
-* `"[s]#", &strs, &count, 5`
-  Parse and allocate max 5 strings into `char **strs` and store the number of strings parsed into `size_t count`
-* `"[s#]#", &strs, 32, &count, 5`
-  Parse and allocate max 5 strings of max 32 length, and store the number of strings parsed into `size_t count`.
-* `".[i]#", &vals, &count, 4`
-  Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
-* `".[i]+", &vals, &count, 4`
-  Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
+Format & Arguments              | Description
+------------------              | -----------
+`"i", &val`                     | Parse a single integer into `int val`.
+`"b", &val`                     | Parse an option as a flag without any arguments. Stores `1` in `val` if flag is set.
+`"b=", &val, 5`                 | Parse an option as a flag. Stores 5 in `val` if flag is set.
+`"b!", &val`                    | Parse an option as a flag. Allow multiple occurances, count them and store the result in `val`.
+`"f", &val`                     | Parse a single float into `float val`.
+`"d", &val`                     | Parse a single double into `double val`.
+`"s", &str`                     | Parse and allocate memory for `char *str`.
+`"s#", &str, 32`                | Parse and allocate memory for `char *str` of max length 32.
+`".s#", &str, 32`               | Parse and copy max 32 characters to `char str[32]`.
+`"[i]*", &vals, &count`         | Parse and allocate **zero or more** integers into `int *vals` and store the number of values parsed into `size_t count`.
+`"[f]+", &vals, &count`         | Parse and allocate **one or more** floats into `float *vals` and store the number of values parsed into `size_t count`
+`"[s]+", &strs, &count`         | Parse and allocate **one or more** strings into `char **strs` and store the number of strings parsed into `size_t count`
+`"[i]#", &vals, &count, 4`      | Parse and allocate max 4 integers into `int *vals` and store the number of integers parsed into `size_t count`
+`"[s]#", &strs, &count, 5`      | Parse and allocate max 5 strings into `char **strs` and store the number of strings parsed into `size_t count`
+`"[s#]#", &strs, 32, &count, 5` | Parse and allocate max 5 strings of max 32 length, and store the number of strings parsed into `size_t count`.
+`".[i]#", &vals, &count, 4`     | Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
+`".[i]+", &vals, &count, 4`     | Parse max 4 integers into `int vals[4]` and store the number of values parsed into `size_t count`.
 
 ### Type ###
 
 The basis of the format is a type specifier:
 
-- `b` boolean `int` (used for flags without arguments).
-- `i` integer `int`
-- `u` unsigned integer `unsigned int`
-- `L` long long integer `long long int`
-- `U` unsigned long long integer `unsigned long long int`
-- `f` float `float`
-- `d` double `double`
-- `s` string `char *`
-- `c` custom callback (you supply your own parse function).
-- `D` Parses nothing (can be useful together with mutex groups).
+Format | Type                       | C type
+------ | ----                       | ------
+`b`    | boolean                    | `int` (used for flags without arguments).
+`i`    | integer                    | `int`
+`u`    | unsigned integer           | `unsigned int`
+`L`    | long long integer          | `long long int`
+`U`    | unsigned long long integer | `unsigned long long int`
+`f`    | float                      | `float`
+`d`    | double                     | `double`
+`s`    | string                     | `char *`
+`c`    | custom callback (you supply your own parse function).
+`D`    | Parses nothing (can be useful together with mutex groups).
 
 Only one type specifier is allowed in a format string.
 
@@ -267,24 +254,25 @@ The `b` specifier denotes a boolean value. By default you pass an `int` as the a
 
 This behaviour can be changed by appending a set of specifiers after `b`:
 
-- `=` After the integer variable, specify a value that will be stored in it instead of the default `1`.
-- `!` Allow multiple occurances of the given flag, count how many times it occurs and store it in the specified integer variable. `-v -v -v` and `-vvv` is equivalent. This is useful for `verbosity` flags and such.
-- `|` Bitwise OR. This is similar to how `!` works, except instead of simply counting the number of occurances, this will do a bitwise OR operation. To do this, you specify a set of extra arguments, the first denotes how many values are available. Followed by a list of the actual `unsigned int` values. For each time the given option occurs an item is popped from the list and a bitwise OR operation is done with the value of the target variable. This can be useful if you want to set values in a bit mask for instance.
-- `&` Works the same as `|` except that an bitwise AND is performed on the target value.
-- `+` Same as `|` except that an addition is made on the target value for each value in the list.
-- `_` Same as `|` except that for each repeat of the flag, the next value in the list overwrites the previous.
+Bool specifier | Description
+-------------- | -----------
+`=`            | After the integer variable, specify a value that will be stored in it instead of the default `1`.
+`!`            | Allow multiple occurances of the given flag, count how many times it occurs and store it in the specified integer variable. `-v -v -v` and `-vvv` is equivalent. This is useful for `verbosity` flags and such.
+`|`            | Bitwise OR. This is similar to how `!` works, except instead of simply counting the number of occurances, this will do a bitwise OR operation. To do this, you specify a set of extra arguments, the first denotes how many values are available. Followed by a list of the actual `unsigned int` values. For each time the given option occurs an item is popped from the list and a bitwise OR operation is done with the value of the target variable. This can be useful if you want to set values in a bit mask for instance.
+`&`            | Works the same as `|` except that an bitwise AND is performed on the target value.
+`+`            | Same as `|` except that an addition is made on the target value for each value in the list.
+`_`            | Same as `|` except that for each repeat of the flag, the next value in the list overwrites the previous.
 
 Some examples:
 
-- Parse an ordinary flag and store `1` in `val` if set: `b, &val`.
-  `"--opt"` -> `val = 1`
-- Or parse the flag but store `5` in `val` if set: `"b=", &val, 5`
-  `"--opt"` -> `val = 5`
-- Or count the number of occurrances of the flag: `"b!", &val`
-  `"--opt --opt --opt"` -> `val = 3`
-- Or do a bitwise OR operation for each occurance of the flag: `"b|", &val, 3, (1 << 1), (1 << 3), (1 << 5)`
-  `"--opt --opt"` -> `val = (1 << 1) | (1 << 3) = 10`
-- Same as above but in a more easy to grasp use case:
+Example         | Description
+-------         | -----------
+`b, &val`       | Parse an ordinary flag and store `1` in `val`.<br>`"--opt"` &rArr; `val = 1`
+`"b=", &val, 5` | Or parse the flag but store `5` in `val`.<br>`"--opt"` -> `val = 5`
+`"b!", &val`    | Count the number of occurrances of the flag.<br>`"--opt --opt --opt"` -> `val = 3`
+`"b|", &val, 3, (1 << 1), (1 << 3), (1 << 5)` | Or do a bitwise OR operation for each occurance of the flag: <br>`"--opt --opt"` -> `val = (1 << 1) | (1 << 3) = 10`
+
+Same as above but in a more easy to grasp use case:
 
 ```c
 typedef enum debug_level_e
