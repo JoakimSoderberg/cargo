@@ -300,9 +300,11 @@ To parse an array/list of values you specify enclose the type into brackets like
 
 Then to tell cargo how many elements you want to parse, you must append a size specifier:
 
-- `+` 1 or more values.
-- `*` 0 or more values.
-- `#` or `N` This means we will pass the expected number of values as a variable argument.
+Specifier | Description
+--------- | -----------
+`+`       | 1 or more values.
+`*`       | 0 or more values.
+`#`       | or `N` This means we will pass the expected number of values as a variable argument.
 
 So to parse **1 or more** `int`: `"[i]+"`
 Or parsing **0 or more** `float`: `"[f]*"`
