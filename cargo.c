@@ -3997,6 +3997,7 @@ static cargo_parse_result_t _cargo_check_unknown_options(cargo_t ctx)
         _cargo_check_unknown_options_gather(ctx, ctx->start, ctx->stopped);
     }
 
+    // TODO: Add support for keeping unknown options over multiple cargo_parse calls.
     if (ctx->unknown_opts_count > 0)
     {
         const char *suggestion = NULL;
@@ -11624,6 +11625,135 @@ _TEST_START(TEST_triple_parse_mutex_fail)
 }
 _TEST_END()
 
+_TEST_START(TEST_triple_parse_mutex_required)
+{
+    char *args[] = { "program" };
+    char *args2[] = { "program", "-c", "8.0" };
+    char *args3[] = { "program", "--delta", "def" };
+    int a = 0;
+    int b = 0;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    cargo_assert(s, "Failed to allocate");
+
+    ret |= cargo_add_mutex_group(cargo, CARGO_MUTEXGRP_ONE_REQUIRED, "mg", NULL, NULL);
+
+    ret |= cargo_add_option(cargo, 0, "<!mg> --alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, 0, "<!mg> --beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret < 0, "Parse did not fail 3");
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
+}
+_TEST_END()
+
+_TEST_START(TEST_triple_parse_unknown)
+{
+    //
+    // Specify two unknowns in different parses, but don't check for the first.
+    //
+    char *args[] = { "program", "--unknown1", "123" };
+    char *args2[] = { "program" };
+    char *args3[] = { "program", "--unknown2" };
+    char *unknown_opts_expect[] = { "--unknown2" };
+    size_t unknown_count = 0;
+    const char **unknown_opts = NULL;
+    int a = 0;
+    int b = 0;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    cargo_assert(s, "Failed to allocate");
+
+    ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_UNKNOWN, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_UNKNOWN, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret < 0, "Parse did not fail 3");
+
+    // Get unknown options.
+    unknown_opts = cargo_get_unknown(cargo, &unknown_count);
+    cargo_assert(unknown_opts != NULL, "Got NULL unknown options");
+
+    printf("Unknown option count = %lu\n", unknown_count);
+    cargo_assert_str_array(unknown_count, 1, unknown_opts, unknown_opts_expect);
+
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
+}
+_TEST_END()
+
+// TODO: Add support for keeping unknown options between cargo_parse calls.s
+#if 0
+_TEST_START(TEST_triple_parse_unknown2)
+{
+    //
+    // Specify two unknowns in different parses, and make sure all are included.
+    //
+    char *args[] = { "program", "--unknown1", "123" };
+    char *args2[] = { "program" };
+    char *args3[] = { "program", "--unknown2" };
+    char *unknown_opts_expect[] = { "--unknown1", "--unknown2" };
+    size_t unknown_count = 0;
+    const char **unknown_opts = NULL;
+    int a = 0;
+    int b = 0;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    cargo_assert(s, "Failed to allocate");
+
+    ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, 0, "--beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+    // Should not fail on finding unknown, but still save it in the list.
+    ret = cargo_parse(cargo, CARGO_NO_FAIL_UNKNOWN, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, CARGO_NO_FAIL_UNKNOWN, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret < 0, "Parse did not fail 3");
+
+    // Get unknown options.
+    unknown_opts = cargo_get_unknown(cargo, &unknown_count);
+    cargo_assert(unknown_opts != NULL, "Got NULL unknown options");
+
+    printf("Unknown option count = %lu\n", unknown_count);
+    cargo_assert_str_array(unknown_count, 2, unknown_opts, unknown_opts_expect);
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
+}
+_TEST_END()
+#endif
+
 _TEST_START_EX(TEST_default_str, CARGO_AUTOCLEAN)
 {
     char *args[] = { "program", "--alpha", "def" };
@@ -12016,6 +12146,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_triple_parse_required),
     CARGO_ADD_TEST(TEST_triple_parse_mutex),
     CARGO_ADD_TEST(TEST_triple_parse_mutex_fail),
+    CARGO_ADD_TEST(TEST_triple_parse_mutex_required),
+    CARGO_ADD_TEST(TEST_triple_parse_unknown),
     CARGO_ADD_TEST(TEST_default_str),
     CARGO_ADD_TEST(TEST_default_str2),
     CARGO_ADD_TEST(TEST_default_str3),
