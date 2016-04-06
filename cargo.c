@@ -3705,11 +3705,10 @@ static int _cargo_check_mutex_group(cargo_t ctx,
     int ret = -1;
     cargo_highlight_t *parse_highlights = NULL;
     size_t parsed_count = 0;
+    size_t parsed_highlight_count = 0;
     assert(ctx);
     assert(g);
     assert(str);
-
-    parsed_count = 0;
 
     // We create a list of highlights, so if more than one option in the
     // mutex groups is parsed, we can highlight it.
@@ -3728,15 +3727,21 @@ static int _cargo_check_mutex_group(cargo_t ctx,
         {
             parse_highlights[parsed_count].i = opt->parsed;
             parse_highlights[parsed_count].c = "~"CARGO_COLOR_RED;
+            parsed_highlight_count++;
+        }
+
+        // We must rely on this compared to opt->parsed, since options
+        // not parsed on this cargo_parse call might've been parsed earlier
+        // and opt->parsed is rest on each invocation.
+        if (!opt->first_parse)
+        {
             parsed_count++;
         }
     }
 
-    // TODO: If we are calling cargo_parse multiple times, some of the options
-    // might not have an opt->parsed index into the current argv, but still be parsed!
     if (parsed_count > 1)
     {
-        _cargo_print_mutex_group_highlights(ctx, str, parse_highlights, parsed_count);
+        _cargo_print_mutex_group_highlights(ctx, str, parse_highlights, parsed_highlight_count);
         cargo_aappendf(str, "Only one of these variables is allowed at the same time:\n");
         _cargo_print_mutex_group(ctx, 0, str, g);
         goto fail;
@@ -5305,7 +5310,8 @@ fail:
     if (ctx->unknown_opts_count == 0)
     {
         int unknown_ret = 0;
-        if ((unknown_ret = _cargo_check_unknown_options_after(ctx)))
+        if (!(ctx->flags & CARGO_SKIP_CHECK_UNKNOWN)
+            && (unknown_ret = _cargo_check_unknown_options_after(ctx)))
         {
             CARGODBG(1, "Unknown option overrides previous error\n");
             ret = unknown_ret;
@@ -11559,19 +11565,59 @@ _TEST_START(TEST_triple_parse_mutex)
     cargo_assert(ret == 0, "Parse failed 1");
     cargo_assert(a == 0, "Expected a == 0");
     cargo_assert(b == 0, "Expected b == 0");
-    printf("s == '%s'\n", s);
     cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
 
     ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args2) / sizeof(args2[0]), args2);
     cargo_assert(ret == 0, "Parse failed 2");
     cargo_assert(a == 0, "Expected a == 0");
     cargo_assert(b == 4, "Expected b == 4");
-    printf("s == '%s'\n", s);
     cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
 
     ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
     cargo_assert(ret == 0, "Parse failed 3");
+    cargo_assert(a == 0, "Expected a == 0");
+    cargo_assert(b == 4, "Expected b == 4");
     cargo_assert(s && !strcmp(s, "def"), "Expected s to be 'def'");
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
+}
+_TEST_END()
+
+_TEST_START(TEST_triple_parse_mutex_fail)
+{
+    char *args[] = { "program", "--alpha", "3"};
+    char *args2[] = { "program", "--beta", "4" };
+    char *args3[] = { "program", "--delta", "def" };
+    int a = 0;
+    int b = 0;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    cargo_assert(s, "Failed to allocate");
+
+    ret |= cargo_add_mutex_group(cargo, 0, "mg", NULL, NULL);
+
+    ret |= cargo_add_option(cargo, 0, "<!mg> --alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, 0, "<!mg> --beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(a == 3, "Expected a == 3");
+    cargo_assert(b == 0, "Expected b == 0");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(a == 3, "Expected a == 3");
+    cargo_assert(b == 4, "Expected b == 4");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret < 0, "Parse did not fail 3");
+    cargo_assert(a == 3, "Expected a == 3");
+    cargo_assert(b == 4, "Expected b == 4");
 
     _TEST_CLEANUP();
     _cargo_xfree(&s);
@@ -11969,6 +12015,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_double_parse_clear),
     CARGO_ADD_TEST(TEST_triple_parse_required),
     CARGO_ADD_TEST(TEST_triple_parse_mutex),
+    CARGO_ADD_TEST(TEST_triple_parse_mutex_fail),
     CARGO_ADD_TEST(TEST_default_str),
     CARGO_ADD_TEST(TEST_default_str2),
     CARGO_ADD_TEST(TEST_default_str3),
