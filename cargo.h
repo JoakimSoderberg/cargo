@@ -152,7 +152,10 @@ typedef enum cargo_flags_e
     CARGO_UNIQUE_OPTS                   = (1 << 7),
     CARGO_NOWARN                        = (1 << 8),
     CARGO_UNKNOWN_EARLY                 = (1 << 9),
-    CARGO_DEFAULT_LITERALS              = (1 << 10)
+    CARGO_DEFAULT_LITERALS              = (1 << 10),
+    CARGO_SKIP_CHECK_REQUIRED           = (1 << 11),
+    CARGO_SKIP_CHECK_MUTEX              = (1 << 12),
+    CARGO_SKIP_CHECK_UNKNOWN            = (1 << 13)
 } cargo_flags_t;
 
 typedef enum cargo_format_e

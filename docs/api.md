@@ -521,7 +521,7 @@ This option instead moves this check to **before** the parsing is performed:
 - Check for unknown options and fail if they're found.
 - Go through all arguments and try to parse them.
 
-Note that since we parse the arguments after we check for unknown options, using the option flag [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) will work differently in regards to unknown options. Options found after the stop point will still be processed during the unknown check.
+Note that since we parse the arguments after we check for unknown options in this scenario, using the option flag [`CARGO_OPT_STOP`](api.md#cargo_opt_stop) will work differently in regards to unknown options. Options found after the stop point will still be processed during the unknown check.
 
 ---
 
@@ -531,6 +531,38 @@ This enables string literals to be used as default values for all string options
 See [`CARGO_OPT_DEFAULT_LITERAL`](api.md#cargo_opt_default_literal) for details.
 
 ---
+
+#### `CARGO_SKIP_CHECK_REQUIRED` ####
+Enable this will skip any checks for required options when calling [`cargo_parse`](api.md#cargo_parse).
+
+This is useful if you are calling multiple times, maybe with different `argv`s passed to it. For example, if `--alpha` is required and you run `cargo_parse` multiple times with this input:
+
+```c
+char *argv[] = { "program", "--beta", "123" };
+cargo_parse(cargo, CARGO_SKIP_CHECK_REQUIRED, 1, ..., argc, argv);
+
+char *argv2[] = { "some", "other" };
+cargo_parse(cargo, CARGO_SKIP_CHECK_REQUIRED, 1, ..., argc2, argv2);
+
+// Let this last parse do the required check!
+char *argv3[] = { "some", "other" };
+cargo_parse(cargo, 0, 1, ..., argc2, argv2);
+```
+
+---
+
+#### `CARGO_SKIP_CHECK_MUTEX` ####
+Same as [`CARGO_SKIP_CHECK_REQUIRED`](api.md#cargo_skip_check_required) but for mutex groups.
+
+---
+
+#### `CARGO_SKIP_CHECK_UNKNOWN` ####
+Same as [`CARGO_SKIP_CHECK_REQUIRED`](api.md#cargo_skip_check_required) but for checking for unknown options.
+
+**Note!** you might not want to use this if you are parsing multiple times for the above scenario. If you simply do  not want [`cargo_parse`](api.md#cargo_parse) to return an error on unknown variables (but still save a list of them), use [`CARGO_NO_FAIL_UNKNOWN`](api.md#cargo_no_fail_unknown) instead.
+
+---
+
 
 ### cargo_usage_t ###
 

@@ -3732,6 +3732,8 @@ static int _cargo_check_mutex_group(cargo_t ctx,
         }
     }
 
+    // TODO: If we are calling cargo_parse multiple times, some of the options
+    // might not have an opt->parsed index into the current argv, but still be parsed!
     if (parsed_count > 1)
     {
         _cargo_print_mutex_group_highlights(ctx, str, parse_highlights, parsed_count);
@@ -4245,7 +4247,10 @@ static int _cargo_check_required_options(cargo_t ctx)
     {
         opt = &ctx->options[i];
 
-        if ((opt->flags & CARGO_OPT_REQUIRED) && (opt->parsed < 0))
+        // opt->first_parse tells us over multiple calls to cargo_parse if
+        // an option has been parsed.
+        // (Compared to opt->parsed which is for the latest parse only).
+        if ((opt->flags & CARGO_OPT_REQUIRED) && opt->first_parse)
         {
             CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
             cargo_aappendf(&errstr, "Missing required argument \"%s\"\n", opt->name[0]);
@@ -5152,7 +5157,8 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
     CARGODBG(2, "Parse arg list of count %d start at index %d\n", argc, start_index);
 
     // Check for unknown options early.
-    if ((ctx->flags & CARGO_UNKNOWN_EARLY)
+    if (!(ctx->flags & CARGO_SKIP_CHECK_UNKNOWN)
+        && (ctx->flags & CARGO_UNKNOWN_EARLY)
         && _cargo_check_unknown_options(ctx))
     {
         ret = CARGO_PARSE_UNKNOWN_OPTS; goto fail;
@@ -5265,17 +5271,20 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
         goto skip_checks;
     }
 
-    if (_cargo_check_required_options(ctx))
+    if (!(ctx->flags & CARGO_SKIP_CHECK_REQUIRED)
+        && _cargo_check_required_options(ctx))
     {
         ret = CARGO_PARSE_MISS_REQUIRED; goto fail;
     }
 
-    if ((ret = _cargo_check_mutex_groups(ctx)))
+    if (!(ctx->flags & CARGO_SKIP_CHECK_MUTEX)
+        && (ret = _cargo_check_mutex_groups(ctx)))
     {
         goto fail;
     }
 
-    if ((ret = _cargo_check_unknown_options_after(ctx)))
+    if (!(ctx->flags & CARGO_SKIP_CHECK_UNKNOWN)
+        && (ret = _cargo_check_unknown_options_after(ctx)))
     {
         goto fail;
     }
@@ -11482,6 +11491,55 @@ _TEST_START(TEST_double_parse_clear)
 }
 _TEST_END()
 
+_TEST_START(TEST_triple_parse_required)
+{
+    char *args[] = { "program" };
+    char *args2[] = { "program", "--beta", "4" };
+    char *args3[] = { "program", "--delta", "def" };
+    int a = 5;
+    int b = 6;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    char *s2 = strdup("ghi");
+    cargo_flags_t no_check_flags = CARGO_SKIP_CHECK_REQUIRED |
+                                   CARGO_SKIP_CHECK_MUTEX |
+                                   CARGO_SKIP_CHECK_UNKNOWN;
+    cargo_assert(s && s2, "Failed to allocate");
+
+    ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, CARGO_OPT_REQUIRED, "--beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+    ret |= cargo_add_option(cargo, 0, "--elite -e", "another option", "s", &s2);
+
+    // Parse once with no arguments, but don't check for errors.
+    // --beta is required but we don't care that it is missing here.
+    ret = cargo_parse(cargo, no_check_flags, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(b == 6, "Expected b == 6");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+    cargo_assert(s2 && !strcmp(s2, "ghi"), "Expected s to be 'ghi'");
+
+    // Parse again, this time --beta is set.
+    ret = cargo_parse(cargo, no_check_flags, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(b == 4, "Expected b == 4");
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+    cargo_assert(s2 && !strcmp(s2, "ghi"), "Expected s to be 'ghi'");
+
+    // And again. --beta should not fail here.
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret == 0, "Parse failed 3");
+    cargo_assert(b == 4, "Expected b == 4");
+    cargo_assert(s && !strcmp(s, "def"), "Expected s to be 'def'");
+    cargo_assert(s2 && !strcmp(s2, "ghi"), "Expected s to be 'ghi'");
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
+    _cargo_xfree(&s2);
+}
+_TEST_END()
+
 _TEST_START_EX(TEST_default_str, CARGO_AUTOCLEAN)
 {
     char *args[] = { "program", "--alpha", "def" };
@@ -11871,6 +11929,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_choices_validation_ulonglong),
     CARGO_ADD_TEST(TEST_double_parse),
     CARGO_ADD_TEST(TEST_double_parse_clear),
+    CARGO_ADD_TEST(TEST_triple_parse_required),
     CARGO_ADD_TEST(TEST_default_str),
     CARGO_ADD_TEST(TEST_default_str2),
     CARGO_ADD_TEST(TEST_default_str3),
