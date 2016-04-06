@@ -11501,9 +11501,6 @@ _TEST_START(TEST_triple_parse_required)
     float c = 7.0f;
     char *s = strdup("abc");
     char *s2 = strdup("ghi");
-    cargo_flags_t no_check_flags = CARGO_SKIP_CHECK_REQUIRED |
-                                   CARGO_SKIP_CHECK_MUTEX |
-                                   CARGO_SKIP_CHECK_UNKNOWN;
     cargo_assert(s && s2, "Failed to allocate");
 
     ret |= cargo_add_option(cargo, 0, "--alpha -a", "an option", "i", &a);
@@ -11514,14 +11511,14 @@ _TEST_START(TEST_triple_parse_required)
 
     // Parse once with no arguments, but don't check for errors.
     // --beta is required but we don't care that it is missing here.
-    ret = cargo_parse(cargo, no_check_flags, 1, sizeof(args) / sizeof(args[0]), args);
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_REQUIRED, 1, sizeof(args) / sizeof(args[0]), args);
     cargo_assert(ret == 0, "Parse failed 1");
     cargo_assert(b == 6, "Expected b == 6");
     cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
     cargo_assert(s2 && !strcmp(s2, "ghi"), "Expected s to be 'ghi'");
 
     // Parse again, this time --beta is set.
-    ret = cargo_parse(cargo, no_check_flags, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_REQUIRED, 1, sizeof(args2) / sizeof(args2[0]), args2);
     cargo_assert(ret == 0, "Parse failed 2");
     cargo_assert(b == 4, "Expected b == 4");
     cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
@@ -11537,6 +11534,47 @@ _TEST_START(TEST_triple_parse_required)
     _TEST_CLEANUP();
     _cargo_xfree(&s);
     _cargo_xfree(&s2);
+}
+_TEST_END()
+
+_TEST_START(TEST_triple_parse_mutex)
+{
+    char *args[] = { "program" };
+    char *args2[] = { "program", "--beta", "4" };
+    char *args3[] = { "program", "--delta", "def" };
+    int a = 0;
+    int b = 0;
+    float c = 7.0f;
+    char *s = strdup("abc");
+    cargo_assert(s, "Failed to allocate");
+
+    ret |= cargo_add_mutex_group(cargo, 0, "mg", NULL, NULL);
+
+    ret |= cargo_add_option(cargo, 0, "<!mg> --alpha -a", "an option", "i", &a);
+    ret |= cargo_add_option(cargo, 0, "<!mg> --beta -b", "another option", "i", &b);
+    ret |= cargo_add_option(cargo, 0, "--centauri -c", "another option", "f", &c);
+    ret |= cargo_add_option(cargo, 0, "--delta -d", "another option", "s", &s);
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args) / sizeof(args[0]), args);
+    cargo_assert(ret == 0, "Parse failed 1");
+    cargo_assert(a == 0, "Expected a == 0");
+    cargo_assert(b == 0, "Expected b == 0");
+    printf("s == '%s'\n", s);
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, CARGO_SKIP_CHECK_MUTEX, 1, sizeof(args2) / sizeof(args2[0]), args2);
+    cargo_assert(ret == 0, "Parse failed 2");
+    cargo_assert(a == 0, "Expected a == 0");
+    cargo_assert(b == 4, "Expected b == 4");
+    printf("s == '%s'\n", s);
+    cargo_assert(s && !strcmp(s, "abc"), "Expected s to be 'abc'");
+
+    ret = cargo_parse(cargo, 0, 1, sizeof(args3) / sizeof(args3[0]), args3);
+    cargo_assert(ret == 0, "Parse failed 3");
+    cargo_assert(s && !strcmp(s, "def"), "Expected s to be 'def'");
+
+    _TEST_CLEANUP();
+    _cargo_xfree(&s);
 }
 _TEST_END()
 
@@ -11930,6 +11968,7 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_double_parse),
     CARGO_ADD_TEST(TEST_double_parse_clear),
     CARGO_ADD_TEST(TEST_triple_parse_required),
+    CARGO_ADD_TEST(TEST_triple_parse_mutex),
     CARGO_ADD_TEST(TEST_default_str),
     CARGO_ADD_TEST(TEST_default_str2),
     CARGO_ADD_TEST(TEST_default_str3),
