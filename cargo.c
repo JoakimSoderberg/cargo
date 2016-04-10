@@ -999,6 +999,8 @@ static int _cargo_nargs_is_valid(int nargs)
 
 static int _cargo_starts_with_prefix(cargo_t ctx, const char *arg)
 {
+    if (!arg)
+        return 0;
     return (strpbrk(arg, ctx->prefix) == arg);
 }
 
@@ -5249,6 +5251,9 @@ int cargo_parse(cargo_t ctx, cargo_flags_t flags, int start_index, int argc, cha
             // Stopped parsing, so everything is saved as extra arguments.
             opt_arg_count = _cargo_add_extra_arg(ctx);
         }
+
+        if (opt_arg_count == 0)
+            opt_arg_count = 1;
 
         CARGODBG(3, "opt_arg_count == %d\n", opt_arg_count);
 
@@ -11966,6 +11971,22 @@ _TEST_START(TEST_cargo_zero_start_one_option_zero_or_none)
 }
 _TEST_END()
 
+_TEST_START(TEST_empty_name)
+{
+    int b = 0;
+    char *args[] = { "program", "-" };
+
+    ret |= cargo_add_option(cargo, 0, "--beta", NULL, "i?", &b, "5");
+    cargo_assert(ret == 0, "Failed to add option");
+
+    ret = cargo_parse(cargo, 0, 0, sizeof(args) / sizeof(args[0]), args);
+    printf("ret == %d\n", ret);
+    cargo_assert(ret == 0, "Parse failed");
+
+    _TEST_CLEANUP();
+}
+_TEST_END()
+
 // TODO: Test default values for string lists
 // TODO: Test giving add_option an invalid alias
 // TODO: Test --help
@@ -12159,7 +12180,8 @@ cargo_test_t tests[] =
     CARGO_ADD_TEST(TEST_cargo_zero_start_bool_option),
     CARGO_ADD_TEST(TEST_cargo_zero_start_one_option),
     CARGO_ADD_TEST(TEST_cargo_zero_start_one_option_no_args),
-    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option_zero_or_none)
+    CARGO_ADD_TEST(TEST_cargo_zero_start_one_option_zero_or_none),
+    CARGO_ADD_TEST(TEST_empty_name)
 };
 
 #define CARGO_NUM_TESTS (sizeof(tests) / sizeof(tests[0]))
