@@ -255,17 +255,12 @@ int cargo_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
     int r;
     if (!buflen)
         return 0;
-    #if defined(_MSC_VER) || defined(_WIN32)
+
+	// Visual Studio 2015+ has support for vsnprintf
+    #if defined(_MSC_VER) && (_MSC_VER < 1900)
     r = _vsnprintf(buf, buflen, format, ap);
     if (r < 0)
         r = _vscprintf(format, ap);
-    #elif defined(sgi)
-    /* Make sure we always use the correct vsnprintf on IRIX */
-    extern int      _xpg5_vsnprintf(char * __restrict,
-        __SGI_LIBC_NAMESPACE_QUALIFIER size_t,
-        const char * __restrict, /* va_list */ char *);
-
-    r = _xpg5_vsnprintf(buf, buflen, format, ap);
     #else
     r = vsnprintf(buf, buflen, format, ap);
     #endif
@@ -1241,7 +1236,7 @@ static const char *_cargo_find_short_option(cargo_t ctx,
 
 static const char *_cargo_is_arg_combined_option(cargo_t ctx, const char *arg)
 {
-    int i = 0;
+    size_t i = 0;
     const char *name = NULL;
     cargo_opt_t *opt = NULL;
 
@@ -2629,8 +2624,8 @@ static void _cargo_add_help_if_missing(cargo_t ctx)
 static int _cargo_damerau_levensthein_dist(const char *s, const char *t)
 {
     #define d(i, j) dd[(i) * (m + 2) + (j) ]
-    #define min(x, y) ((x) < (y) ? (x) : (y))
-    #define min3(a, b, c) ((a) < (b) ? min((a), (c)) : min((b), (c)))
+    #define _min(x, y) ((x) < (y) ? (x) : (y))
+    #define min3(a, b, c) ((a) < (b) ? _min((a), (c)) : _min((b), (c)))
     #define min4(a, b, c, d) ((a) < (b) ? min3((a), (c), (d)) : min3((b), (c),(d)))
 
     int *dd;
