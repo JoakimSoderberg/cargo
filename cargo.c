@@ -1451,7 +1451,7 @@ void _cargo_option_destroy_validation(cargo_opt_t *o)
 static void *_cargo_get_target_offset_ptr(cargo_t ctx,
                 cargo_opt_t *opt, void *target, size_t i)
 {
-    void *trg;
+    void *trg = NULL;
 
     switch (opt->type)
     {
