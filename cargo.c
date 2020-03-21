@@ -1365,7 +1365,7 @@ static void _cargo_cleanup_option_value(cargo_t ctx,
             {
                 CARGODBG(4, "    Not array\n");
 
-                if (opt->type == CARGO_STRING)
+                if (opt->type == CARGO_STRING && !opt->first_parse)
                 {
                     CARGODBG(4, "    String\n");
                     _cargo_free(*opt->target);
@@ -4250,10 +4250,7 @@ static int _cargo_check_required_options(cargo_t ctx)
     {
         opt = &ctx->options[i];
 
-        // opt->first_parse tells us over multiple calls to cargo_parse if
-        // an option has been parsed.
-        // (Compared to opt->parsed which is for the latest parse only).
-        if ((opt->flags & CARGO_OPT_REQUIRED) && opt->first_parse)
+        if ((opt->flags & CARGO_OPT_REQUIRED) && opt->parsed == -1)
         {
             CARGODBG(1, "Missing required argument \"%s\"\n", opt->name[0]);
             cargo_aappendf(&errstr, "Missing required argument \"%s\"\n", opt->name[0]);
